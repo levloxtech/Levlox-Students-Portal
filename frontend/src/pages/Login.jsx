@@ -1243,6 +1243,14 @@ const Login = () => {
           color: rgba(156, 163, 175, 0.55);
         }
 
+        /* Hide Microsoft Edge native password reveal eye icon */
+        input::-ms-reveal,
+        input::-ms-clear {
+          display: none !important;
+          width: 0;
+          height: 0;
+        }
+
         .input-icon-left {
           position: absolute;
           left: 18px;
