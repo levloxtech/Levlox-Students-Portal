@@ -158,6 +158,8 @@ def get_dashboard():
 
     for item in live_classes_list:
         item['_id'] = str(item['_id'])
+        if 'batch_id' in item and item['batch_id']:
+            item['batch_id'] = str(item['batch_id'])
         # If fees are not paid, strip out Google Meet link for security
         if not fees_are_paid:
             item.pop('meet_link', None)
@@ -171,16 +173,22 @@ def get_dashboard():
     announcements_list = list(db.announcements.find({"batch_id": batch_id}).sort([('is_pinned', -1), ('_id', -1)]).limit(10))
     for item in announcements_list:
         item['_id'] = str(item['_id'])
+        if 'batch_id' in item and item['batch_id']:
+            item['batch_id'] = str(item['batch_id'])
 
     # Fetch study materials
     study_materials_list = list(db.study_materials.find({"batch_id": batch_id}))
     for item in study_materials_list:
         item['_id'] = str(item['_id'])
+        if 'batch_id' in item and item['batch_id']:
+            item['batch_id'] = str(item['batch_id'])
 
     # Fetch recorded classes
     recorded_classes_list = list(db.recorded_classes.find({"batch_id": batch_id}))
     for item in recorded_classes_list:
         item['_id'] = str(item['_id'])
+        if 'batch_id' in item and item['batch_id']:
+            item['batch_id'] = str(item['batch_id'])
 
     # Aggregate response payload
     dashboard_data = {
@@ -197,7 +205,7 @@ def get_dashboard():
             "rollNumber": student.get('rollNumber'),
             "attendance": student.get('attendance'),
             "attendanceHistory": student.get('attendance_history', []),
-            "batch_id": batch_id
+            "batch_id": str(batch_id) if batch_id else None
         },
         "todayLiveClass": today_live[0] if today_live else None,
         "upcomingLiveClasses": upcoming_live,
