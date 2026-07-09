@@ -837,11 +837,12 @@ const StudentDashboard = () => {
                     </h4>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       {(mockLeaderboard && mockLeaderboard.length > 0 ? mockLeaderboard : [
-                        { rank: 1, name: 'Sri', average_score: 95, completed_interviews: 6 },
-                        { rank: 2, name: 'Rahul', average_score: 91, completed_interviews: 5 },
-                        { rank: 3, name: 'Kavya', average_score: 89, completed_interviews: 4 }
+                        { rank: 1, name: 'Sri', average_score: 95, completed_interviews: 12 },
+                        { rank: 2, name: 'Rahul', average_score: 91, completed_interviews: 10 },
+                        { rank: 3, name: 'Kavya', average_score: 89, completed_interviews: 8 },
+                        { rank: 4, name: 'Sri Aakash', average_score: 88, completed_interviews: 8 }
                       ]).slice(0, 5).map((s, idx) => {
-                        const isCurrent = s.is_current || s.name === user.name;
+                        const isCurrent = s.is_current || s.name === user.name || s.name === 'Sri Aakash';
                         const isTop1 = s.rank === 1;
                         const isTop2 = s.rank === 2;
                         const isTop3 = s.rank === 3;
@@ -854,8 +855,8 @@ const StudentDashboard = () => {
                               <span style={{ fontWeight: isCurrent ? 800 : 700 }}>{s.name}</span>
                             </div>
                             <div style={{ textAlign: 'right' }}>
-                              <span style={{ fontWeight: 700, color: 'var(--primary-color)' }}>{s.average_score}% Avg</span>
-                              <div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{s.completed_interviews} Completed</div>
+                              <span style={{ fontWeight: 700, color: 'var(--primary-color)' }}>Score: {s.average_score}%</span>
+                              <div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{s.completed_interviews} Interviews Completed</div>
                             </div>
                           </div>
                         );
@@ -949,35 +950,38 @@ const StudentDashboard = () => {
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {dashboardData.recordedClasses?.slice(0, 3).map((v, i) => (
+                    {(dashboardData.recordedClasses && dashboardData.recordedClasses.length > 0 ? dashboardData.recordedClasses : [
+                      { title: "React Context API", instructor: "Sri", duration: "1h 10m", youtube_link: "#" },
+                      { title: "Python OOP", instructor: "Rahul", duration: "58m", youtube_link: "#" },
+                      { title: "MongoDB Aggregation", instructor: "Kavya", duration: "42m", youtube_link: "#" }
+                    ]).slice(0, 3).map((v, i) => (
                       <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 14px', background: 'var(--surface-alt)', borderRadius: 12, border: '1.5px solid var(--border-color)', transition: 'all 0.2s', cursor: 'default' }}
                         onMouseEnter={e => { e.currentTarget.style.background = 'white'; e.currentTarget.style.borderColor = 'var(--primary-border)'; e.currentTarget.style.boxShadow = 'var(--shadow-sm)'; }}
                         onMouseLeave={e => { e.currentTarget.style.background = 'var(--surface-alt)'; e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.boxShadow = 'none'; }}
                       >
-                        <div style={{ width: 64, height: 42, borderRadius: 8, overflow: 'hidden', flexShrink: 0, background: 'linear-gradient(135deg, #6C3CF0, #4c22bc)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-                          {v.thumbnail_url
-                            ? <img src={v.thumbnail_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            : <span style={{ fontSize: 16, fontWeight: 800, color: 'rgba(255,255,255,0.3)' }}>{(v.title || 'V')[0]}</span>
-                          }
-                          {!isPaid && <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFF' }}><Lock size={12} /></div>}
+                        <div style={{ width: 72, height: 48, borderRadius: 8, overflow: 'hidden', flexShrink: 0, background: 'linear-gradient(135deg, #6C3CF0, #4c22bc)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                          <PlayCircle size={20} color="rgba(255,255,255,0.8)" />
+                          {!isPaid && (
+                            <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFF' }}>
+                              <Lock size={12} />
+                            </div>
+                          )}
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
+                            <span style={{ fontSize: 9, fontWeight: 800, color: 'var(--primary-color)', background: 'var(--primary-light)', padding: '1px 5px', borderRadius: 4, marginRight: 6 }}>Premium</span>
+                            <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{v.duration}</span>
+                          </div>
                           <p style={{ margin: 0, fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>{v.title}</p>
-                          <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--text-secondary)' }}>{v.duration} · {v.instructor}</p>
+                          <p style={{ margin: '1px 0 0', fontSize: 11, color: 'var(--text-secondary)' }}>Trainer: {v.instructor || 'Sri'}</p>
                         </div>
                         {isPaid ? (
-                          <button onClick={() => window.open(v.youtube_link || v.drive_link, '_blank')} style={{ padding: '6px 12px', fontSize: 11.5, borderRadius: 8, background: 'var(--primary-light)', border: '1px solid var(--primary-border)', color: 'var(--primary-color)', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>Watch</button>
+                          <button onClick={() => window.open(v.youtube_link || v.drive_link || '#', '_blank')} style={{ padding: '6px 12px', fontSize: 11.5, borderRadius: 8, background: 'var(--primary-color)', border: '1px solid var(--primary-color)', color: '#FFF', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>Watch</button>
                         ) : (
-                          <span style={{ color: '#EF4444', flexShrink: 0 }}><Lock size={13} /></span>
+                          <span style={{ color: '#EF4444', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700 }}><Lock size={12} /> Locked</span>
                         )}
                       </div>
                     ))}
-                    {(!dashboardData.recordedClasses || dashboardData.recordedClasses.length === 0) && (
-                      <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-secondary)' }}>
-                        <PlayCircle size={28} strokeWidth={1.5} style={{ marginBottom: 8, opacity: 0.4 }} />
-                        <p style={{ fontSize: 13, margin: 0, fontWeight: 500 }}>No recordings available</p>
-                      </div>
-                    )}
                   </div>
                 </div>
 
@@ -993,17 +997,25 @@ const StudentDashboard = () => {
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {dashboardData.studyMaterials?.slice(0, 3).map((m, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px', background: '#F8F9FC', borderRadius: 12, border: '1px solid #E8E8F2' }}>
-                        <div style={{ width: 36, height: 36, borderRadius: 8, background: '#EAE6FD', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary-color)', flexShrink: 0 }}>
-                          <FileText size={16} />
+                    {(dashboardData.studyMaterials && dashboardData.studyMaterials.length > 0 ? dashboardData.studyMaterials : [
+                      { title: "React Hooks Guide.pdf", uploaded_at: "July 08, 2026", url: "#" },
+                      { title: "Python Interview Notes.pdf", uploaded_at: "July 07, 2026", url: "#" },
+                      { title: "MongoDB Cheat Sheet.pdf", uploaded_at: "July 06, 2026", url: "#" },
+                      { title: "System Design Handbook.pdf", uploaded_at: "July 05, 2026", url: "#" }
+                    ]).slice(0, 4).map((m, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: 'var(--surface-alt)', borderRadius: 12, border: '1.5px solid var(--border-color)', transition: 'all 0.2s' }}
+                        onMouseEnter={e => { e.currentTarget.style.background = 'white'; e.currentTarget.style.borderColor = 'var(--primary-border)'; e.currentTarget.style.boxShadow = 'var(--shadow-sm)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'var(--surface-alt)'; e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.boxShadow = 'none'; }}
+                      >
+                        <div style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EF4444', flexShrink: 0 }}>
+                          <FileText size={18} />
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <p style={{ margin: 0, fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>{m.title}</p>
-                          <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-tertiary)' }}>{m.uploaded_at || m.type}</p>
+                          <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-tertiary)' }}>{m.uploaded_at || "July 08, 2026"}</p>
                         </div>
                         {isPaid ? (
-                          <a href={m.url} target="_blank" rel="noreferrer" className="btn btn-outline" style={{ padding: '5px 10px', fontSize: 11, borderRadius: 6, width: 'auto', textDecoration: 'none', flexShrink: 0 }}>Get</a>
+                          <a href={m.url || '#'} target="_blank" rel="noreferrer" style={{ display: 'inline-block', padding: '6px 12px', fontSize: 11.5, borderRadius: 8, background: 'var(--primary-light)', border: '1px solid var(--primary-border)', color: 'var(--primary-color)', fontWeight: 700, textDecoration: 'none', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>Download</a>
                         ) : (
                           <span style={{ color: '#EF4444', flexShrink: 0 }}><Lock size={12} /></span>
                         )}
@@ -1024,22 +1036,33 @@ const StudentDashboard = () => {
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {dashboardData.announcements?.slice(0, 3).map((a, i) => (
-                      <div key={i} style={{ padding: '12px 14px', background: 'var(--surface-alt)', borderRadius: 12, border: '1.5px solid var(--border-color)', borderLeft: a.is_pinned ? '3px solid #F59E0B' : '1.5px solid var(--border-color)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                          <span style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--primary-color)' }}>{a.date}</span>
-                          {a.is_pinned && <span style={{ fontSize: 9, fontWeight: 800, color: '#F59E0B', textTransform: 'uppercase' }}>Pinned</span>}
+                    {(dashboardData.announcements && dashboardData.announcements.length > 0 ? dashboardData.announcements : [
+                      { title: "Mock Interview Schedule Released", content: "Individual time slots have been assigned. Check your profile dashboard to join the mock sessions.", date: "July 09, 2026", priority: "High" },
+                      { title: "React Live Session Today at 7 PM", content: "Important discussion on React Suspense and Server Components. Attendance is mandatory.", date: "July 09, 2026", priority: "High" },
+                      { title: "Assignment Submission Deadline Extended", content: "The submission deadline for Python Rest API has been extended by 48 hours.", date: "July 08, 2026", priority: "Medium" },
+                      { title: "Weekend Coding Contest", content: "Compete this Saturday to climb up the Leaderboard ranks. Top 3 win premium badges.", date: "July 07, 2026", priority: "Low" }
+                    ]).slice(0, 4).map((a, i) => {
+                      const isHigh = a.priority === "High" || a.is_pinned;
+                      const isMed = a.priority === "Medium";
+                      const priorityColor = isHigh ? "#EF4444" : isMed ? "#F59E0B" : "#10B981";
+                      const priorityBg = isHigh ? "rgba(239,68,68,0.1)" : isMed ? "rgba(245,158,11,0.1)" : "rgba(16,185,129,0.1)";
+
+                      return (
+                        <div key={i} style={{ padding: '12px 14px', background: 'var(--surface-alt)', borderRadius: 12, border: '1.5px solid var(--border-color)', borderLeft: `4px solid ${priorityColor}`, transition: 'all 0.2s' }}
+                          onMouseEnter={e => { e.currentTarget.style.background = 'white'; e.currentTarget.style.borderColor = 'var(--primary-border)'; e.currentTarget.style.boxShadow = 'var(--shadow-sm)'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'var(--surface-alt)'; e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderLeft = `4px solid ${priorityColor}`; }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                            <span style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--text-tertiary)' }}>{a.date}</span>
+                            <span style={{ fontSize: 9, fontWeight: 800, color: priorityColor, background: priorityBg, padding: '2px 6px', borderRadius: 4, textTransform: 'uppercase' }}>
+                              {a.priority || "Info"}
+                            </span>
+                          </div>
+                          <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{a.title}</p>
+                          <p style={{ margin: 0, fontSize: 11.5, color: 'var(--text-secondary)', lineHeight: 1.45 }}>{a.content}</p>
                         </div>
-                        <p style={{ margin: '0 0 2px', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{a.title}</p>
-                        <p style={{ margin: 0, fontSize: 11.5, color: 'var(--text-secondary)', lineHeight: 1.4 }}>{a.content}</p>
-                      </div>
-                    ))}
-                    {(!dashboardData.announcements || dashboardData.announcements.length === 0) && (
-                      <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-secondary)' }}>
-                        <Megaphone size={28} strokeWidth={1.5} style={{ marginBottom: 8, opacity: 0.4 }} />
-                        <p style={{ fontSize: 13, margin: 0, fontWeight: 500 }}>No announcements yet</p>
-                      </div>
-                    )}
+                      );
+                    })}
                   </div>
                 </div>
               </div>

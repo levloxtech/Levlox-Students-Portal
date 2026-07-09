@@ -27,6 +27,7 @@ def seed():
     db.users.update_one(
         {"_id": student_id},
         {"$set": {
+            "name": "Sri Aakash",
             "overall_score": 880,
             "streak": 12
         }}
@@ -101,6 +102,19 @@ def seed():
                 {"student_id": ds_id, "score": 88, "completed_interviews": 4, "total_interviews": 5},
                 {"student_id": ds_id, "score": 90, "completed_interviews": 4, "total_interviews": 5}
             ])
+
+    # Link all starter classes, announcements, study materials, recorded classes to this batch
+    db.live_classes.update_many({"batch_id": {"$exists": False}}, {"$set": {"batch_id": batch_id}})
+    db.live_classes.update_many({"batch_id": None}, {"$set": {"batch_id": batch_id}})
+    
+    db.announcements.update_many({"batch_id": {"$exists": False}}, {"$set": {"batch_id": batch_id}})
+    db.announcements.update_many({"batch_id": None}, {"$set": {"batch_id": batch_id}})
+    
+    db.study_materials.update_many({"batch_id": {"$exists": False}}, {"$set": {"batch_id": batch_id}})
+    db.study_materials.update_many({"batch_id": None}, {"$set": {"batch_id": batch_id}})
+    
+    db.recorded_classes.update_many({"batch_id": {"$exists": False}}, {"$set": {"batch_id": batch_id}})
+    db.recorded_classes.update_many({"batch_id": None}, {"$set": {"batch_id": batch_id}})
 
     print("Successfully seeded leaderboard demo records!")
 

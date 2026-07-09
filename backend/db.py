@@ -36,7 +36,7 @@ try:
         # Seed Student
         student_pw = bcrypt.hashpw("studentpass123".encode('utf-8'), bcrypt.gensalt())
         db.users.insert_one({
-            "name": "Demo Student",
+            "name": "Sri Aakash",
             "email": "student@levlox.com",
             "password": student_pw,
             "role": "student",
