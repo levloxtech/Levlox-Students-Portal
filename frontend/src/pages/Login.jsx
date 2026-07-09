@@ -499,7 +499,7 @@ const Login = () => {
                       border: 'none',
                       color: 'rgba(255, 255, 255, 0.9)',
                       fontSize: '15px',
-                      paddingLeft: 18,
+                      paddingLeft: 16,
                       paddingRight: 10,
                       height: '100%',
                       cursor: 'pointer',
@@ -507,7 +507,19 @@ const Login = () => {
                       flexShrink: 0,
                     }}
                   >
-                    <span>{selectedCountry.flag}</span>
+                    <span style={{
+                      background: 'rgba(139, 92, 246, 0.15)',
+                      border: '1px solid rgba(139, 92, 246, 0.3)',
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      fontWeight: '800',
+                      color: '#C4B5FD',
+                      letterSpacing: '0.5px',
+                      textTransform: 'uppercase'
+                    }}>
+                      {selectedCountry.code}
+                    </span>
                     <span style={{ fontSize: 9, opacity: 0.5 }}>▼</span>
                   </button>
 
@@ -539,6 +551,7 @@ const Login = () => {
                     value={phone}
                     onChange={e => { setPhone(e.target.value.replace(/\D/g, '')); setPhoneError(''); }}
                     disabled={isLocked}
+                    autoComplete="off"
                     required
                   />
 
@@ -569,6 +582,7 @@ const Login = () => {
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
                         autoFocus
+                        autoComplete="off"
                         style={{
                           width: '100%',
                           height: '38px',
@@ -618,7 +632,16 @@ const Login = () => {
                                 }}
                               >
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                  <span>{c.flag}</span>
+                                  <span style={{
+                                    background: isSelected ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.08)',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    fontSize: '10px',
+                                    fontWeight: '800',
+                                    color: isSelected ? '#FFFFFF' : '#C4B5FD',
+                                  }}>
+                                    {c.code}
+                                  </span>
                                   <span style={{ fontWeight: isSelected ? '700' : '500' }}>{c.name}</span>
                                 </div>
                                 <span style={{ fontWeight: 600, opacity: isSelected ? 0.9 : 0.4 }}>{c.dial}</span>
@@ -659,6 +682,7 @@ const Login = () => {
                     value={password}
                     onChange={e => { setPassword(e.target.value); setPassError(''); }}
                     disabled={isLocked}
+                    autoComplete="new-password"
                     required
                   />
                   <button
@@ -750,7 +774,7 @@ const Login = () => {
                       border: 'none',
                       color: 'rgba(255, 255, 255, 0.9)',
                       fontSize: '15px',
-                      paddingLeft: 18,
+                      paddingLeft: 16,
                       paddingRight: 10,
                       height: '100%',
                       cursor: 'pointer',
@@ -758,7 +782,19 @@ const Login = () => {
                       flexShrink: 0,
                     }}
                   >
-                    <span>{selectedCountry.flag}</span>
+                    <span style={{
+                      background: 'rgba(139, 92, 246, 0.15)',
+                      border: '1px solid rgba(139, 92, 246, 0.3)',
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      fontWeight: '800',
+                      color: '#C4B5FD',
+                      letterSpacing: '0.5px',
+                      textTransform: 'uppercase'
+                    }}>
+                      {selectedCountry.code}
+                    </span>
                     <span style={{ fontSize: 9, opacity: 0.5 }}>▼</span>
                   </button>
 
@@ -788,6 +824,7 @@ const Login = () => {
                     placeholder="Enter your mobile number"
                     value={forgotPhone}
                     onChange={e => { setForgotPhone(e.target.value.replace(/\D/g, '')); setForgotPhoneError(''); }}
+                    autoComplete="off"
                     required
                   />
 
@@ -812,6 +849,7 @@ const Login = () => {
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
                         autoFocus
+                        autoComplete="off"
                         style={{
                           width: '100%',
                           height: '38px',
@@ -861,7 +899,16 @@ const Login = () => {
                                 }}
                               >
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                  <span>{c.flag}</span>
+                                  <span style={{
+                                    background: isSelected ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.08)',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    fontSize: '10px',
+                                    fontWeight: '800',
+                                    color: isSelected ? '#FFFFFF' : '#C4B5FD',
+                                  }}>
+                                    {c.code}
+                                  </span>
                                   <span style={{ fontWeight: isSelected ? '700' : '500' }}>{c.name}</span>
                                 </div>
                                 <span style={{ fontWeight: 600, opacity: isSelected ? 0.9 : 0.4 }}>{c.dial}</span>
