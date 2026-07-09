@@ -235,6 +235,12 @@ const StudentDashboard = () => {
   const [overallLeaderboard, setOverallLeaderboard] = useState([]);
   const [mockLeaderboard, setMockLeaderboard] = useState([]);
   const [taskLeaderboard, setTaskLeaderboard] = useState([]);
+  const [learningRanking, setLearningRanking] = useState(null);
+  // Latest Replays from dedicated API
+  const [latestReplays, setLatestReplays] = useState([]);
+  const [replaysLoading, setReplaysLoading] = useState(false);
+  // Deep-link: when user clicks a replay card, store target and navigate to player
+  const [replayTarget, setReplayTarget] = useState(null); // { courseId, lessonId }
   const notiRef = useRef(null);
   const profileRef = useRef(null);
 
@@ -259,6 +265,8 @@ const StudentDashboard = () => {
     fetchNotifications();
     fetchLiveClasses();
     fetchAnalytics();
+    fetchLatestReplays();
+    fetchLearningRanking();
   }, []);
 
   useEffect(() => {
@@ -336,6 +344,18 @@ const StudentDashboard = () => {
       setAnalytics(d);
     } catch (e) { console.error(e); }
     fetchLeaderboards();
+  };
+
+  const fetchLearningRanking = async () => {
+    try {
+      const r = await apiFetch(`${API_BASE}/student/learning-ranking`, { headers: { Authorization: `Bearer ${token}` } });
+      if (r.ok) {
+        const d = await r.json();
+        setLearningRanking(d);
+      }
+    } catch (e) {
+      console.error('Error fetching learning ranking:', e);
+    }
   };
 
   const fetchNotifications = async () => {
@@ -444,6 +464,21 @@ const StudentDashboard = () => {
       const d = await r.json(); setDashboardData(d);
       const lu = JSON.parse(localStorage.getItem('user') || '{}'); lu.feesPaid = d.student.feesPaid; localStorage.setItem('user', JSON.stringify(lu));
     } catch (e) { console.error(e); }
+  };
+
+  const fetchLatestReplays = async () => {
+    setReplaysLoading(true);
+    try {
+      const r = await fetch(`${API_BASE}/student/latest-replays`, { headers: { Authorization: `Bearer ${token}` } });
+      if (r.ok) { const d = await r.json(); setLatestReplays(d.replays || []); }
+    } catch (e) { console.error(e); } finally { setReplaysLoading(false); }
+  };
+
+  // Open Course Player for a specific lesson from the Dashboard
+  const openReplayInPlayer = (replay) => {
+    if (!replay.access) return; // locked — handled in UI
+    setReplayTarget({ courseId: replay.course_id, lessonId: replay.id });
+    setActiveTab('recorded-classes-tab');
   };
 
   const payFees = async () => {
@@ -769,132 +804,98 @@ const StudentDashboard = () => {
                   </div>
                 </div>
 
-                {/* ─── OVERALL BATCH LEADERBOARD ─── */}
+                {/* ─── LEARNING RANKING WIDGET ─── */}
                 <div style={{ background: 'white', border: '1px solid var(--border-color)', borderRadius: 20, padding: 24, boxShadow: 'var(--shadow-sm)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-                    <h4 style={{ fontSize: 14, fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Crown size={16} color="#FBBF24" /> Overall Batch Leaderboard
-                    </h4>
-                    <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600 }}>Top Performers</span>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                    <div>
+                      <h4 style={{ fontSize: 15, fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: 8, color: '#121118' }}>
+                        <Crown size={18} color="#FBBF24" /> Dynamic Learning Ranking
+                      </h4>
+                      <p style={{ margin: '4px 0 0', fontSize: 11.5, color: 'var(--text-secondary)' }}>
+                        Rankings computed from assignments, mock interviews, attendance, and course completion.
+                      </p>
+                    </div>
+                    <span style={{ fontSize: 11, background: 'var(--primary-light)', color: 'var(--primary-color)', padding: '4px 10px', borderRadius: 20, fontWeight: 700 }}>
+                      Live Batch Stats
+                    </span>
                   </div>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {(overallLeaderboard && overallLeaderboard.length > 0 ? overallLeaderboard : [
-                      { rank: 1, name: 'Sri', overall_score: 950, streak: 18 },
-                      { rank: 2, name: 'Rahul', overall_score: 910, streak: 15 },
-                      { rank: 3, name: 'Kavya', overall_score: 890, streak: 9 }
-                    ]).map((s, idx) => {
-                      const isTop1 = s.rank === 1;
-                      const isTop2 = s.rank === 2;
-                      const isTop3 = s.rank === 3;
-                      const isCurrent = s.is_current || s.name === user.name;
 
+                  {/* Top Performers Grid (1st, 2nd, 3rd) */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 20 }}>
+                    {learningRanking?.topPerformers?.map((performer, idx) => {
+                      const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉';
+                      const label = idx === 0 ? 'Top Performer' : idx === 1 ? '2nd' : '3rd';
+                      const isCurrent = performer.is_current || performer.name === user.name;
                       return (
                         <div
                           key={idx}
                           style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            padding: '12px 16px',
-                            background: isCurrent ? 'rgba(108,60,240,0.06)' : 'var(--surface-alt)',
+                            background: isCurrent ? 'rgba(108,60,240,0.05)' : 'var(--surface-alt)',
                             border: `1.5px solid ${isCurrent ? 'var(--primary-color)' : 'var(--border-color)'}`,
-                            borderRadius: 12,
-                            transition: 'all 0.2s',
+                            borderRadius: 14,
+                            padding: 16,
+                            textAlign: 'center',
+                            position: 'relative'
                           }}
                         >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                            <div style={{ width: 26, height: 26, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isTop1 ? 'rgba(251,191,36,0.15)' : isTop2 ? 'rgba(156,163,175,0.15)' : isTop3 ? 'rgba(217,119,6,0.15)' : 'rgba(255,255,255,0.8)', border: '1px solid var(--border-color)', fontSize: 12, fontWeight: 800 }}>
-                              {isTop1 ? <Crown size={14} color="#D97706" /> : isTop2 ? <Medal size={14} color="#71717A" /> : isTop3 ? <Medal size={14} color="#B45309" /> : s.rank}
-                            </div>
-                            <span style={{ fontSize: 13.5, fontWeight: isCurrent ? 800 : 700, color: 'var(--text-primary)' }}>
-                              {s.name} {isCurrent && <span style={{ fontSize: 10, color: 'var(--primary-color)', background: 'var(--primary-light)', padding: '2px 6px', borderRadius: 4, marginLeft: 4 }}>You</span>}
-                            </span>
-                          </div>
-                          
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary-color)' }}>
-                              {s.overall_score} pts
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#EF4444', fontWeight: 700 }}>
-                              <Flame size={14} /> {s.streak}d
-                            </div>
+                          <div style={{ fontSize: 24, marginBottom: 6 }}>{medal}</div>
+                          <h5 style={{ margin: '0 0 2px', fontSize: 13, fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {performer.name}
+                          </h5>
+                          <p style={{ margin: '0 0 6px', fontSize: 10, color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>
+                            {label}
+                          </p>
+                          <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--primary-color)' }}>
+                            {performer.score} pts
                           </div>
                         </div>
                       );
-                    })}
-                  </div>
-                </div>
-
-                {/* ─── SPECIALIZED LEADERBOARDS (GRID) ─── */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 24 }} className="dashboard-main-grid">
-                  
-                  {/* Mock Interview Leaderboard */}
-                  <div style={{ background: 'white', border: '1px solid var(--border-color)', borderRadius: 20, padding: 20, boxShadow: 'var(--shadow-sm)' }}>
-                    <h4 style={{ fontSize: 13.5, fontWeight: 800, margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <Activity size={15} color="var(--primary-color)" /> Mock Interviews
-                    </h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {(mockLeaderboard && mockLeaderboard.length > 0 ? mockLeaderboard : [
-                        { rank: 1, name: 'Sri', average_score: 95, completed_interviews: 12 },
-                        { rank: 2, name: 'Rahul', average_score: 91, completed_interviews: 10 },
-                        { rank: 3, name: 'Kavya', average_score: 89, completed_interviews: 8 },
-                        { rank: 4, name: 'Sri Aakash', average_score: 88, completed_interviews: 8 }
-                      ]).slice(0, 5).map((s, idx) => {
-                        const isCurrent = s.is_current || s.name === user.name || s.name === 'Sri Aakash';
-                        const isTop1 = s.rank === 1;
-                        const isTop2 = s.rank === 2;
-                        const isTop3 = s.rank === 3;
-                        return (
-                          <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: isCurrent ? 'rgba(108,60,240,0.04)' : 'var(--surface-alt)', border: `1px solid ${isCurrent ? 'var(--primary-color)' : 'var(--border-color)'}`, borderRadius: 10, fontSize: 12.5 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}>
-                                {isTop1 ? <Crown size={12} color="#D97706" /> : isTop2 ? <Medal size={12} color="#71717A" /> : isTop3 ? <Medal size={12} color="#B45309" /> : `#${s.rank}`}
-                              </span>
-                              <span style={{ fontWeight: isCurrent ? 800 : 700 }}>{s.name}</span>
-                            </div>
-                            <div style={{ textAlign: 'right' }}>
-                              <span style={{ fontWeight: 700, color: 'var(--primary-color)' }}>Score: {s.average_score}%</span>
-                              <div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{s.completed_interviews} Interviews Completed</div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                    }) || (
+                      <div style={{ gridColumn: 'span 3', textAlign: 'center', padding: '10px 0', color: 'var(--text-secondary)', fontSize: 12.5 }}>
+                        Calculating rankings...
+                      </div>
+                    )}
                   </div>
 
-                  {/* Task Leaderboard */}
-                  <div style={{ background: 'white', border: '1px solid var(--border-color)', borderRadius: 20, padding: 20, boxShadow: 'var(--shadow-sm)' }}>
-                    <h4 style={{ fontSize: 13.5, fontWeight: 800, margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <FileText size={15} color="var(--primary-color)" /> Assignments & Tasks
-                    </h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {(taskLeaderboard && taskLeaderboard.length > 0 ? taskLeaderboard : [
-                        { rank: 1, name: 'Sri', completed_assignments: 8, submission_rate: 80 },
-                        { rank: 2, name: 'Rahul', completed_assignments: 7, submission_rate: 70 },
-                        { rank: 3, name: 'Kavya', completed_assignments: 6, submission_rate: 60 }
-                      ]).slice(0, 5).map((s, idx) => {
-                        const isCurrent = s.is_current || s.name === user.name;
-                        const isTop1 = s.rank === 1;
-                        const isTop2 = s.rank === 2;
-                        const isTop3 = s.rank === 3;
-                        return (
-                          <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: isCurrent ? 'rgba(108,60,240,0.04)' : 'var(--surface-alt)', border: `1px solid ${isCurrent ? 'var(--primary-color)' : 'var(--border-color)'}`, borderRadius: 10, fontSize: 12.5 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}>
-                                {isTop1 ? <Crown size={12} color="#D97706" /> : isTop2 ? <Medal size={12} color="#71717A" /> : isTop3 ? <Medal size={12} color="#B45309" /> : `#${s.rank}`}
-                              </span>
-                              <span style={{ fontWeight: isCurrent ? 800 : 700 }}>{s.name}</span>
-                            </div>
-                            <div style={{ textAlign: 'right' }}>
-                              <span style={{ fontWeight: 700, color: 'var(--success-color)' }}>{s.completed_assignments} Done</span>
-                              <div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{s.submission_rate}% Sub. Rate</div>
-                            </div>
-                          </div>
-                        );
-                      })}
+                  {/* Current Student Position Banner */}
+                  {learningRanking?.currentStudent && (
+                    <div style={{
+                      background: 'linear-gradient(135deg, var(--primary-color) 0%, #4c22bc 100%)',
+                      borderRadius: 14,
+                      padding: '16px 20px',
+                      color: '#FFF',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      boxShadow: '0 8px 20px rgba(108,60,240,0.18)'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{
+                          width: 38,
+                          height: 38,
+                          borderRadius: '50%',
+                          background: 'rgba(255,255,255,0.15)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 15,
+                          fontWeight: 800
+                        }}>
+                          {learningRanking.currentStudent.rank}
+                        </div>
+                        <div>
+                          <p style={{ margin: 0, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.8, color: 'rgba(255,255,255,0.7)', fontWeight: 700 }}>Your Position</p>
+                          <h5 style={{ margin: '2px 0 0', fontSize: 14, fontWeight: 800 }}>
+                            {learningRanking.currentStudent.name} (You)
+                          </h5>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontSize: 16, fontWeight: 800 }}>{learningRanking.currentStudent.score} pts</span>
+                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>Dynamic Batch Rating</div>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* UPCOMING LECTURES */}
@@ -937,91 +938,188 @@ const StudentDashboard = () => {
               {/* RIGHT COLUMN: LATEST REPLAYS, STUDY MATERIALS, ANNOUNCEMENTS */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
-                {/* RECORDED CLASSES */}
-                <div className="card-premium">
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
+                {/* LATEST REPLAYS — Premium LMS cards, newest 3 lessons */}
+                <div className="card-premium" style={{ padding: 0, overflow: 'hidden' }}>
+                  {/* Header */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px 14px', borderBottom: '1px solid var(--border-color)' }}>
+                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-primary)' }}>
                       <PlayCircle size={17} color="var(--primary-color)" /> Latest Replays
                     </h3>
-                    <button onClick={() => setActiveTab('recorded-classes-tab')} style={{ background: 'var(--primary-light)', border: '1px solid var(--primary-border)', cursor: 'pointer', color: 'var(--primary-color)', fontSize: 12, fontWeight: 700, padding: '5px 12px', borderRadius: 20 }}>
-                      View all
+                    <button
+                      onClick={() => { setReplayTarget(null); setActiveTab('recorded-classes-tab'); }}
+                      style={{ background: 'var(--primary-light)', border: '1px solid var(--primary-border)', cursor: 'pointer', color: 'var(--primary-color)', fontSize: 12, fontWeight: 700, padding: '5px 12px', borderRadius: 20, display: 'flex', alignItems: 'center', gap: 4 }}
+                    >
+                      View all <ArrowRight size={12} />
                     </button>
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {(dashboardData.recordedClasses && dashboardData.recordedClasses.length > 0 ? dashboardData.recordedClasses : [
-                      { title: "React Context API", instructor: "Sri", duration: "1h 10m", youtube_link: "#" },
-                      { title: "Python OOP", instructor: "Rahul", duration: "58m", youtube_link: "#" },
-                      { title: "MongoDB Aggregation", instructor: "Kavya", duration: "42m", youtube_link: "#" }
-                    ]).slice(0, 3).map((v, i) => (
-                      <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 14px', background: 'var(--surface-alt)', borderRadius: 12, border: '1.5px solid var(--border-color)', transition: 'all 0.2s', cursor: 'default' }}
-                        onMouseEnter={e => { e.currentTarget.style.background = 'white'; e.currentTarget.style.borderColor = 'var(--primary-border)'; e.currentTarget.style.boxShadow = 'var(--shadow-sm)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.background = 'var(--surface-alt)'; e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.boxShadow = 'none'; }}
-                      >
-                        <div style={{ width: 72, height: 48, borderRadius: 8, overflow: 'hidden', flexShrink: 0, background: 'linear-gradient(135deg, #6C3CF0, #4c22bc)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-                          <PlayCircle size={20} color="rgba(255,255,255,0.8)" />
-                          {!isPaid && (
-                            <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFF' }}>
-                              <Lock size={12} />
-                            </div>
-                          )}
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
-                            <span style={{ fontSize: 9, fontWeight: 800, color: 'var(--primary-color)', background: 'var(--primary-light)', padding: '1px 5px', borderRadius: 4, marginRight: 6 }}>Premium</span>
-                            <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{v.duration}</span>
+                  {/* Loading skeleton */}
+                  {replaysLoading && (
+                    <div style={{ padding: '20px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                      {[1,2,3].map(i => (
+                        <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                          <div style={{ width: 104, height: 58, borderRadius: 10, background: 'var(--surface-alt)', animation: 'pulse 1.5s infinite' }} />
+                          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 7 }}>
+                            <div style={{ height: 11, borderRadius: 6, background: 'var(--surface-alt)', width: '60%' }} />
+                            <div style={{ height: 9, borderRadius: 6, background: 'var(--surface-alt)', width: '40%' }} />
                           </div>
-                          <p style={{ margin: 0, fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>{v.title}</p>
-                          <p style={{ margin: '1px 0 0', fontSize: 11, color: 'var(--text-secondary)' }}>Trainer: {v.instructor || 'Sri'}</p>
                         </div>
-                        {isPaid ? (
-                          <button onClick={() => window.open(v.youtube_link || v.drive_link || '#', '_blank')} style={{ padding: '6px 12px', fontSize: 11.5, borderRadius: 8, background: 'var(--primary-color)', border: '1px solid var(--primary-color)', color: '#FFF', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>Watch</button>
-                        ) : (
-                          <span style={{ color: '#EF4444', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700 }}><Lock size={12} /> Locked</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Cards */}
+                  {!replaysLoading && (
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      {latestReplays.length === 0 && (
+                        <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                          <PlayCircle size={30} color="var(--text-tertiary)" style={{ marginBottom: 8, display: 'block', margin: '0 auto 8px' }} />
+                          <p style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>No recordings uploaded yet.</p>
+                          <p style={{ margin: '4px 0 0', fontSize: 11.5, color: 'var(--text-tertiary)' }}>Check back after your next class!</p>
+                        </div>
+                      )}
+
+                      {latestReplays.map((v, i) => {
+                        const isLast = i === latestReplays.length - 1;
+                        const progress = v.progress || 0;
+                        const hasAccess = v.access !== false;
+
+                        return (
+                          <div
+                            key={v.id || i}
+                            style={{
+                              display: 'flex', gap: 14, alignItems: 'flex-start',
+                              padding: '14px 20px',
+                              borderBottom: isLast ? 'none' : '1px solid var(--border-color)',
+                              transition: 'background 0.15s',
+                              cursor: hasAccess ? 'pointer' : 'default',
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(108,60,240,0.028)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                            onClick={hasAccess ? () => openReplayInPlayer(v) : undefined}
+                          >
+                            {/* Thumbnail — 16:9 */}
+                            <div style={{
+                              width: 108, flexShrink: 0, borderRadius: 10, overflow: 'hidden',
+                              position: 'relative', aspectRatio: '16/9',
+                              background: 'linear-gradient(135deg, #6C3CF0 0%, #4c22bc 100%)',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              boxShadow: '0 3px 10px rgba(0,0,0,0.10)',
+                            }}>
+                              {v.thumbnail ? (
+                                <img
+                                  src={v.thumbnail}
+                                  alt={v.title}
+                                  style={{
+                                    width: '100%', height: '100%', objectFit: 'cover',
+                                    filter: hasAccess ? 'none' : 'blur(4px) brightness(0.5)',
+                                  }}
+                                  onError={e => { e.target.style.display = 'none'; }}
+                                />
+                              ) : (
+                                <PlayCircle size={22} color={hasAccess ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.25)'} />
+                              )}
+
+                              {/* Premium badge overlay for locked */}
+                              {!hasAccess && (
+                                <div style={{
+                                  position: 'absolute', inset: 0, display: 'flex',
+                                  alignItems: 'center', justifyContent: 'center',
+                                  background: 'rgba(0,0,0,0.42)'
+                                }}>
+                                  <span style={{ fontSize: 8.5, fontWeight: 900, color: '#F0C27F', background: 'rgba(0,0,0,0.6)', padding: '2px 7px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>⭐ Premium</span>
+                                </div>
+                              )}
+
+                              {/* Progress strip at bottom */}
+                              {hasAccess && progress > 0 && progress < 100 && (
+                                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 3, background: 'rgba(255,255,255,0.15)' }}>
+                                  <div style={{ height: '100%', width: `${progress}%`, background: '#6C3CF0', borderRadius: 'inherit' }} />
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Meta */}
+                            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                              {/* Module + date row */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                {v.module && (
+                                  <span style={{ fontSize: 9.5, fontWeight: 800, color: 'var(--primary-color)', background: 'var(--primary-light)', padding: '1.5px 6px', borderRadius: 4 }}>
+                                    {v.module}
+                                  </span>
+                                )}
+                                {v.course && (
+                                  <span style={{ fontSize: 9.5, color: 'var(--text-tertiary)', fontWeight: 600 }}>{v.course}</span>
+                                )}
+                              </div>
+
+                              {/* Title */}
+                              <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3 }}>
+                                {v.title}
+                              </p>
+
+                              {/* Trainer + duration */}
+                              <p style={{ margin: 0, fontSize: 11, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                                {v.trainer || 'Levlox Trainer'}
+                                {v.duration && <><span style={{ color: 'var(--text-tertiary)' }}>·</span><Clock size={9} />{v.duration}</>}
+                              </p>
+
+                              {/* Progress bar (only if started) */}
+                              {hasAccess && progress > 0 && (
+                                <div style={{ marginTop: 4 }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-tertiary)', marginBottom: 3, fontWeight: 600 }}>
+                                    <span>Progress</span>
+                                    <span style={{ color: 'var(--primary-color)' }}>{progress}%</span>
+                                  </div>
+                                  <div style={{ height: 4, background: 'var(--border-color)', borderRadius: 99, overflow: 'hidden' }}>
+                                    <div style={{ height: '100%', width: `${progress}%`, background: 'linear-gradient(90deg, #6C3CF0, #9B59B6)', borderRadius: 99, transition: 'width 0.6s ease' }} />
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* CTA Button */}
+                              <div style={{ marginTop: 6 }}>
+                                {hasAccess ? (
+                                  <button
+                                    onClick={e => { e.stopPropagation(); openReplayInPlayer(v); }}
+                                    style={{
+                                      padding: '5px 13px', fontSize: 11, borderRadius: 7, fontWeight: 800,
+                                      cursor: 'pointer', fontFamily: 'inherit',
+                                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                                      transition: 'all 0.15s', border: 'none',
+                                      background: progress > 0 ? 'var(--primary-color)' : 'var(--primary-light)',
+                                      color: progress > 0 ? '#fff' : 'var(--primary-color)',
+                                    }}
+                                  >
+                                    <PlayCircle size={11} />
+                                    {progress === 100 ? 'Watch Again' : progress > 0 ? 'Continue Watching' : 'Watch Now'}
+                                  </button>
+                                ) : (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                    <span style={{ fontSize: 10.5, color: 'var(--text-tertiary)', fontStyle: 'italic' }}>Available after activation</span>
+                                    <button
+                                      onClick={e => { e.stopPropagation(); setActiveTab('fees-tab'); }}
+                                      style={{
+                                        padding: '4px 10px', fontSize: 10.5, borderRadius: 7,
+                                        background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)',
+                                        color: '#DC2626', fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit',
+                                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                                      }}
+                                    >
+                                      Activate Access
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
-                {/* STUDY MATERIALS */}
-                <div className="card-premium">
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <BookOpen size={17} color="var(--primary-color)" /> Study Materials
-                    </h3>
-                    <button onClick={() => setActiveTab('recorded-classes-tab')} style={{ background: 'var(--primary-light)', border: '1px solid var(--primary-border)', cursor: 'pointer', color: 'var(--primary-color)', fontSize: 12, fontWeight: 700, padding: '5px 12px', borderRadius: 20 }}>
-                      View all
-                    </button>
-                  </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {(dashboardData.studyMaterials && dashboardData.studyMaterials.length > 0 ? dashboardData.studyMaterials : [
-                      { title: "React Hooks Guide.pdf", uploaded_at: "July 08, 2026", url: "#" },
-                      { title: "Python Interview Notes.pdf", uploaded_at: "July 07, 2026", url: "#" },
-                      { title: "MongoDB Cheat Sheet.pdf", uploaded_at: "July 06, 2026", url: "#" },
-                      { title: "System Design Handbook.pdf", uploaded_at: "July 05, 2026", url: "#" }
-                    ]).slice(0, 4).map((m, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: 'var(--surface-alt)', borderRadius: 12, border: '1.5px solid var(--border-color)', transition: 'all 0.2s' }}
-                        onMouseEnter={e => { e.currentTarget.style.background = 'white'; e.currentTarget.style.borderColor = 'var(--primary-border)'; e.currentTarget.style.boxShadow = 'var(--shadow-sm)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.background = 'var(--surface-alt)'; e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.boxShadow = 'none'; }}
-                      >
-                        <div style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EF4444', flexShrink: 0 }}>
-                          <FileText size={18} />
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ margin: 0, fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>{m.title}</p>
-                          <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-tertiary)' }}>{m.uploaded_at || "July 08, 2026"}</p>
-                        </div>
-                        {isPaid ? (
-                          <a href={m.url || '#'} target="_blank" rel="noreferrer" style={{ display: 'inline-block', padding: '6px 12px', fontSize: 11.5, borderRadius: 8, background: 'var(--primary-light)', border: '1px solid var(--primary-border)', color: 'var(--primary-color)', fontWeight: 700, textDecoration: 'none', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>Download</a>
-                        ) : (
-                          <span style={{ color: '#EF4444', flexShrink: 0 }}><Lock size={12} /></span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
 
                 {/* ANNOUNCEMENTS */}
                 <div className="card-premium">
@@ -1162,7 +1260,12 @@ const StudentDashboard = () => {
 
         {/* RECORDED CLASSES TAB — premium Netflix-style */}
         {activeTab === 'recorded-classes-tab' && dashboardData && (
-          <RecordedClassesPage dashboardData={dashboardData} isPaid={isPaid} />
+          <RecordedClassesPage
+            dashboardData={dashboardData}
+            isPaid={isPaid}
+            initialCourseId={replayTarget?.courseId || null}
+            initialLessonId={replayTarget?.lessonId || null}
+          />
         )}
 
         {/* ATTENDANCE TAB — premium GitHub heatmap */}

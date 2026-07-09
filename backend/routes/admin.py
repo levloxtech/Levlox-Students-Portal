@@ -347,6 +347,19 @@ def delete_live_class(class_id):
         return jsonify({'message': 'Error deleting live class', 'error': str(e)}), 400
 
 # Recorded Classes CRUD
+@admin_bp.route('/recorded-classes', methods=['GET'])
+@token_required(allowed_roles=['admin'])
+def list_recorded_classes():
+    try:
+        classes = list(db.recorded_classes.find().sort("sort_order", 1))
+        for c in classes:
+            c['_id'] = str(c['_id'])
+            if 'created_by' in c:
+                c['created_by'] = str(c['created_by'])
+        return jsonify({"recorded_classes": classes}), 200
+    except Exception as e:
+        return jsonify({'message': 'Error fetching classes', 'error': str(e)}), 400
+
 @admin_bp.route('/recorded-classes', methods=['POST'])
 @token_required(allowed_roles=['admin'])
 def create_recorded_class():
@@ -354,12 +367,15 @@ def create_recorded_class():
     title = data.get('title')
     module = data.get('module', 'Module 1 - Python Basics')
     video_url = data.get('video_url', '')
+    thumbnail = data.get('thumbnail', '')
+    description = data.get('description', '')
     notes_url = data.get('notes_url', '')
     assignment = data.get('assignment', '')
     quiz = data.get('quiz', '')
     visibility = data.get('visibility', 'everyone')
     course_title = data.get('course_title', 'Fullstack Engineering')
     batch_id = data.get('batch_id')
+    sort_order = data.get('sort_order', 999)
 
     if not title:
         return jsonify({'message': 'Missing title'}), 400
@@ -368,11 +384,14 @@ def create_recorded_class():
         "title": title.strip(),
         "module": module.strip(),
         "video_url": video_url.strip(),
+        "thumbnail": thumbnail.strip(),
+        "description": description.strip(),
         "notes_url": notes_url.strip(),
         "assignment": assignment.strip() if isinstance(assignment, str) else assignment,
         "quiz": quiz if isinstance(quiz, dict) else quiz.strip() if quiz else "",
         "visibility": visibility.strip(),
         "course_title": course_title.strip(),
+        "sort_order": int(sort_order),
         "created_by": ObjectId(g.current_user['id'] if 'id' in g.current_user else g.current_user['_id']),
         "created_at": datetime.datetime.utcnow().strftime("%B %d, %Y"),
         "batch_id": batch_id

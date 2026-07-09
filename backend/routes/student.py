@@ -183,12 +183,36 @@ def get_dashboard():
         if 'batch_id' in item and item['batch_id']:
             item['batch_id'] = str(item['batch_id'])
 
-    # Fetch recorded classes
-    recorded_classes_list = list(db.recorded_classes.find({"batch_id": batch_id}))
-    for item in recorded_classes_list:
+    # Fetch recorded classes — enriched with access + progress
+    raw_recorded = list(db.recorded_classes.find({"batch_id": batch_id}).sort("sort_order", 1))
+
+    # Get lesson_progress for this student
+    student_oid = ObjectId(student['id'])
+    progress_docs = list(db.lesson_progress.find({"student_id": student_oid}))
+    progress_map = {}
+    for p in progress_docs:
+        lid = str(p.get('lesson_id', ''))
+        progress_map[lid] = p.get('progress', 100 if p.get('completed') else 0)
+
+    # Get trainer name from batch
+    trainer_name = "Levlox Trainer"
+    if batch_id:
+        batch_doc = db.batches.find_one({"_id": ObjectId(batch_id)} if isinstance(batch_id, str) and len(batch_id) == 24 else {"_id": batch_id})
+        if batch_doc:
+            trainer_name = batch_doc.get('trainer', trainer_name)
+
+    recorded_classes_list = []
+    for item in raw_recorded:
         item['_id'] = str(item['_id'])
         if 'batch_id' in item and item['batch_id']:
             item['batch_id'] = str(item['batch_id'])
+
+        visibility = item.get('visibility', 'everyone')
+        # access = True if visibility is 'everyone' OR student has paid fees
+        item['access'] = True if (visibility == 'everyone' or fees_are_paid) else False
+        item['progress'] = progress_map.get(item['_id'], 0)
+        item['trainer'] = trainer_name
+        recorded_classes_list.append(item)
 
     # Aggregate response payload
     dashboard_data = {
@@ -252,16 +276,31 @@ def get_profile():
         if not user:
             return jsonify({'message': 'Student not found'}), 404
         
+        batch_id = user.get('batch_id')
+        batch_name = "Not Assigned"
+        trainer = "Not Assigned"
+        if batch_id:
+            batch_doc = db.batches.find_one({"_id": ObjectId(batch_id)} if isinstance(batch_id, str) and len(batch_id) == 24 else {"_id": batch_id})
+            if batch_doc:
+                batch_name = batch_doc.get('name', 'Not Assigned')
+                trainer = batch_doc.get('trainer_name', batch_doc.get('trainer', 'Not Assigned'))
+
         profile_data = {
             "name": user.get('name'),
             "email": user.get('email'),
             "phone": user.get('phone', ''),
             "college": user.get('college', 'Levlox Technical Institute'),
             "course": user.get('course', 'Fullstack Engineering'),
-            "join_date": user.get('join_date', 'July 08, 2026'),
+            "join_date": user.get('join_date', user.get('enrollmentDate', 'July 08, 2026')),
             "feesStatus": user.get('feesStatus', 'Pending'),
             "attendance": user.get('attendance', {}).get('percentage', 92),
-            "profile_pic": user.get('profile_pic', '')
+            "profile_pic": user.get('profile_pic', ''),
+            "current_location": user.get('current_location', ''),
+            "permanent_address": user.get('permanent_address', ''),
+            "company": user.get('company', ''),
+            "rollNumber": user.get('rollNumber', 'LSP-2026-9999'),
+            "batch_name": batch_name,
+            "trainer": trainer
         }
         return jsonify(profile_data), 200
     except Exception as e:
@@ -273,23 +312,33 @@ def update_profile():
     data = request.get_json() or {}
     name = data.get('name')
     phone = data.get('phone', '')
-    college = data.get('college', '')
-    course = data.get('course', '')
+    email = data.get('email', '')
     profile_pic = data.get('profile_pic', '')
+    current_location = data.get('current_location', '')
+    permanent_address = data.get('permanent_address', '')
 
     if not name:
         return jsonify({'message': 'Name is required'}), 400
 
     try:
+        if email:
+            existing = db.users.find_one({"email": email.strip().lower(), "_id": {"$ne": ObjectId(g.user_id)}})
+            if existing:
+                return jsonify({'message': 'Email already in use by another account'}), 400
+
+        update_data = {
+            "name": name.strip(),
+            "phone": phone.strip(),
+            "profile_pic": profile_pic.strip(),
+            "current_location": current_location.strip(),
+            "permanent_address": permanent_address.strip()
+        }
+        if email:
+            update_data["email"] = email.strip().lower()
+
         db.users.update_one(
             {"_id": ObjectId(g.user_id)},
-            {"$set": {
-                "name": name.strip(),
-                "phone": phone.strip(),
-                "college": college.strip(),
-                "course": course.strip(),
-                "profile_pic": profile_pic.strip()
-            }}
+            {"$set": update_data}
         )
         return jsonify({'message': 'Profile updated successfully!'}), 200
     except Exception as e:
@@ -590,16 +639,133 @@ def get_task_leaderboard():
         return jsonify({'message': 'Error loading task leaderboard', 'error': str(e)}), 400
 
 
+@student_bp.route('/learning-ranking', methods=['GET'])
+@token_required(allowed_roles=['student'])
+def get_learning_ranking():
+    try:
+        student = g.current_user
+        student_db = db.users.find_one({"_id": ObjectId(student['id'])})
+        batch_id = student_db.get('batch_id') if student_db else None
+
+        if not batch_id:
+            return jsonify({
+                "topPerformers": [],
+                "currentStudent": {
+                    "rank": "-",
+                    "score": 0,
+                    "name": student.get('name')
+                }
+            }), 200
+
+        students = list(db.users.find({"role": "student", "batch_id": batch_id}))
+        rankings = []
+        
+        # Calculate totals for completion pct
+        rec_classes = list(db.recorded_classes.find({"batch_id": str(batch_id)}))
+        tot_lessons = len(rec_classes)
+
+        # Get total assignments for this batch/course if any
+        # Let's count assignments
+        total_assigns = db.assignments.count_documents({})
+        if total_assigns == 0:
+            total_assigns = 1
+
+        for s in students:
+            s_id_str = str(s['_id'])
+            s_id_obj = s['_id']
+
+            # 1. Attendance % (20%)
+            attendance_pct = s.get('attendance', {}).get('percentage', 92)
+
+            # 2. Course Completion % (20%)
+            comp_lessons = db.lesson_progress.count_documents({"student_id": s_id_str})
+            completion_pct = round((comp_lessons / max(1, tot_lessons)) * 100) if tot_lessons > 0 else 0
+            if completion_pct > 100:
+                completion_pct = 100
+
+            # 3. Assignment Score (30%)
+            subs = list(db.submissions.find({"student_id": s_id_obj}))
+            graded_subs = [sub for sub in subs if sub.get('grade') is not None]
+            if graded_subs:
+                grades = []
+                for sub in graded_subs:
+                    try:
+                        grades.append(float(sub.get('grade')))
+                    except:
+                        pass
+                avg_grade = sum(grades) / len(grades) if grades else 80.0
+            else:
+                sub_rate = (len(subs) / max(1, total_assigns)) * 100
+                avg_grade = min(100.0, sub_rate)
+
+            # 4. Mock Interview Score (30%)
+            interviews = list(db.mock_interviews.find({"student_id": s_id_obj}))
+            if interviews:
+                avg_mock = sum(i.get('score', 0) for i in interviews) / len(interviews)
+            else:
+                avg_mock = 75.0  # default fallback
+
+            final_score = round(
+                (avg_grade * 0.3) +
+                (avg_mock * 0.3) +
+                (attendance_pct * 0.2) +
+                (completion_pct * 0.2),
+                1
+            )
+
+            rankings.append({
+                "student_id": s_id_str,
+                "name": s.get('name', 'Student'),
+                "score": final_score,
+                "is_current": s_id_str == str(student['id'])
+            })
+
+        rankings.sort(key=lambda x: x['score'], reverse=True)
+
+        for idx, r in enumerate(rankings):
+            r['rank'] = idx + 1
+
+        top_performers = rankings[:3]
+        current_student = next((r for r in rankings if r['is_current']), {
+            "rank": "-",
+            "score": 0,
+            "name": student.get('name')
+        })
+
+        return jsonify({
+            "topPerformers": top_performers,
+            "currentStudent": current_student,
+            "rankings": rankings
+        }), 200
+    except Exception as e:
+        return jsonify({'message': 'Error loading learning ranking', 'error': str(e)}), 400
+
+
 @student_bp.route('/recorded-classes-lms', methods=['GET'])
 @token_required(allowed_roles=['student'])
 def get_recorded_classes_lms():
+    # Backward compatibility fallback redirecting to course overview
+    return get_recorded_courses()
+
+@student_bp.route('/recorded-courses', methods=['GET'])
+@token_required(allowed_roles=['student'])
+def get_recorded_courses():
     try:
         student = g.current_user
         fees_are_paid = student.get('feesPaid', False)
         student_db = db.users.find_one({"_id": ObjectId(student['id'])})
         batch_id = student_db.get('batch_id') if student_db else None
 
-        # Check if empty, seed default database records linked to batch_id
+        # Fetch batch trainer & name
+        batch_name = "July 2026"
+        trainer = "Sri"
+        if batch_id:
+            batch_doc = db.batches.find_one({"_id": ObjectId(batch_id)})
+            if batch_doc:
+                batch_name = batch_doc.get('name', 'July 2026')
+                trainer = batch_doc.get('trainer_name', 'Sri')
+
+        # Seeding starter classes if empty
         if db.recorded_classes.count_documents({"batch_id": str(batch_id) if batch_id else None}) == 0:
             db.recorded_classes.insert_many([
                 {
@@ -637,140 +803,176 @@ def get_recorded_classes_lms():
                 }
             ])
 
-        # Fetch records
+        recorded_classes = list(db.recorded_classes.find({"batch_id": str(batch_id) if batch_id else None}))
+        
+        # Calculate modules count and lessons count
+        modules_set = set()
+        lessons_count = len(recorded_classes)
+        for rc in recorded_classes:
+            modules_set.add(rc.get('module', 'Module 1 - Python Basics'))
+        
+        modules_count = len(modules_set) if modules_set else 1
+
+        # Calculate progress
+        completed_lessons = db.lesson_progress.count_documents({"student_id": student['id']})
+        progress_pct = round((completed_lessons / max(1, lessons_count)) * 100)
+        if progress_pct > 100: progress_pct = 100
+
+        # Course records
+        courses_list = [
+            {
+                "id": "python-full-stack",
+                "title": "Python Full Stack",
+                "trainer": trainer,
+                "batch": batch_name,
+                "modules_count": modules_count,
+                "videos_count": lessons_count,
+                "progress": progress_pct,
+                "thumbnail": "",
+                "last_watched": "Variables & Data Types" if completed_lessons > 0 else "Not Started"
+            }
+        ]
+
+        return jsonify({"courses": courses_list, "isPaid": fees_are_paid}), 200
+    except Exception as e:
+        return jsonify({'message': 'Error loading recorded courses', 'error': str(e)}), 400
+
+@student_bp.route('/recorded-courses/<course_id>/player', methods=['GET'])
+@token_required(allowed_roles=['student'])
+def get_course_player(course_id):
+    try:
+        student = g.current_user
+        fees_are_paid = student.get('feesPaid', False)
+        student_db = db.users.find_one({"_id": ObjectId(student['id'])})
+        batch_id = student_db.get('batch_id') if student_db else None
+
         recorded_classes = list(db.recorded_classes.find({"batch_id": str(batch_id) if batch_id else None}))
         submissions = list(db.submissions.find({"student_id": ObjectId(student['id'])}))
+        completed_list = list(db.lesson_progress.find({"student_id": student['id']}))
+        completed_ids = set(str(lp.get('lesson_id')) for lp in completed_list)
         
-        # Turn submissions to dict map by assignment_id or title
         sub_map = {}
         for sub in submissions:
             sub_map[str(sub.get('assignment_id'))] = sub.get('status', 'Submitted').capitalize()
 
         # Group by module field
         modules_dict = {}
+        video_number = 1
         for rc in recorded_classes:
             mod_title = rc.get('module', 'Module 1 - Python Basics')
             if mod_title not in modules_dict:
                 modules_dict[mod_title] = {
                     "id": mod_title.lower().replace(" ", "-"),
                     "title": mod_title,
-                    "progress": 0,
-                    "videos": [],
-                    "notes": [],
-                    "assignments": [],
-                    "quiz": None
+                    "lessons": []
                 }
             
-            # Determine visibility & lock
             visibility = rc.get('visibility', 'everyone')
             is_locked = True if (visibility == 'paid' and not fees_are_paid) else False
-
-            # Add video
             rc_id = str(rc['_id'])
-            modules_dict[mod_title]["videos"].append({
+
+            modules_dict[mod_title]["lessons"].append({
                 "id": rc_id,
+                "video_number": video_number,
                 "title": rc.get('title'),
+                "description": rc.get('description', 'Learn the core programming constructs in this step-by-step lecture replay.'),
                 "duration": "1h 15m",
-                "watch_progress": 100 if is_locked == False and rc.get('title') == "Variables & Data Types" else 0,
-                "completed": True if is_locked == False and rc.get('title') == "Variables & Data Types" else False,
+                "completed": rc_id in completed_ids,
                 "url": rc.get('video_url', ''),
+                "notes_url": rc.get('notes_url') if not is_locked else None,
+                "assignment": rc.get('assignment') if not is_locked else None,
+                "quiz": rc.get('quiz') if not is_locked else None,
                 "visibility": visibility,
                 "locked": is_locked
             })
+            video_number += 1
 
-            # Add notes
-            if rc.get('notes_url'):
-                modules_dict[mod_title]["notes"].append({
-                    "id": f"note-{rc_id}",
-                    "title": f"{rc.get('title')} Notes",
-                    "file_name": f"{rc.get('title')} Notes.pdf",
-                    "url": rc.get('notes_url'),
-                    "visibility": visibility,
-                    "locked": is_locked
-                })
-
-            # Add assignment
-            if rc.get('assignment'):
-                status = "Pending"
-                if rc_id in sub_map:
-                    status = sub_map[rc_id]
-                modules_dict[mod_title]["assignments"].append({
-                    "id": rc_id,
-                    "title": rc.get('assignment'),
-                    "deadline": "July 30, 2026",
-                    "marks": 50,
-                    "status": status,
-                    "visibility": visibility,
-                    "locked": is_locked
-                })
-
-            # Add quiz
-            if rc.get('quiz') and not modules_dict[mod_title]["quiz"]:
-                modules_dict[mod_title]["quiz"] = {
-                    "id": f"quiz-{rc_id}",
-                    "name": rc.get('quiz'),
-                    "questions": 12,
-                    "time": "15 mins",
-                    "attempts": "0/2",
-                    "visibility": visibility,
-                    "locked": is_locked
-                }
-
-        # Calculate module progress based on videos completion
-        for mod_title, mod in modules_dict.items():
-            unlocked_vids = [v for v in mod["videos"] if not v["locked"]]
-            if unlocked_vids:
-                completed_vids = sum(1 for v in unlocked_vids if v["completed"])
-                mod["progress"] = round((completed_vids / len(unlocked_vids)) * 100)
-            else:
-                mod["progress"] = 0
-
-        # Convert to list
         modules_list = list(modules_dict.values())
-        # Sort by module name
         modules_list.sort(key=lambda x: x['title'])
 
-        mock_interviews = [
-            {
-                "number": 1,
-                "status": "Completed",
-                "score": "88/100",
-                "feedback": "Great logic and explanation of OOP decorators. Focus slightly more on memory management."
-            },
-            {
-                "number": 2,
-                "status": "Scheduled",
-                "score": "N/A",
-                "feedback": "Scheduled for July 12, 2026. Prepare for Python REST APIs and DB indexing."
-            }
-        ]
-
-        completed_count = sum(1 for m in modules_list if m['progress'] == 100)
-        overall_progress = round((sum(m['progress'] for m in modules_list) / len(modules_list))) if modules_list else 0
-
-        course_data = {
-            "title": "Python Full Stack",
-            "trainer": "Prof. Charles Babbage",
-            "batch": student_db.get('course', 'Fullstack Engineering') if student_db else "Python Full Stack",
-            "progress": overall_progress,
-            "modules_completed": completed_count,
-            "modules_remaining": len(modules_list) - completed_count,
-            "duration": "120 Hours",
-            "last_updated": "July 09, 2026",
-            "modules": modules_list,
-            "resources": [
-                { "title": "Comprehensive PDF Lecture Notes", "type": "PDF Notes", "url": "https://react.dev" },
-                { "title": "Flask & React Cheat Sheets", "type": "Cheat Sheets", "url": "https://react.dev" },
-                { "title": "Backend API Source Code", "type": "Source Code", "url": "https://github.com" },
-                { "title": "Python Coding Lab Practice Programs", "type": "Practice Programs", "url": "https://react.dev" },
-                { "title": "Classroom GitHub Repository", "type": "GitHub Repository", "url": "https://github.com" }
-            ],
-            "mock_interviews": mock_interviews
-        }
-
-        return jsonify({"course": course_data, "isPaid": fees_are_paid}), 200
+        return jsonify({"modules": modules_list, "isPaid": fees_are_paid}), 200
     except Exception as e:
-        return jsonify({'message': 'Error loading LMS data', 'error': str(e)}), 400
+        return jsonify({'message': 'Error loading player curriculum', 'error': str(e)}), 400
+
+@student_bp.route('/lessons/<lesson_id>/complete', methods=['POST'])
+@token_required(allowed_roles=['student'])
+def complete_lesson(lesson_id):
+    try:
+        student = g.current_user
+        
+        db.lesson_progress.update_one(
+            {"student_id": student['id'], "lesson_id": lesson_id},
+            {"$set": {
+                "student_id": student['id'],
+                "lesson_id": lesson_id,
+                "completed_at": datetime.datetime.utcnow()
+            }},
+            upsert=True
+        )
+        return jsonify({'message': 'Lesson marked as completed successfully!'}), 200
+    except Exception as e:
+        return jsonify({'message': 'Error completing lesson', 'error': str(e)}), 400
+
+
+@student_bp.route('/latest-replays', methods=['GET'])
+@token_required(allowed_roles=['student'])
+def get_latest_replays():
+    """Return the 3 most recently uploaded lessons for the student's batch.
+    Includes access control, progress, and deep-link course_id for the Course Player.
+    """
+    try:
+        student = g.current_user
+        fees_are_paid = student.get('feesPaid', False)
+        student_db = db.users.find_one({"_id": ObjectId(student['id'])})
+        batch_id = student_db.get('batch_id') if student_db else None
+
+        # Fetch trainer name
+        trainer_name = "Levlox Trainer"
+        if batch_id:
+            batch_doc = db.batches.find_one({"_id": ObjectId(batch_id)})
+            if batch_doc:
+                trainer_name = batch_doc.get('trainer_name', batch_doc.get('trainer', 'Levlox Trainer'))
+
+        # Fetch lessons sorted by creation (newest first), limit 3
+        query = {"batch_id": str(batch_id) if batch_id else None}
+        raw = list(db.recorded_classes.find(query).sort("_id", -1).limit(3))
+
+        # Get this student's lesson progress
+        progress_docs = list(db.lesson_progress.find({"student_id": student['id']}))
+        progress_map = {str(p.get('lesson_id', '')): 100 for p in progress_docs}
+
+        result = []
+        for idx, item in enumerate(raw):
+            lesson_id = str(item['_id'])
+            visibility = item.get('visibility', 'everyone')
+            has_access = visibility == 'everyone' or fees_are_paid
+
+            # Derive a stable course_id (used by Course Player route)
+            # We use the course_title normalised as a slug for grouping
+            course_raw = item.get('course_title', 'Python Full Stack')
+
+            result.append({
+                "id": lesson_id,
+                "title": item.get('title', f'Lesson {idx + 1}'),
+                "course": course_raw,
+                "module": item.get('module', 'Module 1'),
+                "trainer": trainer_name,
+                "thumbnail": item.get('thumbnail', ''),
+                "duration": item.get('duration', ''),
+                "description": item.get('description', ''),
+                "video_url": item.get('video_url', '') if has_access else '',
+                "progress": progress_map.get(lesson_id, 0),
+                "created_at": item.get('created_at', ''),
+                "visibility": visibility,
+                "access": has_access,
+                # Course Player deep-link: batch_id is used as course_id by the player route
+                "course_id": str(batch_id) if batch_id else None,
+            })
+
+        return jsonify({"replays": result, "isPaid": fees_are_paid}), 200
+    except Exception as e:
+        return jsonify({'message': 'Error fetching latest replays', 'error': str(e)}), 400
+
 
 
 

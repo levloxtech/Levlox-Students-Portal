@@ -98,10 +98,14 @@ const AdminDashboard = () => {
   const [recCourseTitle, setRecCourseTitle] = useState('Fullstack Engineering');
   const [recModule, setRecModule] = useState('Module 1 - Python Basics');
   const [recVideoUrl, setRecVideoUrl] = useState('');
+  const [recThumbnailUrl, setRecThumbnailUrl] = useState('');
+  const [recLessonDescription, setRecLessonDescription] = useState('');
   const [recNotesUrl, setRecNotesUrl] = useState('');
   const [recAssignment, setRecAssignment] = useState('');
   const [recQuiz, setRecQuiz] = useState('');
   const [recVisibility, setRecVisibility] = useState('everyone');
+  const [recSortOrder, setRecSortOrder] = useState('');
+  const [editingRecordedClass, setEditingRecordedClass] = useState(null);
 
   const [noteTitle, setNoteTitle] = useState('');
   const [noteType, setNoteType] = useState('PDF');
@@ -457,12 +461,12 @@ const AdminDashboard = () => {
   const fetchRecordedClasses = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/student/dashboard`, {
+      const res = await fetch(`${API_BASE}/admin/recorded-classes`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
         const data = await res.json();
-        setRecordedClasses(data.recordedClasses || []);
+        setRecordedClasses(data.recorded_classes || data || []);
       }
     } catch (error) {
       console.error(error);
@@ -793,9 +797,14 @@ const AdminDashboard = () => {
 
   const addRecordedClass = async (e) => {
     e.preventDefault();
+    const isEditing = !!editingRecordedClass;
+    const url = isEditing 
+      ? `${API_BASE}/admin/recorded-classes/${editingRecordedClass._id}`
+      : `${API_BASE}/admin/recorded-classes`;
+    const method = isEditing ? 'PUT' : 'POST';
     try {
-      const response = await fetch(`${API_BASE}/admin/recorded-classes`, {
-        method: 'POST',
+      const response = await fetch(url, {
+        method,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
@@ -804,25 +813,32 @@ const AdminDashboard = () => {
           title: recTitle,
           module: recModule,
           video_url: recVideoUrl,
+          thumbnail: recThumbnailUrl,
+          description: recLessonDescription,
           notes_url: recNotesUrl,
           assignment: recAssignment,
           quiz: recQuiz,
           visibility: recVisibility,
           course_title: recCourseTitle,
-          batch_id: selectedBatchId
+          batch_id: selectedBatchId,
+          sort_order: recSortOrder ? parseInt(recSortOrder) : 999
         })
       });
       if (response.ok) {
         setRecTitle('');
         setRecModule('Module 1 - Python Basics');
         setRecVideoUrl('');
+        setRecThumbnailUrl('');
+        setRecLessonDescription('');
         setRecNotesUrl('');
         setRecAssignment('');
         setRecQuiz('');
         setRecVisibility('everyone');
+        setRecSortOrder('');
+        setEditingRecordedClass(null);
         fetchRecordedClasses();
         fetchStats();
-        showModal("Success", "New LMS Lesson posted successfully!", "success");
+        showModal("Success", isEditing ? "Lesson updated successfully!" : "New LMS Lesson posted successfully!", "success");
       } else {
         const err = await response.json();
         showModal("Error", err.message || "Failed to upload lesson", "error");
@@ -1580,7 +1596,9 @@ const AdminDashboard = () => {
         {activeTab === 'recorded-classes' && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '30px' }}>
             <div className="dashboard-card-section">
-              <h4 style={{ marginBottom: '18px', fontSize: '15px', fontWeight: '700' }}>Upload Recorded Lesson</h4>
+              <h4 style={{ marginBottom: '18px', fontSize: '15px', fontWeight: '700' }}>
+                {editingRecordedClass ? '✏️ Edit Lesson' : '➕ Upload New Lesson'}
+              </h4>
               <form onSubmit={addRecordedClass}>
                 <div className="form-group">
                   <label className="form-label" htmlFor="recBatchSelect">Target Batch</label>
@@ -1604,15 +1622,23 @@ const AdminDashboard = () => {
                   <input id="recTitle" type="text" className="form-input" value={recTitle} onChange={(e) => setRecTitle(e.target.value)} placeholder="e.g. Variables & Data Types" required />
                 </div>
                 <div className="form-group">
-                  <label className="form-label" htmlFor="recVideoUrl">Video Link / URL</label>
-                  <input id="recVideoUrl" type="url" className="form-input" value={recVideoUrl} onChange={(e) => setRecVideoUrl(e.target.value)} placeholder="https://youtube.com/watch?v=... or stream url" />
+                  <label className="form-label" htmlFor="recVideoUrl">Video URL</label>
+                  <input id="recVideoUrl" type="url" className="form-input" value={recVideoUrl} onChange={(e) => setRecVideoUrl(e.target.value)} placeholder="https://youtube.com/watch?v=..." />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="recThumbnailUrl">Thumbnail URL <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>(optional)</span></label>
+                  <input id="recThumbnailUrl" type="url" className="form-input" value={recThumbnailUrl} onChange={(e) => setRecThumbnailUrl(e.target.value)} placeholder="https://img.youtube.com/vi/.../hqdefault.jpg" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="recLessonDescription">Lesson Description <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>(optional)</span></label>
+                  <textarea id="recLessonDescription" className="form-input" style={{ height: 70, resize: 'none' }} value={recLessonDescription} onChange={(e) => setRecLessonDescription(e.target.value)} placeholder="Brief overview of what students will learn..." />
                 </div>
                 <div className="form-group">
                   <label className="form-label" htmlFor="recNotesUrl">PDF Notes URL</label>
-                  <input id="recNotesUrl" type="url" className="form-input" value={recNotesUrl} onChange={(e) => setRecNotesUrl(e.target.value)} placeholder="https://drive.google.com/file/... or pdf url" />
+                  <input id="recNotesUrl" type="url" className="form-input" value={recNotesUrl} onChange={(e) => setRecNotesUrl(e.target.value)} placeholder="https://drive.google.com/file/..." />
                 </div>
                 <div className="form-group">
-                  <label className="form-label" htmlFor="recAssignment">Assignment Title/Description</label>
+                  <label className="form-label" htmlFor="recAssignment">Assignment Title</label>
                   <input id="recAssignment" type="text" className="form-input" value={recAssignment} onChange={(e) => setRecAssignment(e.target.value)} placeholder="e.g. Variables & Operators Lab" />
                 </div>
                 <div className="form-group">
@@ -1620,55 +1646,95 @@ const AdminDashboard = () => {
                   <input id="recQuiz" type="text" className="form-input" value={recQuiz} onChange={(e) => setRecQuiz(e.target.value)} placeholder="e.g. Python Basics Quiz" />
                 </div>
                 <div className="form-group">
+                  <label className="form-label" htmlFor="recSortOrder">Sort Order <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>(lower = first)</span></label>
+                  <input id="recSortOrder" type="number" className="form-input" value={recSortOrder} onChange={(e) => setRecSortOrder(e.target.value)} placeholder="e.g. 1, 2, 3..." min="1" />
+                </div>
+                <div className="form-group">
                   <label className="form-label">Visibility Access</label>
                   <div style={{ display: 'flex', gap: '16px', marginTop: '6px' }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13.5px', cursor: 'pointer' }}>
                       <input type="radio" name="recVisibility" value="everyone" checked={recVisibility === 'everyone'} onChange={() => setRecVisibility('everyone')} />
-                      Everyone
+                      🌐 Everyone
                     </label>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13.5px', cursor: 'pointer' }}>
                       <input type="radio" name="recVisibility" value="paid" checked={recVisibility === 'paid'} onChange={() => setRecVisibility('paid')} />
-                      Paid Students Only
+                      🔒 Paid Students Only
                     </label>
                   </div>
                 </div>
-                <button type="submit" className="btn btn-primary btn-block" style={{ marginTop: '20px' }}>Save LMS Lesson</button>
+                <div style={{ display: 'flex', gap: 10, marginTop: '20px' }}>
+                  <button type="submit" className="btn btn-primary btn-block">
+                    {editingRecordedClass ? 'Update Lesson' : 'Save LMS Lesson'}
+                  </button>
+                  {editingRecordedClass && (
+                    <button type="button" className="btn btn-outline" onClick={() => {
+                      setEditingRecordedClass(null);
+                      setRecTitle(''); setRecModule('Module 1 - Python Basics'); setRecVideoUrl(''); setRecThumbnailUrl(''); setRecLessonDescription(''); setRecNotesUrl(''); setRecAssignment(''); setRecQuiz(''); setRecVisibility('everyone'); setRecSortOrder('');
+                    }}>
+                      Cancel
+                    </button>
+                  )}
+                </div>
               </form>
             </div>
 
             <div className="dashboard-card-section">
-              <h4 style={{ marginBottom: '18px', fontSize: '15px', fontWeight: '700' }}>Recorded Video Curriculum Library</h4>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {recordedClasses.map((item, idx) => (
-                  <div key={idx} className="feed-item-premium" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '10px' }}>
-                    <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
-                      <div style={{ width: '60px', height: '60px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--primary-light)', color: 'var(--primary-color)', flexShrink: 0 }}>
-                        <Video size={20} />
+              <h4 style={{ marginBottom: '18px', fontSize: '15px', fontWeight: '700' }}>Curriculum Library ({recordedClasses.length} lessons)</h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {recordedClasses.length === 0 ? (
+                  <div style={{ padding: 30, textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13 }}>
+                    No lessons uploaded yet. Add your first lesson using the form.
+                  </div>
+                ) : recordedClasses.map((item, idx) => (
+                  <div key={idx} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: 12, padding: '14px 16px' }}>
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                      {/* Sort # badge */}
+                      <div style={{ width: 36, height: 36, borderRadius: 8, background: 'var(--primary-light)', color: 'var(--primary-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 13, flexShrink: 0 }}>
+                        {item.sort_order || idx + 1}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
-                          <h5 style={{ fontWeight: '700', fontSize: '14.5px', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title}</h5>
-                          <button className="btn btn-danger" style={{ padding: '6px', backgroundColor: 'var(--danger-color)', color: 'white', flexShrink: 0 }} onClick={() => deleteRecordedClass(item._id)}>
-                            <Trash2 size={13} />
-                          </button>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
+                          <h5 style={{ fontWeight: '700', fontSize: '14px', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '55%' }}>{item.title}</h5>
+                          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                            <button 
+                              className="btn btn-outline" 
+                              style={{ padding: '4px 10px', fontSize: 11 }}
+                              onClick={() => {
+                                setEditingRecordedClass(item);
+                                setRecTitle(item.title || '');
+                                setRecModule(item.module || '');
+                                setRecCourseTitle(item.course_title || '');
+                                setRecVideoUrl(item.video_url || '');
+                                setRecThumbnailUrl(item.thumbnail || '');
+                                setRecLessonDescription(item.description || '');
+                                setRecNotesUrl(item.notes_url || '');
+                                setRecAssignment(item.assignment || '');
+                                setRecQuiz(item.quiz || '');
+                                setRecVisibility(item.visibility || 'everyone');
+                                setRecSortOrder(item.sort_order?.toString() || '');
+                                setSelectedBatchId(item.batch_id || '');
+                              }}
+                            >
+                              Edit
+                            </button>
+                            <button className="btn btn-danger" style={{ padding: '4px', backgroundColor: 'var(--danger-color)', color: 'white' }} onClick={() => deleteRecordedClass(item._id)}>
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
                         </div>
-                        <p style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '4px', margin: 0 }}>
-                          Module: <strong>{item.module || 'N/A'}</strong> | Course: <strong>{item.course_title}</strong>
+                        <p style={{ fontSize: '11.5px', color: 'var(--text-secondary)', margin: '4px 0 8px' }}>
+                          {item.module} · {item.course_title}
                         </p>
-                        
-                        {/* Visibility switcher & notes/assign info */}
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px', alignItems: 'center', borderTop: '1px solid rgba(0,0,0,0.03)', paddingTop: '8px' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
                           <button 
-                            className={`badge-status ${item.visibility === 'paid' ? 'unpaid' : 'paid'}`} 
-                            style={{ border: 'none', cursor: 'pointer', fontSize: '10px', padding: '2px 8px', borderRadius: '12px' }}
                             onClick={() => toggleRecordedClassVisibility(item._id, item.visibility)}
-                            title="Click to toggle visibility"
+                            style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: 10, border: 'none', cursor: 'pointer', background: item.visibility === 'paid' ? 'rgba(239,68,68,0.08)' : 'rgba(16,185,129,0.08)', color: item.visibility === 'paid' ? '#DC2626' : '#059669' }}
                           >
-                            Visibility: {item.visibility === 'paid' ? 'Paid Only' : 'Everyone'} (Toggle)
+                            {item.visibility === 'paid' ? '🔒 Paid Only' : '🌐 Everyone'} (toggle)
                           </button>
-                          {item.notes_url && <span style={{ fontSize: '10px', color: '#10B981', background: 'rgba(16,185,129,0.06)', padding: '2px 8px', borderRadius: '12px' }}>📄 PDF</span>}
-                          {item.assignment && <span style={{ fontSize: '10px', color: '#3B82F6', background: 'rgba(59,130,246,0.06)', padding: '2px 8px', borderRadius: '12px' }}>📝 Assignment</span>}
-                          {item.quiz && <span style={{ fontSize: '10px', color: '#F59E0B', background: 'rgba(245,158,11,0.06)', padding: '2px 8px', borderRadius: '12px' }}>❓ Quiz</span>}
+                          {item.notes_url && <span style={{ fontSize: '10px', color: '#3B82F6', background: 'rgba(59,130,246,0.06)', padding: '2px 8px', borderRadius: 10 }}>📄 PDF Notes</span>}
+                          {item.assignment && <span style={{ fontSize: '10px', color: '#8B5CF6', background: 'rgba(139,92,246,0.06)', padding: '2px 8px', borderRadius: 10 }}>📝 Assignment</span>}
+                          {item.quiz && <span style={{ fontSize: '10px', color: '#F59E0B', background: 'rgba(245,158,11,0.06)', padding: '2px 8px', borderRadius: 10 }}>❓ Quiz</span>}
                         </div>
                       </div>
                     </div>
