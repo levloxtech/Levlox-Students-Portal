@@ -208,8 +208,20 @@ def get_dashboard():
             item['batch_id'] = str(item['batch_id'])
 
         visibility = item.get('visibility', 'everyone')
-        # access = True if visibility is 'everyone' OR student has paid fees
-        item['access'] = True if (visibility == 'everyone' or fees_are_paid) else False
+        is_premium_restricted = False
+        created_at_str = item.get('created_at', '')
+        if created_at_str:
+            try:
+                c_date = datetime.datetime.strptime(created_at_str, "%B %d, %Y").date()
+                activation_date = datetime.date(2026, 7, 9)
+                if c_date > activation_date:
+                    is_premium_restricted = True
+            except Exception:
+                is_premium_restricted = True
+        else:
+            is_premium_restricted = True
+
+        item['access'] = True if (visibility == 'everyone' or fees_are_paid or not is_premium_restricted) else False
         item['progress'] = progress_map.get(item['_id'], 0)
         item['trainer'] = trainer_name
         recorded_classes_list.append(item)
@@ -293,6 +305,10 @@ def get_profile():
             "course": user.get('course', 'Fullstack Engineering'),
             "join_date": user.get('join_date', user.get('enrollmentDate', 'July 08, 2026')),
             "feesStatus": user.get('feesStatus', 'Pending'),
+            "feesTotal": user.get('feesTotal', 1500),
+            "feesPaidAmount": user.get('feesPaidAmount', 1000),
+            "feesRemainingAmount": user.get('feesRemainingAmount', 500),
+            "feesDueDate": user.get('feesDueDate', 'July 15, 2026'),
             "attendance": user.get('attendance', {}).get('percentage', 92),
             "profile_pic": user.get('profile_pic', ''),
             "current_location": user.get('current_location', ''),
@@ -317,6 +333,9 @@ def update_profile():
     current_location = data.get('current_location', '')
     permanent_address = data.get('permanent_address', '')
 
+    college = data.get('college', '')
+    company = data.get('company', '')
+
     if not name:
         return jsonify({'message': 'Name is required'}), 400
 
@@ -331,7 +350,9 @@ def update_profile():
             "phone": phone.strip(),
             "profile_pic": profile_pic.strip(),
             "current_location": current_location.strip(),
-            "permanent_address": permanent_address.strip()
+            "permanent_address": permanent_address.strip(),
+            "college": college.strip(),
+            "company": company.strip()
         }
         if email:
             update_data["email"] = email.strip().lower()
@@ -526,33 +547,156 @@ def get_analytics():
         return jsonify({'message': 'Error retrieving analytics', 'error': str(e)}), 400
 
 # Leaderboard APIs
+months_map = {
+    "1": "01", "2": "02", "3": "03", "4": "04", "5": "05", "6": "06", 
+    "7": "07", "8": "08", "9": "09", "10": "10", "11": "11", "12": "12",
+    "january": "01", "february": "02", "march": "03", "april": "04", "may": "05", "june": "06",
+    "july": "07", "august": "08", "september": "09", "october": "10", "november": "11", "december": "12"
+}
+
+def filter_by_date(date_str, month=None, week=None):
+    if not date_str:
+        return True
+    try:
+        # Standardize formats like "July 08, 2026" or "2026-07-08"
+        if "-" in date_str:
+            parts = date_str.split("-")
+            if len(parts) == 3:
+                y, m, d = parts[0], parts[1], parts[2]
+            else:
+                return True
+        else:
+            dt = datetime.datetime.strptime(date_str, "%B %d, %Y")
+            y, m, d = str(dt.year), f"{dt.month:02d}", f"{dt.day:02d}"
+        
+        if month:
+            m_target = months_map.get(month.lower(), month)
+            if m != m_target:
+                return False
+                
+        if week:
+            day_val = int(d)
+            w_val = int(week)
+            if w_val == 1 and not (1 <= day_val <= 7):
+                return False
+            elif w_val == 2 and not (8 <= day_val <= 14):
+                return False
+            elif w_val == 3 and not (15 <= day_val <= 21):
+                return False
+            elif w_val == 4 and not (22 <= day_val <= 31):
+                return False
+                
+        return True
+    except:
+        return True
+
 @student_bp.route('/leaderboard/overall', methods=['GET'])
 @token_required(allowed_roles=['student'])
 def get_overall_leaderboard():
     try:
         student = g.current_user
         student_db = db.users.find_one({"_id": ObjectId(student['id'])})
-        batch_id = student_db.get('batch_id') if student_db else None
-
-        if not batch_id:
-            return jsonify([]), 200
-
-        students = list(db.users.find({"role": "student", "batch_id": batch_id}))
+        
+        batch_id = request.args.get('batch_id')
+        course_id = request.args.get('course_id')
+        month = request.args.get('month')
+        week = request.args.get('week')
+        
+        query = {"role": "student"}
+        if batch_id and batch_id != "all":
+            query["batch_id"] = batch_id
+        elif not batch_id and student_db.get('batch_id'):
+            query["batch_id"] = student_db.get('batch_id')
+            
+        if course_id and course_id != "all":
+            query["course"] = course_id
+            
+        students = list(db.users.find(query))
         
         leaderboard = []
         for s in students:
+            s_id_str = str(s['_id'])
+            s_id_obj = s['_id']
+            
+            # 1. Attendance % (20%)
+            hist = s.get('attendance_history', [])
+            filtered_hist = [h for h in hist if filter_by_date(h.get('date'), month, week)]
+            if filtered_hist:
+                present = sum(1 for h in filtered_hist if h.get('status') == 'Present')
+                attendance_pct = round((present / len(filtered_hist)) * 100)
+            else:
+                attendance_pct = s.get('attendance', {}).get('percentage', 92)
+                
+            # 2. Assignment Submission Rate (30%)
+            s_batch = s.get('batch_id')
+            assigns_query = {}
+            if s_batch:
+                assigns_query["batch_id"] = s_batch
+            total_assigns = db.assignments.count_documents(assigns_query) or 10
+            
+            subs = list(db.submissions.find({"student_id": s_id_obj}))
+            filtered_subs = []
+            for sub in subs:
+                assign = db.assignments.find_one({"_id": sub.get('assignment_id')}) if isinstance(sub.get('assignment_id'), ObjectId) else db.assignments.find_one({"_id": ObjectId(sub.get('assignment_id'))})
+                a_date = assign.get('due_date') if assign else None
+                if filter_by_date(a_date, month, week):
+                    filtered_subs.append(sub)
+            submission_rate = round((len(filtered_subs) / max(1, total_assigns)) * 100)
+            
+            # 3. Mock Interview Score (30%)
+            interviews = list(db.mock_interviews.find({"student_id": s_id_obj}))
+            filtered_interviews = [i for i in interviews if filter_by_date(i.get('date', i.get('scheduled_date')), month, week)]
+            if filtered_interviews:
+                avg_mock = sum(i.get('score', 0) for i in filtered_interviews) / len(filtered_interviews)
+            else:
+                avg_mock = 75.0 if not month else 0.0
+                
+            # 4. Live Class Activity Score (20% -> Points capped at 200)
+            activity_logs = list(db.live_class_activity.find({"student_id": s_id_obj}))
+            filtered_activities = [a for a in activity_logs if filter_by_date(a.get('date'), month, week)]
+            total_act_points = sum(a.get('points', 0) for a in filtered_activities)
+            
+            overall_score = round(
+                (attendance_pct * 2) +
+                (submission_rate * 3) +
+                (avg_mock * 3) +
+                min(200, total_act_points)
+            )
+            
+            badge = "Consistent Student"
+            if overall_score >= 950:
+                badge = "👑 Champion"
+            elif overall_score >= 880:
+                badge = "🔥 Top Performer"
+            elif overall_score >= 800:
+                badge = "⭐ Rising Star"
+            elif submission_rate >= 90:
+                badge = "🚀 Fast Learner"
+            elif attendance_pct >= 95:
+                badge = "💎 Consistent Student"
+                
+            # Get Batch Name
+            batch_doc = db.batches.find_one({"_id": ObjectId(s_batch)} if isinstance(s_batch, str) and len(s_batch) == 24 else {"code": s_batch})
+            batch_name = batch_doc.get('name', 'July 2026') if batch_doc else 'July 2026'
+
             leaderboard.append({
-                "student_id": str(s['_id']),
+                "student_id": s_id_str,
                 "name": s.get('name', 'Student'),
-                "overall_score": s.get('overall_score', 750),
-                "streak": s.get('streak', 3),
-                "is_current": str(s['_id']) == str(student['id'])
+                "profile_pic": s.get('profile_pic', ''),
+                "batch": batch_name,
+                "overall_score": overall_score,
+                "badge": badge,
+                "is_current": s_id_str == str(student['id'])
             })
             
         leaderboard.sort(key=lambda x: x['overall_score'], reverse=True)
-        
         for index, item in enumerate(leaderboard):
             item['rank'] = index + 1
+            if item['rank'] == 1:
+                item['badge'] = "👑 Champion"
+            elif item['rank'] <= 3:
+                if "👑" not in item['badge']:
+                    item['badge'] = "🔥 Top Performer"
             
         return jsonify(leaderboard), 200
     except Exception as e:
@@ -564,34 +708,51 @@ def get_mock_leaderboard():
     try:
         student = g.current_user
         student_db = db.users.find_one({"_id": ObjectId(student['id'])})
-        batch_id = student_db.get('batch_id') if student_db else None
-
-        if not batch_id:
-            return jsonify([]), 200
-
-        students = list(db.users.find({"role": "student", "batch_id": batch_id}))
+        
+        batch_id = request.args.get('batch_id')
+        course_id = request.args.get('course_id')
+        month = request.args.get('month')
+        week = request.args.get('week')
+        
+        query = {"role": "student"}
+        if batch_id and batch_id != "all":
+            query["batch_id"] = batch_id
+        elif not batch_id and student_db.get('batch_id'):
+            query["batch_id"] = student_db.get('batch_id')
+            
+        if course_id and course_id != "all":
+            query["course"] = course_id
+            
+        students = list(db.users.find(query))
         
         leaderboard = []
         for s in students:
-            s_id = s['_id']
-            interviews = list(db.mock_interviews.find({"student_id": s_id}))
-            if interviews:
-                avg_score = round(sum(i.get('score', 0) for i in interviews) / len(interviews))
-                completed = sum(i.get('completed_interviews', 0) for i in interviews)
+            s_id_str = str(s['_id'])
+            s_id_obj = s['_id']
+            
+            interviews = list(db.mock_interviews.find({"student_id": s_id_obj}))
+            filtered_interviews = [i for i in interviews if filter_by_date(i.get('date', i.get('scheduled_date')), month, week)]
+            
+            if filtered_interviews:
+                avg_score = round(sum(i.get('score', 0) for i in filtered_interviews) / len(filtered_interviews))
+                completed = len(filtered_interviews)
+                highest = max(i.get('score', 0) for i in filtered_interviews)
             else:
                 avg_score = 0
                 completed = 0
+                highest = 0
                 
             leaderboard.append({
-                "student_id": str(s_id),
+                "student_id": s_id_str,
                 "name": s.get('name', 'Student'),
+                "profile_pic": s.get('profile_pic', ''),
                 "average_score": avg_score,
                 "completed_interviews": completed,
-                "is_current": str(s_id) == str(student['id'])
+                "highest_score": highest,
+                "is_current": s_id_str == str(student['id'])
             })
             
         leaderboard.sort(key=lambda x: x['average_score'], reverse=True)
-        
         for index, item in enumerate(leaderboard):
             item['rank'] = index + 1
             
@@ -605,38 +766,124 @@ def get_task_leaderboard():
     try:
         student = g.current_user
         student_db = db.users.find_one({"_id": ObjectId(student['id'])})
-        batch_id = student_db.get('batch_id') if student_db else None
-
-        if not batch_id:
-            return jsonify([]), 200
-
-        students = list(db.users.find({"role": "student", "batch_id": batch_id}))
-        total_assignments = db.assignments.count_documents({"batch_id": batch_id}) or 10
-
+        
+        batch_id = request.args.get('batch_id')
+        course_id = request.args.get('course_id')
+        month = request.args.get('month')
+        week = request.args.get('week')
+        
+        query = {"role": "student"}
+        if batch_id and batch_id != "all":
+            query["batch_id"] = batch_id
+        elif not batch_id and student_db.get('batch_id'):
+            query["batch_id"] = student_db.get('batch_id')
+            
+        if course_id and course_id != "all":
+            query["course"] = course_id
+            
+        students = list(db.users.find(query))
+        
         leaderboard = []
         for s in students:
-            s_id = s['_id']
-            completed = db.submissions.count_documents({"student_id": s_id, "status": {"$in": ["Submitted", "graded", "pending"]}})
-            sub_rate = round((completed / total_assignments) * 100)
-            on_time = 95 if completed > 0 else 0
+            s_id_str = str(s['_id'])
+            s_id_obj = s['_id']
+            
+            s_batch = s.get('batch_id')
+            assigns_query = {}
+            if s_batch:
+                assigns_query["batch_id"] = s_batch
+            total_assignments = db.assignments.count_documents(assigns_query) or 10
+            
+            subs = list(db.submissions.find({"student_id": s_id_obj}))
+            filtered_subs = []
+            late_submissions = 0
+            graded_total = 0
+            graded_count = 0
+            
+            for sub in subs:
+                assign = db.assignments.find_one({"_id": sub.get('assignment_id')}) if isinstance(sub.get('assignment_id'), ObjectId) else db.assignments.find_one({"_id": ObjectId(sub.get('assignment_id'))})
+                a_date = assign.get('due_date') if assign else None
+                if filter_by_date(a_date, month, week):
+                    filtered_subs.append(sub)
+                    if sub.get('status') == 'late' or sub.get('is_late'):
+                        late_submissions += 1
+                    if sub.get('grade') is not None:
+                        try:
+                            graded_total += float(sub.get('grade'))
+                            graded_count += 1
+                        except:
+                            pass
+                            
+            completed = len(filtered_subs)
+            sub_rate = round((completed / max(1, total_assignments)) * 100)
+            avg_grade = round(graded_total / max(1, graded_count)) if graded_count > 0 else 75
             
             leaderboard.append({
-                "student_id": str(s_id),
+                "student_id": s_id_str,
                 "name": s.get('name', 'Student'),
+                "profile_pic": s.get('profile_pic', ''),
                 "completed_assignments": completed,
                 "submission_rate": sub_rate,
-                "on_time_submission": on_time,
-                "is_current": str(s_id) == str(student['id'])
+                "assignment_score": avg_grade,
+                "late_submission_count": late_submissions,
+                "is_current": s_id_str == str(student['id'])
             })
             
         leaderboard.sort(key=lambda x: x['completed_assignments'], reverse=True)
-        
         for index, item in enumerate(leaderboard):
             item['rank'] = index + 1
             
         return jsonify(leaderboard), 200
     except Exception as e:
         return jsonify({'message': 'Error loading task leaderboard', 'error': str(e)}), 400
+
+@student_bp.route('/leaderboard/live-class-activity', methods=['GET'])
+@token_required(allowed_roles=['student'])
+def get_live_class_activity_leaderboard():
+    try:
+        student = g.current_user
+        student_db = db.users.find_one({"_id": ObjectId(student['id'])})
+        
+        batch_id = request.args.get('batch_id')
+        course_id = request.args.get('course_id')
+        month = request.args.get('month')
+        week = request.args.get('week')
+        
+        query = {"role": "student"}
+        if batch_id and batch_id != "all":
+            query["batch_id"] = batch_id
+        elif not batch_id and student_db.get('batch_id'):
+            query["batch_id"] = student_db.get('batch_id')
+            
+        if course_id and course_id != "all":
+            query["course"] = course_id
+            
+        students = list(db.users.find(query))
+        
+        leaderboard = []
+        for s in students:
+            s_id_str = str(s['_id'])
+            s_id_obj = s['_id']
+            
+            activity_logs = list(db.live_class_activity.find({"student_id": s_id_obj}))
+            filtered_activities = [a for a in activity_logs if filter_by_date(a.get('date'), month, week)]
+            total_act_points = sum(a.get('points', 0) for a in filtered_activities)
+            
+            leaderboard.append({
+                "student_id": s_id_str,
+                "name": s.get('name', 'Student'),
+                "profile_pic": s.get('profile_pic', ''),
+                "activity_points": total_act_points,
+                "is_current": s_id_str == str(student['id'])
+            })
+            
+        leaderboard.sort(key=lambda x: x['activity_points'], reverse=True)
+        for index, item in enumerate(leaderboard):
+            item['rank'] = index + 1
+            
+        return jsonify(leaderboard), 200
+    except Exception as e:
+        return jsonify({'message': 'Error loading activity leaderboard', 'error': str(e)}), 400
 
 
 @student_bp.route('/learning-ranking', methods=['GET'])
@@ -752,8 +999,8 @@ def get_recorded_classes_lms():
 def get_recorded_courses():
     try:
         student = g.current_user
-        fees_are_paid = student.get('feesPaid', False)
         student_db = db.users.find_one({"_id": ObjectId(student['id'])})
+        fees_are_paid = (student_db.get('feesStatus') == 'Paid') if student_db else False
         batch_id = student_db.get('batch_id') if student_db else None
 
         # Fetch batch trainer & name
@@ -842,8 +1089,8 @@ def get_recorded_courses():
 def get_course_player(course_id):
     try:
         student = g.current_user
-        fees_are_paid = student.get('feesPaid', False)
         student_db = db.users.find_one({"_id": ObjectId(student['id'])})
+        fees_are_paid = (student_db.get('feesStatus') == 'Paid') if student_db else False
         batch_id = student_db.get('batch_id') if student_db else None
 
         recorded_classes = list(db.recorded_classes.find({"batch_id": str(batch_id) if batch_id else None}))
@@ -868,7 +1115,20 @@ def get_course_player(course_id):
                 }
             
             visibility = rc.get('visibility', 'everyone')
-            is_locked = True if (visibility == 'paid' and not fees_are_paid) else False
+            is_premium_restricted = False
+            created_at_str = rc.get('created_at', '')
+            if created_at_str:
+                try:
+                    c_date = datetime.datetime.strptime(created_at_str, "%B %d, %Y").date()
+                    activation_date = datetime.date(2026, 7, 9)
+                    if c_date > activation_date:
+                        is_premium_restricted = True
+                except Exception:
+                    is_premium_restricted = True
+            else:
+                is_premium_restricted = True
+
+            is_locked = True if (visibility == 'paid' and not fees_are_paid and is_premium_restricted) else False
             rc_id = str(rc['_id'])
 
             modules_dict[mod_title]["lessons"].append({
@@ -876,14 +1136,17 @@ def get_course_player(course_id):
                 "video_number": video_number,
                 "title": rc.get('title'),
                 "description": rc.get('description', 'Learn the core programming constructs in this step-by-step lecture replay.'),
-                "duration": "1h 15m",
+                "duration": rc.get('duration', '1h 15m'),
                 "completed": rc_id in completed_ids,
                 "url": rc.get('video_url', ''),
                 "notes_url": rc.get('notes_url') if not is_locked else None,
                 "assignment": rc.get('assignment') if not is_locked else None,
                 "quiz": rc.get('quiz') if not is_locked else None,
                 "visibility": visibility,
-                "locked": is_locked
+                "locked": is_locked,
+                "thumbnail": rc.get('thumbnail', ''),
+                "trainer": rc.get('trainer', trainer),
+                "upload_date": rc.get('created_at', '')
             })
             video_number += 1
 

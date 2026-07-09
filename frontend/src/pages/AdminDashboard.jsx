@@ -5,7 +5,7 @@ import {
   Megaphone, Wallet, Settings, Trash2, Plus, 
   LogOut, CheckCircle, Award, Percent, CalendarCheck,
   Pencil, Eye, ChevronLeft, ChevronRight, Search, Filter,
-  PlayCircle, Clock3, TriangleAlert, CircleAlert, Wallet as WalletIcon
+  PlayCircle, Clock3, TriangleAlert, CircleAlert, Wallet as WalletIcon, Trophy
 } from 'lucide-react';
 import CustomModal from '../components/Modal';
 
@@ -128,6 +128,88 @@ const AdminDashboard = () => {
   // Portal settings states
   const [portalName, setPortalName] = useState('Levlox Student Portal');
   const [portalLogo, setPortalLogo] = useState('');
+
+  // Activity score management states
+  const [actBatchId, setActBatchId] = useState('');
+  const [actStudentId, setActStudentId] = useState('');
+  const [actDate, setActDate] = useState(new Date().toISOString().substring(0, 10));
+  const [actMeeting, setActMeeting] = useState('');
+  const [actType, setActType] = useState('+10 Answered Questions');
+  const [actPoints, setActPoints] = useState(10);
+  const [actRemarks, setActRemarks] = useState('');
+  const [batchStudents, setBatchStudents] = useState([]);
+  const [activityLogs, setActivityLogs] = useState([]);
+
+  const handleActBatchChange = async (batchId) => {
+    setActBatchId(batchId);
+    setActStudentId('');
+    if (!batchId) {
+      setBatchStudents([]);
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE}/admin/students-by-batch/${batchId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setBatchStudents(data || []);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleAwardActivity = async (e) => {
+    e.preventDefault();
+    if (!actStudentId || !actBatchId || !actMeeting) {
+      showModal("Missing Fields", "Please select Batch, Student, and enter Meeting Title.", "warning");
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE}/admin/live-class-activity`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          student_id: actStudentId,
+          batch_id: actBatchId,
+          date: actDate,
+          meeting: actMeeting,
+          activity_type: actType,
+          points: actPoints,
+          remarks: actRemarks
+        })
+      });
+      if (response.ok) {
+        showModal("Success", "Activity score updated successfully!", "success");
+        setActRemarks('');
+        fetchActivityLogs();
+        fetchStats();
+      } else {
+        const err = await response.json();
+        showModal("Error", err.message || "Failed to award activity points", "error");
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const fetchActivityLogs = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/admin/live-class-activity`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setActivityLogs(data || []);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   // Notification Modals
   const [modalOpen, setModalOpen] = useState(false);
@@ -390,6 +472,9 @@ const AdminDashboard = () => {
       fetchBatches();
     } else if (activeTab === 'batches') {
       fetchBatches();
+    } else if (activeTab === 'activity-score') {
+      fetchBatches();
+      fetchActivityLogs();
     }
   }, [activeTab, currentPage, searchQuery, statusFilter, feesFilter]);
 
@@ -1073,6 +1158,11 @@ const AdminDashboard = () => {
           <button className={`sidebar-link ${activeTab === 'fees-management' ? 'active' : ''}`} onClick={() => { setActiveTab('fees-management'); setCurrentPage(1); }}>
             <Wallet size={18} />
             <span className="sidebar-link-text">Fees Management</span>
+          </button>
+          
+          <button className={`sidebar-link ${activeTab === 'activity-score' ? 'active' : ''}`} onClick={() => setActiveTab('activity-score')}>
+            <Trophy size={18} />
+            <span className="sidebar-link-text">Activity Scores</span>
           </button>
           
           <button className={`sidebar-link ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
@@ -1931,6 +2021,123 @@ const AdminDashboard = () => {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* Activity Scores Tab */}
+        {activeTab === 'activity-score' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '30px' }}>
+            <div className="dashboard-card-section">
+              <h4 style={{ marginBottom: '18px', fontSize: '15px', fontWeight: '700' }}>Award Activity Points</h4>
+              <form onSubmit={handleAwardActivity}>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="actBatchSelect">Target Batch</label>
+                  <select id="actBatchSelect" className="form-select" value={actBatchId} onChange={(e) => handleActBatchChange(e.target.value)} required>
+                    <option value="">-- Choose Batch --</option>
+                    {batches.map(b => (
+                      <option key={b.id} value={b.id}>{b.name} ({b.code})</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div className="form-group">
+                  <label className="form-label" htmlFor="actStudentSelect">Select Student</label>
+                  <select id="actStudentSelect" className="form-select" value={actStudentId} onChange={(e) => setActStudentId(e.target.value)} required>
+                    <option value="">-- Choose Student --</option>
+                    {batchStudents.map(s => (
+                      <option key={s.id} value={s.id}>{s.name} ({s.rollNumber})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="actDate">Date</label>
+                  <input id="actDate" type="date" className="form-input" value={actDate} onChange={(e) => setActDate(e.target.value)} required />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="actMeeting">Google Meet Session / Lecture Name</label>
+                  <input id="actMeeting" type="text" className="form-input" value={actMeeting} onChange={(e) => setActMeeting(e.target.value)} placeholder="e.g. Python Variables Class" required />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="actPreset">Activity Preset Type</label>
+                  <select 
+                    id="actPreset" 
+                    className="form-select" 
+                    value={actType} 
+                    onChange={(e) => {
+                      const type = e.target.value;
+                      setActType(type);
+                      if (type.includes("+10")) setActPoints(10);
+                      else if (type.includes("+5")) setActPoints(5);
+                      else if (type.includes("+3")) setActPoints(3);
+                      else if (type.includes("+2")) setActPoints(2);
+                      else if (type.includes("-5")) setActPoints(-5);
+                    }}
+                  >
+                    <option value="+10 Answered Questions">Answered Questions (+10 pts)</option>
+                    <option value="+5 Active Participation">Active Participation (+5 pts)</option>
+                    <option value="+3 Attendance on Time">Attendance on Time (+3 pts)</option>
+                    <option value="+5 Helped Others">Helped Others (+5 pts)</option>
+                    <option value="+2 Camera On">Camera On (+2 pts)</option>
+                    <option value="-5 Penalty/Deduction">Deduction (-5 pts)</option>
+                    <option value="Custom">Custom Activity Type</option>
+                  </select>
+                </div>
+
+                {actType === 'Custom' && (
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="customActType">Custom Activity Title</label>
+                    <input id="customActType" type="text" className="form-input" placeholder="e.g. Completed Extra Lab Task" onChange={(e) => setActType(e.target.value)} required />
+                  </div>
+                )}
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="actPoints">Points</label>
+                  <input id="actPoints" type="number" className="form-input" value={actPoints} onChange={(e) => setActPoints(parseInt(e.target.value) || 0)} required />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="actRemarks">Remarks</label>
+                  <textarea id="actRemarks" className="form-input" style={{ height: '60px', resize: 'none' }} value={actRemarks} onChange={(e) => setActRemarks(e.target.value)} placeholder="Provide context..." />
+                </div>
+
+                <button type="submit" className="btn btn-primary btn-block">Award Activity Points</button>
+              </form>
+            </div>
+
+            <div className="dashboard-card-section">
+              <h4 style={{ marginBottom: '18px', fontSize: '15px', fontWeight: '700' }}>Activity Logs History</h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '550px', overflowY: 'auto' }}>
+                {activityLogs.length === 0 ? (
+                  <div style={{ padding: 30, textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13 }}>
+                    No activity points awarded yet.
+                  </div>
+                ) : activityLogs.map((log) => (
+                  <div key={log._id} className="feed-item-premium" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span className="badge-status paid" style={{ fontSize: '10px', background: log.points >= 0 ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)', color: log.points >= 0 ? '#10B981' : '#EF4444' }}>
+                        {log.points >= 0 ? `+${log.points}` : log.points} Points
+                      </span>
+                      <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{log.date}</span>
+                    </div>
+                    <h5 style={{ fontWeight: '700', fontSize: '14px', margin: 0 }}>
+                      {log.student_name}
+                    </h5>
+                    <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', margin: 0 }}>
+                      <strong>Activity:</strong> {log.activity_type} · <strong>Session:</strong> {log.meeting}
+                    </p>
+                    {log.remarks && (
+                      <p style={{ fontSize: '12px', color: 'var(--text-tertiary)', fontStyle: 'italic', margin: 0 }}>
+                        "{log.remarks}"
+                      </p>
+                    )}
+                    <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Batch: {log.batch_name}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}

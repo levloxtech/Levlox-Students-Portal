@@ -820,3 +820,87 @@ def assign_students(batch_id):
     except Exception as e:
         return jsonify({'message': 'Error assigning students', 'error': str(e)}), 400
 
+
+@admin_bp.route('/students-by-batch/<batch_id>', methods=['GET'])
+@token_required(allowed_roles=['admin'])
+def get_students_by_batch(batch_id):
+    try:
+        batch = db.batches.find_one({"_id": ObjectId(batch_id)})
+        if not batch:
+            return jsonify({'message': 'Batch not found'}), 404
+        
+        student_ids = [ObjectId(sid) for sid in batch.get('student_ids', [])]
+        students = list(db.users.find({"_id": {"$in": student_ids}}))
+        for s in students:
+            s['id'] = str(s['_id'])
+            s.pop('_id', None)
+            s.pop('password', None)
+        return jsonify(students), 200
+    except Exception as e:
+        return jsonify({'message': 'Error retrieving students', 'error': str(e)}), 400
+
+
+@admin_bp.route('/live-class-activity', methods=['POST'])
+@token_required(allowed_roles=['admin'])
+def award_live_class_activity():
+    data = request.get_json() or {}
+    student_id = data.get('student_id')
+    batch_id = data.get('batch_id')
+    date = data.get('date')
+    meeting = data.get('meeting')
+    activity_type = data.get('activity_type')
+    points = data.get('points', 0)
+    remarks = data.get('remarks', '')
+
+    if not student_id or not batch_id or not date or not meeting or not activity_type:
+        return jsonify({'message': 'Missing required fields'}), 400
+
+    try:
+        points = int(points)
+    except:
+        return jsonify({'message': 'Points must be an integer'}), 400
+
+    try:
+        doc = {
+            "student_id": ObjectId(student_id),
+            "batch_id": batch_id,
+            "date": date,
+            "meeting": meeting,
+            "activity_type": activity_type,
+            "points": points,
+            "remarks": remarks,
+            "created_at": datetime.datetime.utcnow()
+        }
+        db.live_class_activity.insert_one(doc)
+
+        # Update cached student overall activity points
+        db.users.update_one(
+            {"_id": ObjectId(student_id)},
+            {"$inc": {"activity_points": points}}
+        )
+
+        return jsonify({'message': 'Activity score awarded successfully!'}), 201
+    except Exception as e:
+        return jsonify({'message': 'Error saving activity log', 'error': str(e)}), 400
+
+
+@admin_bp.route('/live-class-activity', methods=['GET'])
+@token_required(allowed_roles=['admin'])
+def get_live_class_activity_logs():
+    try:
+        logs = list(db.live_class_activity.find().sort('created_at', -1).limit(100))
+        for l in logs:
+            l['_id'] = str(l['_id'])
+            l['student_id'] = str(l['student_id'])
+            # fetch student name
+            student = db.users.find_one({"_id": ObjectId(l['student_id'])})
+            l['student_name'] = student.get('name', 'Student') if student else 'Unknown'
+            # fetch batch name
+            batch = db.batches.find_one({"_id": ObjectId(l['batch_id'])} if len(l['batch_id']) == 24 else {"code": l['batch_id']})
+            l['batch_name'] = batch.get('name', 'Batch') if batch else 'Unknown'
+            
+        return jsonify(logs), 200
+    except Exception as e:
+        return jsonify({'message': 'Error retrieving activity logs', 'error': str(e)}), 400
+
+

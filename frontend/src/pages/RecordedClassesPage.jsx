@@ -56,6 +56,12 @@ const RecordedClassesPage = ({ initialCourseId = null, initialLessonId = null })
   const [submitting, setSubmitting] = useState(false);
   const [submissionText, setSubmissionText] = useState('');
 
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  useEffect(() => {
+    setIsPlaying(false);
+  }, [activeLesson]);
+
   // Fetch Courses Overview (Page 1)
   const fetchCourses = async () => {
     try {
@@ -97,10 +103,10 @@ const RecordedClassesPage = ({ initialCourseId = null, initialLessonId = null })
       const response = await fetch(`http://localhost:5000/api/student/recorded-courses/${courseId}/player`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (!response.ok) throw new Error('Failed to load player data');
       const data = await response.json();
       const modules = data.modules || [];
       setPlayerModules(modules);
+      setIsPaid(data.isPaid);
 
       // Find the lesson to highlight (by targetLessonId, or fall back to first)
       let selectedLesson = null;
@@ -690,17 +696,9 @@ const RecordedClassesPage = ({ initialCourseId = null, initialLessonId = null })
         {/* ── LEFT COLUMN ── */}
         <div className="lms-left">
 
-          {/* Video Player */}
+          {/* Video Player & Premium Access Lock */}
           <div className="lms-video-frame">
-            {activeLesson.locked ? (
-              <div className="lms-locked-overlay">
-                <Lock size={36} color="#EF4444" style={{ marginBottom: 10 }} />
-                <h3 style={{ fontSize: 16, fontWeight: 800, margin: '0 0 6px' }}>Premium Lesson Locked</h3>
-                <p style={{ color: '#94A3B8', fontSize: 12.5, maxWidth: 280, lineHeight: 1.5 }}>
-                  Clear your outstanding portal fees to unlock this and all premium content.
-                </p>
-              </div>
-            ) : (
+            {isPlaying && isPaid && !activeLesson.locked ? (
               <iframe
                 src={activeLesson.url?.replace('watch?v=', 'embed/')}
                 title={activeLesson.title}
@@ -708,6 +706,92 @@ const RecordedClassesPage = ({ initialCourseId = null, initialLessonId = null })
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
               />
+            ) : (
+              <div style={{
+                position: 'absolute',
+                inset: 0,
+                backgroundImage: activeLesson.thumbnail ? `url(${activeLesson.thumbnail})` : 'linear-gradient(135deg, #1E1B4B 0%, #311068 100%)',
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexDirection: 'column'
+              }}>
+                {/* Backdrop Blur Overlay */}
+                <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(3px)', zIndex: 1 }} />
+                
+                <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', padding: '24px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  {isPaid && !activeLesson.locked ? (
+                    // PAID STUDENT: SHOW PLAY BUTTON
+                    <button 
+                      onClick={() => setIsPlaying(true)}
+                      style={{
+                        width: 72,
+                        height: 72,
+                        borderRadius: '50%',
+                        background: '#6C3CF0',
+                        color: 'white',
+                        border: 'none',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 10px 25px -5px rgba(108, 60, 240, 0.5)',
+                        transition: 'transform 0.2s ease, background-color 0.2s',
+                        marginBottom: 12
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.08)'}
+                      onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                    >
+                      <Play size={30} fill="white" style={{ marginLeft: 4 }} />
+                    </button>
+                  ) : (
+                    // UNPAID STUDENT: HIDE PLAY BUTTON, SHOW LATEST UPDATE & RENEW BUTTON
+                    <div style={{ 
+                      background: 'rgba(255, 255, 255, 0.1)', 
+                      backdropFilter: 'blur(10px)', 
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      borderRadius: 16, 
+                      padding: '24px 30px', 
+                      maxWidth: 380,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)'
+                    }}>
+                      <div style={{ display: 'inline-flex', padding: '6px 14px', background: '#EF4444', color: 'white', borderRadius: 20, fontSize: 11, fontWeight: 800, textTransform: 'uppercase', marginBottom: 12, letterSpacing: 0.5 }}>
+                        Latest Update
+                      </div>
+                      <h4 style={{ color: 'white', fontSize: 15, fontWeight: 800, margin: '0 0 10px', textAlign: 'center', lineHeight: 1.4 }}>
+                        This lecture is available with your next active learning period.
+                      </h4>
+                      <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12.5, margin: '0 0 20px', textAlign: 'center' }}>
+                        Please clear outstanding course fee dues to unlock immediate streaming.
+                      </p>
+                      <button 
+                        onClick={() => alert("Please contact the Levlox Administration or visit the Fees section to pay your pending dues and renew your learning access.")}
+                        style={{
+                          background: '#6C3CF0',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: 8,
+                          padding: '10px 24px',
+                          fontSize: 13,
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          boxShadow: '0 4px 12px rgba(108, 60, 240, 0.3)',
+                          transition: 'background-color 0.15s'
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = '#5930cb'}
+                        onMouseLeave={e => e.currentTarget.style.background = '#6C3CF0'}
+                      >
+                        Renew Access
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
           </div>
 
@@ -717,6 +801,11 @@ const RecordedClassesPage = ({ initialCourseId = null, initialLessonId = null })
               <div style={{ minWidth: 0 }}>
                 <div className="lms-lesson-label">Lesson {activeLesson.video_number}</div>
                 <h2 className="lms-lesson-title">{activeLesson.title}</h2>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px', margin: '8px 0', fontSize: '13px', color: '#64748B' }}>
+                  <span>Trainer: <strong style={{ color: '#334155' }}>{activeLesson.trainer || 'Sri'}</strong></span>
+                  <span>Duration: <strong style={{ color: '#334155' }}>{activeLesson.duration || '1h 15m'}</strong></span>
+                  <span>Uploaded: <strong style={{ color: '#334155' }}>{activeLesson.upload_date || 'July 09, 2026'}</strong></span>
+                </div>
                 {activeLesson.description && (
                   <p className="lms-lesson-desc" style={{ marginTop: 6 }}>{activeLesson.description}</p>
                 )}

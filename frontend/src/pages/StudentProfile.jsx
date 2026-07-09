@@ -13,6 +13,32 @@ const StudentProfile = ({ dashboardData, enrolledCourses = [], token }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
+  const [paying, setPaying] = useState(false);
+
+  const handlePayNow = async () => {
+    setPaying(true);
+    try {
+      const r = await fetch(`${API_BASE}/student/pay-fees`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        }
+      });
+      if (r.ok) {
+        showToast('Payment successful ✓');
+        fetchProfile();
+      } else {
+        const err = await r.json();
+        showToast(err.message || 'Payment failed');
+      }
+    } catch (e) {
+      console.error(e);
+      showToast('Error completing payment');
+    } finally {
+      setPaying(false);
+    }
+  };
 
   // Editable fields
   const [name, setName] = useState('');
@@ -21,6 +47,8 @@ const StudentProfile = ({ dashboardData, enrolledCourses = [], token }) => {
   const [currentLocation, setCurrentLocation] = useState('');
   const [permanentAddress, setPermanentAddress] = useState('');
   const [profilePic, setProfilePic] = useState('');
+  const [college, setCollege] = useState('Levlox Technical Institute');
+  const [company, setCompany] = useState('');
 
   useEffect(() => {
     fetchProfile();
@@ -46,6 +74,8 @@ const StudentProfile = ({ dashboardData, enrolledCourses = [], token }) => {
         setCurrentLocation(d.current_location || '');
         setPermanentAddress(d.permanent_address || '');
         setProfilePic(d.profile_pic || '');
+        setCollege(d.college || 'Levlox Technical Institute');
+        setCompany(d.company || '');
       }
     } catch (e) {
       console.error(e);
@@ -70,7 +100,9 @@ const StudentProfile = ({ dashboardData, enrolledCourses = [], token }) => {
           phone,
           profile_pic: profilePic,
           current_location: currentLocation,
-          permanent_address: permanentAddress
+          permanent_address: permanentAddress,
+          college,
+          company
         })
       });
       if (r.ok) {
@@ -97,6 +129,8 @@ const StudentProfile = ({ dashboardData, enrolledCourses = [], token }) => {
       setCurrentLocation(profileData.current_location || '');
       setPermanentAddress(profileData.permanent_address || '');
       setProfilePic(profileData.profile_pic || '');
+      setCollege(profileData.college || 'Levlox Technical Institute');
+      setCompany(profileData.company || '');
     }
     setEditing(false);
   };
@@ -123,8 +157,6 @@ const StudentProfile = ({ dashboardData, enrolledCourses = [], token }) => {
   const course = profileData?.course || dashboardData?.student?.course || 'Fullstack Engineering';
   const batchName = profileData?.batch_name || 'Not Assigned';
   const trainer = profileData?.trainer || 'Levlox Trainer';
-  const college = profileData?.college || 'Levlox Technical Institute';
-  const company = profileData?.company || '';
   const admissionDate = profileData?.join_date || dashboardData?.student?.enrollmentDate || 'July 08, 2026';
   
   // Calculate completion % from enrolledCourses or fallback
@@ -168,7 +200,7 @@ const StudentProfile = ({ dashboardData, enrolledCourses = [], token }) => {
       </div>
 
       {/* Clean Two Column Layout */}
-      <div className="dashboard-main-grid" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 24 }}>
+      <div className="dashboard-main-grid" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 24, alignItems: 'start' }}>
         
         {/* LEFT CARD - PERSONAL INFORMATION */}
         <div style={{
@@ -178,8 +210,7 @@ const StudentProfile = ({ dashboardData, enrolledCourses = [], token }) => {
           padding: 28,
           boxShadow: 'var(--shadow-card)',
           display: 'flex',
-          flexDirection: 'column',
-          height: 'fit-content'
+          flexDirection: 'column'
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
             <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: 8, color: '#121118' }}>
@@ -375,82 +406,174 @@ const StudentProfile = ({ dashboardData, enrolledCourses = [], token }) => {
               )}
             </div>
 
-            {/* College / Institution (READ ONLY - LOCK ICON) */}
+            {/* College / Institution */}
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
-                <label style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, margin: 0 }}>College / Institution</label>
-                <Lock size={12} color="#EF4444" />
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#F3F4F6', borderRadius: 10, border: '1.5px solid var(--border-color)', opacity: 0.8, cursor: 'not-allowed' }}>
-                <Building2 size={15} color="#9CA3AF" />
-                <span style={{ fontSize: 14, fontWeight: 700, color: '#6B7280' }}>{college}</span>
-              </div>
-            </div>
-
-            {/* Company Name (READ ONLY - LOCK ICON) */}
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
-                <label style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, margin: 0 }}>Company Name</label>
-                <Lock size={12} color="#EF4444" />
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#F3F4F6', borderRadius: 10, border: '1.5px solid var(--border-color)', opacity: 0.8, cursor: 'not-allowed' }}>
-                <Briefcase size={15} color="#9CA3AF" />
-                <span style={{ fontSize: 14, fontWeight: 700, color: '#6B7280' }}>{company || 'No Company Assigned'}</span>
-              </div>
-            </div>
-
-          </div>
-        </div>
-
-        {/* RIGHT CARD - ACADEMIC INFORMATION */}
-        <div style={{
-          background: '#FFF',
-          border: '1.5px solid var(--border-color)',
-          borderRadius: 20,
-          padding: 28,
-          boxShadow: 'var(--shadow-card)',
-          display: 'flex',
-          flexDirection: 'column',
-          height: 'fit-content'
-        }}>
-          <h3 style={{ fontSize: 16, fontWeight: 800, marginBottom: 24, display: 'flex', alignItems: 'center', gap: 8, color: '#121118' }}>
-            <GraduationCap size={18} color="var(--primary-color)" /> Academic Information
-          </h3>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {[
-              { label: 'Student ID', val: studentId, icon: <FileText size={15} color="var(--primary-color)" /> },
-              { label: 'Course', val: course, icon: <BookOpen size={15} color="var(--primary-color)" /> },
-              { label: 'Batch', val: batchName, icon: <Users size={15} color="var(--primary-color)" /> },
-              { label: 'Admission Date', val: admissionDate, icon: <Calendar size={15} color="var(--primary-color)" /> },
-              { label: 'Academic Year', val: batchName || '2024–25', icon: <Calendar size={15} color="var(--primary-color)" /> },
-              { label: 'Trainer', val: trainer, icon: <UserCheck size={15} color="var(--primary-color)" /> },
-              { label: 'Fee Status', val: isPaid ? 'Paid' : 'Pending', valColor: isPaid ? '#10B981' : '#EF4444', icon: <Award size={15} color="var(--primary-color)" /> },
-              { label: 'Attendance %', val: `${attendancePct}%`, icon: <Percent size={15} color="var(--primary-color)" /> },
-              { label: 'Course Completion %', val: `${courseCompletionPct}%`, icon: <Percent size={15} color="var(--primary-color)" /> }
-            ].map((f, i) => (
-              <div
-                key={i}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '12px 14px',
-                  background: 'var(--surface-alt)',
-                  borderRadius: 12,
-                  border: '1px solid var(--border-color)'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {f.icon}
-                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>{f.label}</span>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>College / Institution</label>
+              {editing ? (
+                <input type="text" className="form-input" style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1.5px solid var(--border-color)', fontSize: 13.5, fontWeight: 600, outline: 'none' }} value={college} onChange={e => setCollege(e.target.value)} />
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: 'var(--surface-alt)', borderRadius: 10, border: '1.5px solid transparent' }}>
+                  <Building2 size={15} color="var(--primary-color)" />
+                  <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{college || '—'}</span>
                 </div>
-                <span style={{ fontSize: 13.5, fontWeight: 800, color: f.valColor || 'var(--text-primary)' }}>{f.val}</span>
-              </div>
-            ))}
+              )}
+            </div>
+
+            {/* Company Name */}
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Company Name</label>
+              {editing ? (
+                <input type="text" className="form-input" style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1.5px solid var(--border-color)', fontSize: 13.5, fontWeight: 600, outline: 'none' }} value={company} onChange={e => setCompany(e.target.value)} />
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: 'var(--surface-alt)', borderRadius: 10, border: '1.5px solid transparent' }}>
+                  <Briefcase size={15} color="var(--primary-color)" />
+                  <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{company || 'No Company Assigned'}</span>
+                </div>
+              )}
+            </div>
+
           </div>
         </div>
 
+        {/* RIGHT COLUMN - STACKED CARDS */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          
+          {/* ACADEMIC INFORMATION CARD */}
+          <div style={{
+            background: '#FFF',
+            border: '1.5px solid var(--border-color)',
+            borderRadius: 20,
+            padding: 28,
+            boxShadow: 'var(--shadow-card)',
+            display: 'flex',
+            flexDirection: 'column'
+          }}>
+            <h3 style={{ fontSize: 16, fontWeight: 800, marginBottom: 24, display: 'flex', alignItems: 'center', gap: 8, color: '#121118' }}>
+              <GraduationCap size={18} color="var(--primary-color)" /> Academic Information
+            </h3>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {[
+                { label: 'Student ID', val: studentId, icon: <FileText size={15} color="var(--primary-color)" /> },
+                { label: 'Course', val: course, icon: <BookOpen size={15} color="var(--primary-color)" /> },
+                { label: 'Batch', val: batchName, icon: <Users size={15} color="var(--primary-color)" /> },
+                { label: 'Admission Date', val: admissionDate, icon: <Calendar size={15} color="var(--primary-color)" /> },
+                { label: 'Academic Year', val: batchName || '2024–25', icon: <Calendar size={15} color="var(--primary-color)" /> },
+                { label: 'Trainer', val: trainer, icon: <UserCheck size={15} color="var(--primary-color)" /> },
+                { label: 'Attendance %', val: `${attendancePct}%`, icon: <Percent size={15} color="var(--primary-color)" /> },
+                { label: 'Course Completion %', val: `${courseCompletionPct}%`, icon: <Percent size={15} color="var(--primary-color)" /> }
+              ].map((f, i) => (
+                <div
+                  key={i}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '12px 14px',
+                    background: 'var(--surface-alt)',
+                    borderRadius: 12,
+                    border: '1px solid var(--border-color)'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {f.icon}
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>{f.label}</span>
+                  </div>
+                  <span style={{ fontSize: 13.5, fontWeight: 800, color: f.valColor || 'var(--text-primary)' }}>{f.val}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* PAYMENT INFORMATION CARD */}
+          <div id="profile-payment-card" style={{
+            background: '#FFF',
+            border: '1.5px solid var(--border-color)',
+            borderRadius: 20,
+            padding: 28,
+            boxShadow: 'var(--shadow-card)',
+            display: 'flex',
+            flexDirection: 'column'
+          }}>
+            <h3 style={{ fontSize: 16, fontWeight: 800, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8, color: '#121118' }}>
+              <FileText size={18} color="var(--primary-color)" /> Payment Information
+            </h3>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Fee Status Row */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>Fee Status</span>
+                <span style={{ 
+                  fontSize: 11, 
+                  fontWeight: 800, 
+                  padding: '4px 12px', 
+                  borderRadius: 20, 
+                  textTransform: 'uppercase',
+                  background: isPaid ? 'rgba(16,185,129,0.08)' : 'rgba(245,158,11,0.08)', 
+                  color: isPaid ? '#10B981' : '#F59E0B'
+                }}>
+                  {isPaid ? 'Paid' : 'Pending'}
+                </span>
+              </div>
+
+              {/* Total Course Fee */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>Total Course Fee</span>
+                <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-primary)' }}>₹{profileData?.feesTotal || 1500}</span>
+              </div>
+
+              {/* Progress Summary box */}
+              <div style={{ background: 'var(--surface-alt)', border: '1px solid var(--border-color)', borderRadius: 12, padding: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, fontWeight: 700, marginBottom: 8 }}>
+                  <span style={{ color: 'var(--success-color)' }}>Paid : ₹{profileData?.feesPaidAmount || 1000}</span>
+                  <span style={{ color: 'var(--text-secondary)' }}>Remaining : ₹{profileData?.feesRemainingAmount || 500}</span>
+                </div>
+
+                {/* Progress Bar */}
+                <div style={{ height: 6, background: 'var(--border-color)', borderRadius: 99, overflow: 'hidden', marginBottom: 4 }}>
+                  <div style={{ 
+                    height: '100%', 
+                    width: `${Math.round(((profileData?.feesPaidAmount || 1000) / (profileData?.feesTotal || 1500)) * 100)}%`, 
+                    background: 'var(--primary-color)', 
+                    borderRadius: 99 
+                  }} />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600 }}>
+                  <span>Progress</span>
+                  <span>{Math.round(((profileData?.feesPaidAmount || 1000) / (profileData?.feesTotal || 1500)) * 100)}%</span>
+                </div>
+              </div>
+
+              {/* Next Due Date Alert */}
+              {!isPaid && (
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between', 
+                  padding: '10px 14px', 
+                  background: 'rgba(245,158,11,0.06)', 
+                  border: '1.5px solid rgba(245,158,11,0.15)', 
+                  borderRadius: 12 
+                }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: '#D97706' }}>Next Due</span>
+                  <span style={{ 
+                    fontSize: 11, 
+                    fontWeight: 800, 
+                    background: '#F59E0B', 
+                    color: 'white', 
+                    padding: '3px 8px', 
+                    borderRadius: 6,
+                    textTransform: 'uppercase'
+                  }}>
+                    {profileData?.feesDueDate || '15 Jul 2026'}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+        </div>
       </div>
     </div>
   );

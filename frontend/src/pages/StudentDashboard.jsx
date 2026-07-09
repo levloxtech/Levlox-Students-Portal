@@ -7,13 +7,13 @@ import {
   Search, ChevronLeft, ChevronRight, Settings, HelpCircle,
   Clock, CheckCircle, AlertCircle, PlayCircle, Zap, TrendingUp,
   Award, Star, ArrowRight, Plus, X, Eye, Users, Menu,
-  Crown, Medal, Flame, Activity
+  Crown, Medal, Flame, Activity, Trophy
 } from 'lucide-react';
 import StudentProfile from './StudentProfile';
 import AttendancePage from './AttendancePage';
 import RecordedClassesPage from './RecordedClassesPage';
 import StudyMaterialsPage from './StudyMaterialsPage';
-import FeesPage from './FeesPage';
+import LeaderboardPage from './LeaderboardPage';
 import CustomModal from '../components/Modal';
 
 const API_BASE = 'http://localhost:5000/api';
@@ -541,6 +541,26 @@ const StudentDashboard = () => {
   const getSubmissionStatus = (id) => submissions.find(s => s.assignment_id === id) || null;
   const isPaid = dashboardData?.student?.feesStatus === 'Paid';
 
+  const navigateToPaymentDetails = () => {
+    setActiveTab('profile');
+    setTimeout(() => {
+      const el = document.getElementById('profile-payment-card');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.style.transition = 'all 0.5s ease';
+        el.style.transform = 'scale(1.03)';
+        el.style.boxShadow = '0 0 25px rgba(108,60,240,0.5)';
+        el.style.borderColor = 'var(--primary-color)';
+        
+        setTimeout(() => {
+          el.style.transform = 'none';
+          el.style.boxShadow = 'var(--shadow-card)';
+          el.style.borderColor = 'var(--border-color)';
+        }, 1500);
+      }
+    }, 200);
+  };
+
   /* ── Profile Completion ── */
   const calcCompletion = () => {
     if (!profileData) return 0;
@@ -572,6 +592,7 @@ const StudentDashboard = () => {
     { id: 'my-courses', icon: <Video size={20} strokeWidth={1.75} />, label: 'Live Classes' },
     { id: 'recorded-classes-tab', icon: <PlayCircle size={20} strokeWidth={1.75} />, label: 'Recorded Classes' },
     { id: 'attendance-tab', icon: <Percent size={20} strokeWidth={1.75} />, label: 'Attendance' },
+    { id: 'leaderboard-tab', icon: <Trophy size={20} strokeWidth={1.75} />, label: 'Leaderboard' },
     { id: 'announcements-tab', icon: <Megaphone size={20} strokeWidth={1.75} />, label: 'Announcements' },
     { id: 'profile', icon: <User size={20} strokeWidth={1.75} />, label: 'Profile' },
     { id: 'settings', icon: <Settings size={20} strokeWidth={1.75} />, label: 'Settings' },
@@ -992,11 +1013,11 @@ const StudentDashboard = () => {
                               padding: '14px 20px',
                               borderBottom: isLast ? 'none' : '1px solid var(--border-color)',
                               transition: 'background 0.15s',
-                              cursor: hasAccess ? 'pointer' : 'default',
+                              cursor: 'pointer',
                             }}
                             onMouseEnter={e => { e.currentTarget.style.background = 'rgba(108,60,240,0.028)'; }}
                             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                            onClick={hasAccess ? () => openReplayInPlayer(v) : undefined}
+                            onClick={hasAccess ? () => openReplayInPlayer(v) : navigateToPaymentDetails}
                           >
                             {/* Thumbnail — 16:9 */}
                             <div style={{
@@ -1096,18 +1117,17 @@ const StudentDashboard = () => {
                                   </button>
                                 ) : (
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                    <span style={{ fontSize: 10.5, color: 'var(--text-tertiary)', fontStyle: 'italic' }}>Available after activation</span>
-                                    <button
-                                      onClick={e => { e.stopPropagation(); setActiveTab('fees-tab'); }}
-                                      style={{
-                                        padding: '4px 10px', fontSize: 10.5, borderRadius: 7,
-                                        background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)',
-                                        color: '#DC2626', fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit',
-                                        display: 'inline-flex', alignItems: 'center', gap: 4,
-                                      }}
-                                    >
-                                      Activate Access
-                                    </button>
+                                    <span style={{ 
+                                      fontSize: 10.5, 
+                                      background: 'rgba(245,158,11,0.08)', 
+                                      color: '#F59E0B', 
+                                      padding: '3px 8px', 
+                                      borderRadius: 6,
+                                      fontWeight: 700,
+                                      cursor: 'pointer'
+                                    }}>
+                                      View Payment Details
+                                    </span>
                                   </div>
                                 )}
                               </div>
@@ -1273,10 +1293,7 @@ const StudentDashboard = () => {
           <AttendancePage dashboardData={dashboardData} />
         )}
 
-        {/* FEES TAB — premium Stripe/Vercel dashboard */}
-        {activeTab === 'fees-tab' && dashboardData && (
-          <FeesPage dashboardData={dashboardData} onPayFees={payFees} paying={paying} />
-        )}
+
 
         {/* ANNOUNCEMENTS TAB */}
         {activeTab === 'announcements-tab' && dashboardData && (
@@ -1303,6 +1320,11 @@ const StudentDashboard = () => {
         )}
 
 
+
+        {/* LEADERBOARD TAB */}
+        {activeTab === 'leaderboard-tab' && (
+          <LeaderboardPage token={token} user={user} />
+        )}
 
         {/* PROFILE TAB — premium page component */}
         {activeTab === 'profile' && (
