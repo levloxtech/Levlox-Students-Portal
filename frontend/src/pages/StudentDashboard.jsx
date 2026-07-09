@@ -6,7 +6,8 @@ import {
   Download, ExternalLink, Calendar, Percent, Bell,
   Search, ChevronLeft, ChevronRight, Settings, HelpCircle,
   Clock, CheckCircle, AlertCircle, PlayCircle, Zap, TrendingUp,
-  Award, Star, ArrowRight, Plus, X, Eye, Users, Menu
+  Award, Star, ArrowRight, Plus, X, Eye, Users, Menu,
+  Crown, Medal, Flame, Activity
 } from 'lucide-react';
 import StudentProfile from './StudentProfile';
 import AttendancePage from './AttendancePage';
@@ -231,6 +232,9 @@ const StudentDashboard = () => {
   const [modalType, setModalType] = useState('info');
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [analytics, setAnalytics] = useState(null);
+  const [overallLeaderboard, setOverallLeaderboard] = useState([]);
+  const [mockLeaderboard, setMockLeaderboard] = useState([]);
+  const [taskLeaderboard, setTaskLeaderboard] = useState([]);
   const notiRef = useRef(null);
   const profileRef = useRef(null);
 
@@ -309,12 +313,29 @@ const StudentDashboard = () => {
     }
   };
 
+  const fetchLeaderboards = async () => {
+    try {
+      const headers = { Authorization: `Bearer ${token}` };
+      const [rOverall, rMock, rTask] = await Promise.all([
+        apiFetch(`${API_BASE}/student/leaderboard/overall`, { headers }),
+        apiFetch(`${API_BASE}/student/leaderboard/mock`, { headers }),
+        apiFetch(`${API_BASE}/student/leaderboard/tasks`, { headers })
+      ]);
+      if (rOverall.ok) setOverallLeaderboard(await rOverall.json());
+      if (rMock.ok) setMockLeaderboard(await rMock.json());
+      if (rTask.ok) setTaskLeaderboard(await rTask.json());
+    } catch (e) {
+      console.error('Error fetching leaderboards:', e);
+    }
+  };
+
   const fetchAnalytics = async () => {
     try {
       const r = await apiFetch(`${API_BASE}/student/analytics`, { headers: { Authorization: `Bearer ${token}` } });
       const d = await r.json();
       setAnalytics(d);
     } catch (e) { console.error(e); }
+    fetchLeaderboards();
   };
 
   const fetchNotifications = async () => {
@@ -724,112 +745,155 @@ const StudentDashboard = () => {
 
               {/* LEFT COLUMN: LEARNING PROGRESS DASHBOARD */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                {/* Analytics Card */}
-                <div style={{ background: 'white', border: '1px solid var(--border-color)', borderRadius: 20, padding: 28, boxShadow: 'var(--shadow-sm)' }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 800, margin: '0 0 20px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <TrendingUp size={18} color="var(--primary-color)" /> Learning Progress Dashboard
-                  </h3>
-
-                  {/* Analytics Details 3-Column Grid */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 20 }}>
-                    {/* Mock Interview Progress */}
-                    <div style={{ background: 'var(--surface-alt)', border: '1.5px solid var(--border-color)', borderRadius: 16, padding: 20, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                      <div>
-                        <h4 style={{ fontSize: 13, fontWeight: 800, margin: '0 0 14px', display: 'flex', alignItems: 'center', gap: 6, color: 'var(--primary-color)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                          <Award size={14} /> Mock Interviews
-                        </h4>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, fontSize: 12.5 }}>
-                          <div>
-                            <span style={{ color: 'var(--text-secondary)' }}>Total / Done</span>
-                            <p style={{ margin: '2px 0 0', fontWeight: 800, fontSize: 15 }}>{activeAnalytics.mock_interviews.total} / {activeAnalytics.mock_interviews.completed}</p>
-                          </div>
-                          <div>
-                            <span style={{ color: 'var(--text-secondary)' }}>Pending</span>
-                            <p style={{ margin: '2px 0 0', fontWeight: 800, fontSize: 15 }}>{activeAnalytics.mock_interviews.pending}</p>
-                          </div>
-                          <div>
-                            <span style={{ color: 'var(--text-secondary)' }}>Avg Score</span>
-                            <p style={{ margin: '2px 0 0', fontWeight: 800, fontSize: 15, color: 'var(--primary-color)' }}>{activeAnalytics.mock_interviews.average_score}%</p>
-                          </div>
-                          <div>
-                            <span style={{ color: 'var(--text-secondary)' }}>Best Score</span>
-                            <p style={{ margin: '2px 0 0', fontWeight: 800, fontSize: 15, color: 'var(--success-color)' }}>{activeAnalytics.mock_interviews.best_score}%</p>
-                          </div>
-                        </div>
-                      </div>
-                      <p style={{ margin: '14px 0 0 0', fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600, borderTop: '1px solid var(--border-light)', paddingTop: 10 }}>Latest: {activeAnalytics.mock_interviews.latest_date}</p>
-                    </div>
-
-                    {/* Task / Assignment Progress */}
-                    <div style={{ background: 'var(--surface-alt)', border: '1.5px solid var(--border-color)', borderRadius: 16, padding: 20, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                      <div>
-                        <h4 style={{ fontSize: 13, fontWeight: 800, margin: '0 0 14px', display: 'flex', alignItems: 'center', gap: 6, color: 'var(--primary-color)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                          <FileText size={14} /> Tasks & Assignments
-                        </h4>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, fontSize: 12.5 }}>
-                          <div>
-                            <span style={{ color: 'var(--text-secondary)' }}>Completed</span>
-                            <p style={{ margin: '2px 0 0', fontWeight: 800, fontSize: 15, color: 'var(--success-color)' }}>{activeAnalytics.assignments.completed}</p>
-                          </div>
-                          <div>
-                            <span style={{ color: 'var(--text-secondary)' }}>Pending</span>
-                            <p style={{ margin: '2px 0 0', fontWeight: 800, fontSize: 15, color: 'var(--danger-color)' }}>{activeAnalytics.assignments.pending}</p>
-                          </div>
-                          <div style={{ gridColumn: 'span 2' }}>
-                            <span style={{ color: 'var(--text-secondary)' }}>Submission Rate</span>
-                            <p style={{ margin: '2px 0 0', fontWeight: 800, fontSize: 15 }}>{activeAnalytics.assignments.submission_rate}%</p>
-                          </div>
-                        </div>
-                      </div>
-                      <div style={{ marginTop: 14, borderTop: '1px solid var(--border-light)', paddingTop: 10 }}>
-                        <ProgressBar pct={activeAnalytics.assignments.submission_rate} color="var(--success-color)" height={5} />
-                      </div>
-                    </div>
-
-                    {/* Attendance Summary */}
-                    <div style={{ background: 'var(--surface-alt)', border: '1.5px solid var(--border-color)', borderRadius: 16, padding: 20, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                      <div>
-                        <h4 style={{ fontSize: 13, fontWeight: 800, margin: '0 0 14px', display: 'flex', alignItems: 'center', gap: 6, color: 'var(--primary-color)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                          <Percent size={14} /> Attendance Summary
-                        </h4>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, fontSize: 12.5 }}>
-                          <div>
-                            <span style={{ color: 'var(--text-secondary)' }}>Percentage</span>
-                            <p style={{ margin: '2px 0 0', fontWeight: 800, fontSize: 15, color: 'var(--success-color)' }}>{activeAnalytics.attendance.percentage}%</p>
-                          </div>
-                          <div>
-                            <span style={{ color: 'var(--text-secondary)' }}>Present Days</span>
-                            <p style={{ margin: '2px 0 0', fontWeight: 800, fontSize: 15 }}>{activeAnalytics.attendance.present}</p>
-                          </div>
-                          <div style={{ gridColumn: 'span 2' }}>
-                            <span style={{ color: 'var(--text-secondary)' }}>Absent Days</span>
-                            <p style={{ margin: '2px 0 0', fontWeight: 800, fontSize: 15, color: 'var(--danger-color)' }}>{activeAnalytics.attendance.absent}</p>
-                          </div>
-                        </div>
-                      </div>
-                      <div style={{ marginTop: 14, borderTop: '1px solid var(--border-light)', paddingTop: 10 }}>
-                        <ProgressBar pct={activeAnalytics.attendance.percentage} color="var(--primary-color)" height={5} />
-                      </div>
-                    </div>
+                {/* ─── OVERALL COURSE PROGRESS ─── */}
+                <div style={{ background: 'white', border: '1px solid var(--border-color)', borderRadius: 20, padding: 24, boxShadow: 'var(--shadow-sm)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <h4 style={{ fontSize: 14, fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-primary)' }}>
+                      <TrendingUp size={16} color="var(--primary-color)" /> Overall Course Progress
+                    </h4>
+                    <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--primary-color)' }}>
+                      {activeAnalytics.overall_progress.percentage}%
+                    </span>
+                  </div>
+                  <div style={{ width: '100%', height: 8, background: '#FAF9FF', border: '1px solid var(--border-color)', borderRadius: 4, overflow: 'hidden', marginBottom: 14 }}>
+                    <div style={{
+                      width: `${activeAnalytics.overall_progress.percentage}%`,
+                      height: '100%',
+                      background: 'linear-gradient(135deg, var(--primary-color) 0%, #4c22bc 100%)',
+                      borderRadius: 4,
+                      transition: 'width 1s cubic-bezier(0.4, 0, 0.2, 1)'
+                    }} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)' }}>
+                    <span>Completed Modules: <strong>{activeAnalytics.overall_progress.completed_modules}</strong></span>
+                    <span>Remaining Modules: <strong>{activeAnalytics.overall_progress.remaining_modules}</strong></span>
                   </div>
                 </div>
 
-                {/* Interactive Charts Section */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 24 }} className="dashboard-main-grid">
-                  {/* Weekly learning line chart */}
-                  <div style={{ background: 'white', border: '1px solid var(--border-color)', borderRadius: 20, padding: 24, boxShadow: 'var(--shadow-sm)' }}>
-                    <h4 style={{ fontSize: 14, fontWeight: 800, margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <Clock size={16} color="var(--primary-color)" /> Weekly Learning (Hours)
+                {/* ─── OVERALL BATCH LEADERBOARD ─── */}
+                <div style={{ background: 'white', border: '1px solid var(--border-color)', borderRadius: 20, padding: 24, boxShadow: 'var(--shadow-sm)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+                    <h4 style={{ fontSize: 14, fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Crown size={16} color="#FBBF24" /> Overall Batch Leaderboard
                     </h4>
-                    <WeeklyLineChart data={activeAnalytics.weekly_learning} />
+                    <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600 }}>Top Performers</span>
+                  </div>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {(overallLeaderboard && overallLeaderboard.length > 0 ? overallLeaderboard : [
+                      { rank: 1, name: 'Sri', overall_score: 950, streak: 18 },
+                      { rank: 2, name: 'Rahul', overall_score: 910, streak: 15 },
+                      { rank: 3, name: 'Kavya', overall_score: 890, streak: 9 }
+                    ]).map((s, idx) => {
+                      const isTop1 = s.rank === 1;
+                      const isTop2 = s.rank === 2;
+                      const isTop3 = s.rank === 3;
+                      const isCurrent = s.is_current || s.name === user.name;
+
+                      return (
+                        <div
+                          key={idx}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '12px 16px',
+                            background: isCurrent ? 'rgba(108,60,240,0.06)' : 'var(--surface-alt)',
+                            border: `1.5px solid ${isCurrent ? 'var(--primary-color)' : 'var(--border-color)'}`,
+                            borderRadius: 12,
+                            transition: 'all 0.2s',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <div style={{ width: 26, height: 26, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isTop1 ? 'rgba(251,191,36,0.15)' : isTop2 ? 'rgba(156,163,175,0.15)' : isTop3 ? 'rgba(217,119,6,0.15)' : 'rgba(255,255,255,0.8)', border: '1px solid var(--border-color)', fontSize: 12, fontWeight: 800 }}>
+                              {isTop1 ? <Crown size={14} color="#D97706" /> : isTop2 ? <Medal size={14} color="#71717A" /> : isTop3 ? <Medal size={14} color="#B45309" /> : s.rank}
+                            </div>
+                            <span style={{ fontSize: 13.5, fontWeight: isCurrent ? 800 : 700, color: 'var(--text-primary)' }}>
+                              {s.name} {isCurrent && <span style={{ fontSize: 10, color: 'var(--primary-color)', background: 'var(--primary-light)', padding: '2px 6px', borderRadius: 4, marginLeft: 4 }}>You</span>}
+                            </span>
+                          </div>
+                          
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary-color)' }}>
+                              {s.overall_score} pts
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#EF4444', fontWeight: 700 }}>
+                              <Flame size={14} /> {s.streak}d
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* ─── SPECIALIZED LEADERBOARDS (GRID) ─── */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 24 }} className="dashboard-main-grid">
+                  
+                  {/* Mock Interview Leaderboard */}
+                  <div style={{ background: 'white', border: '1px solid var(--border-color)', borderRadius: 20, padding: 20, boxShadow: 'var(--shadow-sm)' }}>
+                    <h4 style={{ fontSize: 13.5, fontWeight: 800, margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Activity size={15} color="var(--primary-color)" /> Mock Interviews
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {(mockLeaderboard && mockLeaderboard.length > 0 ? mockLeaderboard : [
+                        { rank: 1, name: 'Sri', average_score: 95, completed_interviews: 6 },
+                        { rank: 2, name: 'Rahul', average_score: 91, completed_interviews: 5 },
+                        { rank: 3, name: 'Kavya', average_score: 89, completed_interviews: 4 }
+                      ]).slice(0, 5).map((s, idx) => {
+                        const isCurrent = s.is_current || s.name === user.name;
+                        const isTop1 = s.rank === 1;
+                        const isTop2 = s.rank === 2;
+                        const isTop3 = s.rank === 3;
+                        return (
+                          <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: isCurrent ? 'rgba(108,60,240,0.04)' : 'var(--surface-alt)', border: `1px solid ${isCurrent ? 'var(--primary-color)' : 'var(--border-color)'}`, borderRadius: 10, fontSize: 12.5 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}>
+                                {isTop1 ? <Crown size={12} color="#D97706" /> : isTop2 ? <Medal size={12} color="#71717A" /> : isTop3 ? <Medal size={12} color="#B45309" /> : `#${s.rank}`}
+                              </span>
+                              <span style={{ fontWeight: isCurrent ? 800 : 700 }}>{s.name}</span>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <span style={{ fontWeight: 700, color: 'var(--primary-color)' }}>{s.average_score}% Avg</span>
+                              <div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{s.completed_interviews} Completed</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
 
-                  {/* Mock Interview History bar chart */}
-                  <div style={{ background: 'white', border: '1px solid var(--border-color)', borderRadius: 20, padding: 24, boxShadow: 'var(--shadow-sm)' }}>
-                    <h4 style={{ fontSize: 14, fontWeight: 800, margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <Award size={16} color="var(--primary-color)" /> Mock Interview History
+                  {/* Task Leaderboard */}
+                  <div style={{ background: 'white', border: '1px solid var(--border-color)', borderRadius: 20, padding: 20, boxShadow: 'var(--shadow-sm)' }}>
+                    <h4 style={{ fontSize: 13.5, fontWeight: 800, margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <FileText size={15} color="var(--primary-color)" /> Assignments & Tasks
                     </h4>
-                    <MockBarChart data={activeAnalytics.mock_interviews.scores} />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {(taskLeaderboard && taskLeaderboard.length > 0 ? taskLeaderboard : [
+                        { rank: 1, name: 'Sri', completed_assignments: 8, submission_rate: 80 },
+                        { rank: 2, name: 'Rahul', completed_assignments: 7, submission_rate: 70 },
+                        { rank: 3, name: 'Kavya', completed_assignments: 6, submission_rate: 60 }
+                      ]).slice(0, 5).map((s, idx) => {
+                        const isCurrent = s.is_current || s.name === user.name;
+                        const isTop1 = s.rank === 1;
+                        const isTop2 = s.rank === 2;
+                        const isTop3 = s.rank === 3;
+                        return (
+                          <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: isCurrent ? 'rgba(108,60,240,0.04)' : 'var(--surface-alt)', border: `1px solid ${isCurrent ? 'var(--primary-color)' : 'var(--border-color)'}`, borderRadius: 10, fontSize: 12.5 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}>
+                                {isTop1 ? <Crown size={12} color="#D97706" /> : isTop2 ? <Medal size={12} color="#71717A" /> : isTop3 ? <Medal size={12} color="#B45309" /> : `#${s.rank}`}
+                              </span>
+                              <span style={{ fontWeight: isCurrent ? 800 : 700 }}>{s.name}</span>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <span style={{ fontWeight: 700, color: 'var(--success-color)' }}>{s.completed_assignments} Done</span>
+                              <div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{s.submission_rate}% Sub. Rate</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
 

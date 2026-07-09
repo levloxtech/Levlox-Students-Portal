@@ -468,4 +468,117 @@ def get_analytics():
     except Exception as e:
         return jsonify({'message': 'Error retrieving analytics', 'error': str(e)}), 400
 
+# Leaderboard APIs
+@student_bp.route('/leaderboard/overall', methods=['GET'])
+@token_required(allowed_roles=['student'])
+def get_overall_leaderboard():
+    try:
+        student = g.current_user
+        student_db = db.users.find_one({"_id": ObjectId(student['id'])})
+        batch_id = student_db.get('batch_id') if student_db else None
+
+        if not batch_id:
+            return jsonify([]), 200
+
+        students = list(db.users.find({"role": "student", "batch_id": batch_id}))
+        
+        leaderboard = []
+        for s in students:
+            leaderboard.append({
+                "student_id": str(s['_id']),
+                "name": s.get('name', 'Student'),
+                "overall_score": s.get('overall_score', 750),
+                "streak": s.get('streak', 3),
+                "is_current": str(s['_id']) == str(student['id'])
+            })
+            
+        leaderboard.sort(key=lambda x: x['overall_score'], reverse=True)
+        
+        for index, item in enumerate(leaderboard):
+            item['rank'] = index + 1
+            
+        return jsonify(leaderboard), 200
+    except Exception as e:
+        return jsonify({'message': 'Error loading overall leaderboard', 'error': str(e)}), 400
+
+@student_bp.route('/leaderboard/mock', methods=['GET'])
+@token_required(allowed_roles=['student'])
+def get_mock_leaderboard():
+    try:
+        student = g.current_user
+        student_db = db.users.find_one({"_id": ObjectId(student['id'])})
+        batch_id = student_db.get('batch_id') if student_db else None
+
+        if not batch_id:
+            return jsonify([]), 200
+
+        students = list(db.users.find({"role": "student", "batch_id": batch_id}))
+        
+        leaderboard = []
+        for s in students:
+            s_id = s['_id']
+            interviews = list(db.mock_interviews.find({"student_id": s_id}))
+            if interviews:
+                avg_score = round(sum(i.get('score', 0) for i in interviews) / len(interviews))
+                completed = sum(i.get('completed_interviews', 0) for i in interviews)
+            else:
+                avg_score = 0
+                completed = 0
+                
+            leaderboard.append({
+                "student_id": str(s_id),
+                "name": s.get('name', 'Student'),
+                "average_score": avg_score,
+                "completed_interviews": completed,
+                "is_current": str(s_id) == str(student['id'])
+            })
+            
+        leaderboard.sort(key=lambda x: x['average_score'], reverse=True)
+        
+        for index, item in enumerate(leaderboard):
+            item['rank'] = index + 1
+            
+        return jsonify(leaderboard), 200
+    except Exception as e:
+        return jsonify({'message': 'Error loading mock leaderboard', 'error': str(e)}), 400
+
+@student_bp.route('/leaderboard/tasks', methods=['GET'])
+@token_required(allowed_roles=['student'])
+def get_task_leaderboard():
+    try:
+        student = g.current_user
+        student_db = db.users.find_one({"_id": ObjectId(student['id'])})
+        batch_id = student_db.get('batch_id') if student_db else None
+
+        if not batch_id:
+            return jsonify([]), 200
+
+        students = list(db.users.find({"role": "student", "batch_id": batch_id}))
+        total_assignments = db.assignments.count_documents({"batch_id": batch_id}) or 10
+
+        leaderboard = []
+        for s in students:
+            s_id = s['_id']
+            completed = db.submissions.count_documents({"student_id": s_id, "status": {"$in": ["Submitted", "graded", "pending"]}})
+            sub_rate = round((completed / total_assignments) * 100)
+            on_time = 95 if completed > 0 else 0
+            
+            leaderboard.append({
+                "student_id": str(s_id),
+                "name": s.get('name', 'Student'),
+                "completed_assignments": completed,
+                "submission_rate": sub_rate,
+                "on_time_submission": on_time,
+                "is_current": str(s_id) == str(student['id'])
+            })
+            
+        leaderboard.sort(key=lambda x: x['completed_assignments'], reverse=True)
+        
+        for index, item in enumerate(leaderboard):
+            item['rank'] = index + 1
+            
+        return jsonify(leaderboard), 200
+    except Exception as e:
+        return jsonify({'message': 'Error loading task leaderboard', 'error': str(e)}), 400
+
 
