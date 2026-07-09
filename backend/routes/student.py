@@ -590,3 +590,187 @@ def get_task_leaderboard():
         return jsonify({'message': 'Error loading task leaderboard', 'error': str(e)}), 400
 
 
+@student_bp.route('/recorded-classes-lms', methods=['GET'])
+@token_required(allowed_roles=['student'])
+def get_recorded_classes_lms():
+    try:
+        student = g.current_user
+        fees_are_paid = student.get('feesPaid', False)
+        student_db = db.users.find_one({"_id": ObjectId(student['id'])})
+        batch_id = student_db.get('batch_id') if student_db else None
+
+        # Check if empty, seed default database records linked to batch_id
+        if db.recorded_classes.count_documents({"batch_id": str(batch_id) if batch_id else None}) == 0:
+            db.recorded_classes.insert_many([
+                {
+                    "title": "Variables & Data Types",
+                    "module": "Module 1 - Python Basics",
+                    "video_url": "https://www.youtube.com/watch?v=35lXWvCuDKo",
+                    "notes_url": "https://react.dev",
+                    "assignment": "Variables & Operators Challenge",
+                    "quiz": "Python Variables Quiz",
+                    "visibility": "everyone",
+                    "course_title": "Python Full Stack",
+                    "batch_id": str(batch_id) if batch_id else None
+                },
+                {
+                    "title": "Python Operators",
+                    "module": "Module 1 - Python Basics",
+                    "video_url": "https://www.youtube.com/watch?v=lawexDFUtGY",
+                    "notes_url": "https://react.dev",
+                    "assignment": "Operators Hands-on Lab",
+                    "quiz": "Operators Practice Test",
+                    "visibility": "paid",
+                    "course_title": "Python Full Stack",
+                    "batch_id": str(batch_id) if batch_id else None
+                },
+                {
+                    "title": "Functions Part 1",
+                    "module": "Module 2 - Functions & Recursion",
+                    "video_url": "https://www.youtube.com/watch?v=35lXWvCuDKo",
+                    "notes_url": "https://react.dev",
+                    "assignment": "Recursion Practice Assignment",
+                    "quiz": "Functions & Scope Quiz",
+                    "visibility": "paid",
+                    "course_title": "Python Full Stack",
+                    "batch_id": str(batch_id) if batch_id else None
+                }
+            ])
+
+        # Fetch records
+        recorded_classes = list(db.recorded_classes.find({"batch_id": str(batch_id) if batch_id else None}))
+        submissions = list(db.submissions.find({"student_id": ObjectId(student['id'])}))
+        
+        # Turn submissions to dict map by assignment_id or title
+        sub_map = {}
+        for sub in submissions:
+            sub_map[str(sub.get('assignment_id'))] = sub.get('status', 'Submitted').capitalize()
+
+        # Group by module field
+        modules_dict = {}
+        for rc in recorded_classes:
+            mod_title = rc.get('module', 'Module 1 - Python Basics')
+            if mod_title not in modules_dict:
+                modules_dict[mod_title] = {
+                    "id": mod_title.lower().replace(" ", "-"),
+                    "title": mod_title,
+                    "progress": 0,
+                    "videos": [],
+                    "notes": [],
+                    "assignments": [],
+                    "quiz": None
+                }
+            
+            # Determine visibility & lock
+            visibility = rc.get('visibility', 'everyone')
+            is_locked = True if (visibility == 'paid' and not fees_are_paid) else False
+
+            # Add video
+            rc_id = str(rc['_id'])
+            modules_dict[mod_title]["videos"].append({
+                "id": rc_id,
+                "title": rc.get('title'),
+                "duration": "1h 15m",
+                "watch_progress": 100 if is_locked == False and rc.get('title') == "Variables & Data Types" else 0,
+                "completed": True if is_locked == False and rc.get('title') == "Variables & Data Types" else False,
+                "url": rc.get('video_url', ''),
+                "visibility": visibility,
+                "locked": is_locked
+            })
+
+            # Add notes
+            if rc.get('notes_url'):
+                modules_dict[mod_title]["notes"].append({
+                    "id": f"note-{rc_id}",
+                    "title": f"{rc.get('title')} Notes",
+                    "file_name": f"{rc.get('title')} Notes.pdf",
+                    "url": rc.get('notes_url'),
+                    "visibility": visibility,
+                    "locked": is_locked
+                })
+
+            # Add assignment
+            if rc.get('assignment'):
+                status = "Pending"
+                if rc_id in sub_map:
+                    status = sub_map[rc_id]
+                modules_dict[mod_title]["assignments"].append({
+                    "id": rc_id,
+                    "title": rc.get('assignment'),
+                    "deadline": "July 30, 2026",
+                    "marks": 50,
+                    "status": status,
+                    "visibility": visibility,
+                    "locked": is_locked
+                })
+
+            # Add quiz
+            if rc.get('quiz') and not modules_dict[mod_title]["quiz"]:
+                modules_dict[mod_title]["quiz"] = {
+                    "id": f"quiz-{rc_id}",
+                    "name": rc.get('quiz'),
+                    "questions": 12,
+                    "time": "15 mins",
+                    "attempts": "0/2",
+                    "visibility": visibility,
+                    "locked": is_locked
+                }
+
+        # Calculate module progress based on videos completion
+        for mod_title, mod in modules_dict.items():
+            unlocked_vids = [v for v in mod["videos"] if not v["locked"]]
+            if unlocked_vids:
+                completed_vids = sum(1 for v in unlocked_vids if v["completed"])
+                mod["progress"] = round((completed_vids / len(unlocked_vids)) * 100)
+            else:
+                mod["progress"] = 0
+
+        # Convert to list
+        modules_list = list(modules_dict.values())
+        # Sort by module name
+        modules_list.sort(key=lambda x: x['title'])
+
+        mock_interviews = [
+            {
+                "number": 1,
+                "status": "Completed",
+                "score": "88/100",
+                "feedback": "Great logic and explanation of OOP decorators. Focus slightly more on memory management."
+            },
+            {
+                "number": 2,
+                "status": "Scheduled",
+                "score": "N/A",
+                "feedback": "Scheduled for July 12, 2026. Prepare for Python REST APIs and DB indexing."
+            }
+        ]
+
+        completed_count = sum(1 for m in modules_list if m['progress'] == 100)
+        overall_progress = round((sum(m['progress'] for m in modules_list) / len(modules_list))) if modules_list else 0
+
+        course_data = {
+            "title": "Python Full Stack",
+            "trainer": "Prof. Charles Babbage",
+            "batch": student_db.get('course', 'Fullstack Engineering') if student_db else "Python Full Stack",
+            "progress": overall_progress,
+            "modules_completed": completed_count,
+            "modules_remaining": len(modules_list) - completed_count,
+            "duration": "120 Hours",
+            "last_updated": "July 09, 2026",
+            "modules": modules_list,
+            "resources": [
+                { "title": "Comprehensive PDF Lecture Notes", "type": "PDF Notes", "url": "https://react.dev" },
+                { "title": "Flask & React Cheat Sheets", "type": "Cheat Sheets", "url": "https://react.dev" },
+                { "title": "Backend API Source Code", "type": "Source Code", "url": "https://github.com" },
+                { "title": "Python Coding Lab Practice Programs", "type": "Practice Programs", "url": "https://react.dev" },
+                { "title": "Classroom GitHub Repository", "type": "GitHub Repository", "url": "https://github.com" }
+            ],
+            "mock_interviews": mock_interviews
+        }
+
+        return jsonify({"course": course_data, "isPaid": fees_are_paid}), 200
+    except Exception as e:
+        return jsonify({'message': 'Error loading LMS data', 'error': str(e)}), 400
+
+
+

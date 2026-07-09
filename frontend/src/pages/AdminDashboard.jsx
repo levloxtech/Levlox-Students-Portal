@@ -96,6 +96,12 @@ const AdminDashboard = () => {
   const [recYoutube, setRecYoutube] = useState('');
   const [recDrive, setRecDrive] = useState('');
   const [recCourseTitle, setRecCourseTitle] = useState('Fullstack Engineering');
+  const [recModule, setRecModule] = useState('Module 1 - Python Basics');
+  const [recVideoUrl, setRecVideoUrl] = useState('');
+  const [recNotesUrl, setRecNotesUrl] = useState('');
+  const [recAssignment, setRecAssignment] = useState('');
+  const [recQuiz, setRecQuiz] = useState('');
+  const [recVisibility, setRecVisibility] = useState('everyone');
 
   const [noteTitle, setNoteTitle] = useState('');
   const [noteType, setNoteType] = useState('PDF');
@@ -796,24 +802,54 @@ const AdminDashboard = () => {
         },
         body: JSON.stringify({
           title: recTitle,
-          description: recDescription,
-          thumbnail_url: recThumbnail,
-          youtube_link: recYoutube,
-          drive_link: recDrive,
+          module: recModule,
+          video_url: recVideoUrl,
+          notes_url: recNotesUrl,
+          assignment: recAssignment,
+          quiz: recQuiz,
+          visibility: recVisibility,
           course_title: recCourseTitle,
-          duration: recDuration,
           batch_id: selectedBatchId
         })
       });
       if (response.ok) {
         setRecTitle('');
-        setRecDescription('');
-        setRecThumbnail('');
-        setRecYoutube('');
-        setRecDrive('');
-        setRecDuration('1h 30m');
+        setRecModule('Module 1 - Python Basics');
+        setRecVideoUrl('');
+        setRecNotesUrl('');
+        setRecAssignment('');
+        setRecQuiz('');
+        setRecVisibility('everyone');
         fetchRecordedClasses();
         fetchStats();
+        showModal("Success", "New LMS Lesson posted successfully!", "success");
+      } else {
+        const err = await response.json();
+        showModal("Error", err.message || "Failed to upload lesson", "error");
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const toggleRecordedClassVisibility = async (id, currentVisibility) => {
+    const newVisibility = currentVisibility === 'everyone' ? 'paid' : 'everyone';
+    try {
+      const response = await fetch(`${API_BASE}/admin/recorded-classes/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          visibility: newVisibility
+        })
+      });
+      if (response.ok) {
+        showModal("Success", `Visibility changed to: ${newVisibility === 'everyone' ? 'Everyone' : 'Paid Students Only'}`, "success");
+        fetchRecordedClasses();
+      } else {
+        showModal("Error", "Failed to update visibility status", "error");
       }
     } catch (error) {
       console.error(error);
@@ -1544,7 +1580,7 @@ const AdminDashboard = () => {
         {activeTab === 'recorded-classes' && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '30px' }}>
             <div className="dashboard-card-section">
-              <h4 style={{ marginBottom: '18px', fontSize: '15px', fontWeight: '700' }}>Upload Lecture Replay</h4>
+              <h4 style={{ marginBottom: '18px', fontSize: '15px', fontWeight: '700' }}>Upload Recorded Lesson</h4>
               <form onSubmit={addRecordedClass}>
                 <div className="form-group">
                   <label className="form-label" htmlFor="recBatchSelect">Target Batch</label>
@@ -1556,66 +1592,84 @@ const AdminDashboard = () => {
                   </select>
                 </div>
                 <div className="form-group">
-                  <label className="form-label" htmlFor="recTitle">Lecture Title</label>
-                  <input id="recTitle" type="text" className="form-input" value={recTitle} onChange={(e) => setRecTitle(e.target.value)} required />
+                  <label className="form-label" htmlFor="recCourseTitle">Course Name</label>
+                  <input id="recCourseTitle" type="text" className="form-input" value={recCourseTitle} onChange={(e) => setRecCourseTitle(e.target.value)} placeholder="e.g. Python Full Stack" required />
                 </div>
                 <div className="form-group">
-                  <label className="form-label" htmlFor="recCourseTitle">Course Category</label>
-                  <select id="recCourseTitle" className="form-select" value={recCourseTitle} onChange={(e) => setRecCourseTitle(e.target.value)}>
-                    <option value="Frontend Development">Frontend Development</option>
-                    <option value="Backend Development">Backend Development</option>
-                    <option value="Fullstack Engineering">Fullstack Engineering</option>
-                    <option value="UI/UX Design">UI/UX Design</option>
-                    <option value="Data Science & AI">Data Science & AI</option>
-                  </select>
+                  <label className="form-label" htmlFor="recModule">Module Section</label>
+                  <input id="recModule" type="text" className="form-input" value={recModule} onChange={(e) => setRecModule(e.target.value)} placeholder="e.g. Module 1 - Python Basics" required />
                 </div>
                 <div className="form-group">
-                  <label className="form-label" htmlFor="recDuration">Duration (e.g. 1h 20m)</label>
-                  <input id="recDuration" type="text" className="form-input" value={recDuration} onChange={(e) => setRecDuration(e.target.value)} required />
+                  <label className="form-label" htmlFor="recTitle">Lesson Title</label>
+                  <input id="recTitle" type="text" className="form-input" value={recTitle} onChange={(e) => setRecTitle(e.target.value)} placeholder="e.g. Variables & Data Types" required />
                 </div>
                 <div className="form-group">
-                  <label className="form-label" htmlFor="recThumbnail">Thumbnail URL</label>
-                  <input id="recThumbnail" type="url" className="form-input" value={recThumbnail} onChange={(e) => setRecThumbnail(e.target.value)} placeholder="https://images.unsplash.com/... or blank" />
+                  <label className="form-label" htmlFor="recVideoUrl">Video Link / URL</label>
+                  <input id="recVideoUrl" type="url" className="form-input" value={recVideoUrl} onChange={(e) => setRecVideoUrl(e.target.value)} placeholder="https://youtube.com/watch?v=... or stream url" />
                 </div>
                 <div className="form-group">
-                  <label className="form-label" htmlFor="recYoutube">YouTube Resource Link</label>
-                  <input id="recYoutube" type="url" className="form-input" value={recYoutube} onChange={(e) => setRecYoutube(e.target.value)} placeholder="https://youtube.com/watch?v=..." />
+                  <label className="form-label" htmlFor="recNotesUrl">PDF Notes URL</label>
+                  <input id="recNotesUrl" type="url" className="form-input" value={recNotesUrl} onChange={(e) => setRecNotesUrl(e.target.value)} placeholder="https://drive.google.com/file/... or pdf url" />
                 </div>
                 <div className="form-group">
-                  <label className="form-label" htmlFor="recDrive">Google Drive Resource Link</label>
-                  <input id="recDrive" type="url" className="form-input" value={recDrive} onChange={(e) => setRecDrive(e.target.value)} placeholder="https://drive.google.com/file/..." />
+                  <label className="form-label" htmlFor="recAssignment">Assignment Title/Description</label>
+                  <input id="recAssignment" type="text" className="form-input" value={recAssignment} onChange={(e) => setRecAssignment(e.target.value)} placeholder="e.g. Variables & Operators Lab" />
                 </div>
                 <div className="form-group">
-                  <label className="form-label" htmlFor="recDescription">Description</label>
-                  <textarea id="recDescription" className="form-input" style={{ height: '80px', resize: 'none' }} value={recDescription} onChange={(e) => setRecDescription(e.target.value)} />
+                  <label className="form-label" htmlFor="recQuiz">Quiz Name</label>
+                  <input id="recQuiz" type="text" className="form-input" value={recQuiz} onChange={(e) => setRecQuiz(e.target.value)} placeholder="e.g. Python Basics Quiz" />
                 </div>
-                <button type="submit" className="btn btn-primary btn-block">Post Video Replay</button>
+                <div className="form-group">
+                  <label className="form-label">Visibility Access</label>
+                  <div style={{ display: 'flex', gap: '16px', marginTop: '6px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13.5px', cursor: 'pointer' }}>
+                      <input type="radio" name="recVisibility" value="everyone" checked={recVisibility === 'everyone'} onChange={() => setRecVisibility('everyone')} />
+                      Everyone
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13.5px', cursor: 'pointer' }}>
+                      <input type="radio" name="recVisibility" value="paid" checked={recVisibility === 'paid'} onChange={() => setRecVisibility('paid')} />
+                      Paid Students Only
+                    </label>
+                  </div>
+                </div>
+                <button type="submit" className="btn btn-primary btn-block" style={{ marginTop: '20px' }}>Save LMS Lesson</button>
               </form>
             </div>
 
             <div className="dashboard-card-section">
-              <h4 style={{ marginBottom: '18px', fontSize: '15px', fontWeight: '700' }}>Recorded Video Library</h4>
+              <h4 style={{ marginBottom: '18px', fontSize: '15px', fontWeight: '700' }}>Recorded Video Curriculum Library</h4>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {recordedClasses.map((item, idx) => (
                   <div key={idx} className="feed-item-premium" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '10px' }}>
                     <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
-                      <div style={{ width: '100px', height: '60px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#e5e7eb' }}>
-                        {item.thumbnail_url ? (
-                          <img src={item.thumbnail_url} alt="thumbnail" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        ) : (
-                          <Video size={20} style={{ color: 'var(--text-secondary)' }} />
-                        )}
+                      <div style={{ width: '60px', height: '60px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--primary-light)', color: 'var(--primary-color)', flexShrink: 0 }}>
+                        <Video size={20} />
                       </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          <h5 style={{ fontWeight: '700', fontSize: '15px', margin: 0 }}>{item.title}</h5>
-                          <button className="btn btn-danger" style={{ padding: '6px', backgroundColor: 'var(--danger-color)', color: 'white' }} onClick={() => deleteRecordedClass(item._id)}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
+                          <h5 style={{ fontWeight: '700', fontSize: '14.5px', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title}</h5>
+                          <button className="btn btn-danger" style={{ padding: '6px', backgroundColor: 'var(--danger-color)', color: 'white', flexShrink: 0 }} onClick={() => deleteRecordedClass(item._id)}>
                             <Trash2 size={13} />
                           </button>
                         </div>
-                        <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                          Duration: {item.duration} | Course: <strong style={{ color: 'var(--primary-color)' }}>{item.course_title}</strong>
+                        <p style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '4px', margin: 0 }}>
+                          Module: <strong>{item.module || 'N/A'}</strong> | Course: <strong>{item.course_title}</strong>
                         </p>
+                        
+                        {/* Visibility switcher & notes/assign info */}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px', alignItems: 'center', borderTop: '1px solid rgba(0,0,0,0.03)', paddingTop: '8px' }}>
+                          <button 
+                            className={`badge-status ${item.visibility === 'paid' ? 'unpaid' : 'paid'}`} 
+                            style={{ border: 'none', cursor: 'pointer', fontSize: '10px', padding: '2px 8px', borderRadius: '12px' }}
+                            onClick={() => toggleRecordedClassVisibility(item._id, item.visibility)}
+                            title="Click to toggle visibility"
+                          >
+                            Visibility: {item.visibility === 'paid' ? 'Paid Only' : 'Everyone'} (Toggle)
+                          </button>
+                          {item.notes_url && <span style={{ fontSize: '10px', color: '#10B981', background: 'rgba(16,185,129,0.06)', padding: '2px 8px', borderRadius: '12px' }}>📄 PDF</span>}
+                          {item.assignment && <span style={{ fontSize: '10px', color: '#3B82F6', background: 'rgba(59,130,246,0.06)', padding: '2px 8px', borderRadius: '12px' }}>📝 Assignment</span>}
+                          {item.quiz && <span style={{ fontSize: '10px', color: '#F59E0B', background: 'rgba(245,158,11,0.06)', padding: '2px 8px', borderRadius: '12px' }}>❓ Quiz</span>}
+                        </div>
                       </div>
                     </div>
                   </div>

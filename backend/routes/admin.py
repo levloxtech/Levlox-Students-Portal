@@ -352,13 +352,13 @@ def delete_live_class(class_id):
 def create_recorded_class():
     data = request.get_json() or {}
     title = data.get('title')
-    description = data.get('description', '')
-    thumbnail_url = data.get('thumbnail_url', '')
-    youtube_link = data.get('youtube_link', '')
-    drive_link = data.get('drive_link', '')
-    course_id = data.get('course_id', '')
-    course_title = data.get('course_title', '')
-    duration = data.get('duration', '1h 30m')
+    module = data.get('module', 'Module 1 - Python Basics')
+    video_url = data.get('video_url', '')
+    notes_url = data.get('notes_url', '')
+    assignment = data.get('assignment', '')
+    quiz = data.get('quiz', '')
+    visibility = data.get('visibility', 'everyone')
+    course_title = data.get('course_title', 'Fullstack Engineering')
     batch_id = data.get('batch_id')
 
     if not title:
@@ -366,24 +366,60 @@ def create_recorded_class():
 
     doc = {
         "title": title.strip(),
-        "description": description.strip(),
-        "thumbnail_url": thumbnail_url.strip(),
-        "youtube_link": youtube_link.strip(),
-        "drive_link": drive_link.strip(),
-        "course_id": course_id,
+        "module": module.strip(),
+        "video_url": video_url.strip(),
+        "notes_url": notes_url.strip(),
+        "assignment": assignment.strip() if isinstance(assignment, str) else assignment,
+        "quiz": quiz if isinstance(quiz, dict) else quiz.strip() if quiz else "",
+        "visibility": visibility.strip(),
         "course_title": course_title.strip(),
-        "duration": duration.strip(),
-        "uploaded_at": datetime.datetime.utcnow().strftime("%B %d, %Y"),
+        "created_by": ObjectId(g.current_user['id'] if 'id' in g.current_user else g.current_user['_id']),
+        "created_at": datetime.datetime.utcnow().strftime("%B %d, %Y"),
         "batch_id": batch_id
     }
 
     result = db.recorded_classes.insert_one(doc)
     doc['_id'] = str(result.inserted_id)
+    doc['created_by'] = str(doc['created_by'])
 
     # Trigger global notification
-    create_notification('recorded_class', f"New Lecture Replay: {title}", f"Watch the recorded class. Course category: {course_title}.")
+    create_notification('recorded_class', f"New Lesson: {title}", f"Uploaded in {module}. Access: {visibility}.")
 
     return jsonify(doc), 201
+
+@admin_bp.route('/recorded-classes/<class_id>', methods=['PUT'])
+@token_required(allowed_roles=['admin'])
+def update_recorded_class(class_id):
+    data = request.get_json() or {}
+    title = data.get('title')
+    module = data.get('module')
+    video_url = data.get('video_url')
+    notes_url = data.get('notes_url')
+    assignment = data.get('assignment')
+    quiz = data.get('quiz')
+    visibility = data.get('visibility', 'everyone')
+    course_title = data.get('course_title')
+    batch_id = data.get('batch_id')
+
+    try:
+        update_fields = {}
+        if title is not None: update_fields["title"] = title.strip()
+        if module is not None: update_fields["module"] = module.strip()
+        if video_url is not None: update_fields["video_url"] = video_url.strip()
+        if notes_url is not None: update_fields["notes_url"] = notes_url.strip()
+        if assignment is not None: update_fields["assignment"] = assignment.strip()
+        if quiz is not None: update_fields["quiz"] = quiz
+        if visibility is not None: update_fields["visibility"] = visibility.strip()
+        if course_title is not None: update_fields["course_title"] = course_title.strip()
+        if batch_id is not None: update_fields["batch_id"] = batch_id
+
+        db.recorded_classes.update_one(
+            {"_id": ObjectId(class_id)},
+            {"$set": update_fields}
+        )
+        return jsonify({'message': 'Recorded class updated successfully!'}), 200
+    except Exception as e:
+        return jsonify({'message': 'Error updating recorded class', 'error': str(e)}), 400
 
 @admin_bp.route('/recorded-classes/<class_id>', methods=['DELETE'])
 @token_required(allowed_roles=['admin'])

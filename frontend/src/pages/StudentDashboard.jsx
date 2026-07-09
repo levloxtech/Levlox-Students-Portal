@@ -525,7 +525,7 @@ const StudentDashboard = () => {
   /* ── Quick action items ── */
   const quickActions = [
     { label: 'Join Live Class', icon: <Video size={18} />, action: () => setActiveTab('my-courses') },
-    { label: 'Browse Notes', icon: <BookOpen size={18} />, action: () => setActiveTab('study-materials-tab') },
+    { label: 'Browse Notes', icon: <BookOpen size={18} />, action: () => setActiveTab('recorded-classes-tab') },
     { label: 'Watch Replay', icon: <PlayCircle size={18} />, action: () => setActiveTab('recorded-classes-tab') },
     { label: 'My Attendance', icon: <Percent size={18} />, action: () => setActiveTab('attendance-tab') },
     { label: 'Announcements', icon: <Megaphone size={18} />, action: () => setActiveTab('announcements-tab') },
@@ -536,7 +536,6 @@ const StudentDashboard = () => {
     { id: 'dashboard', icon: <Bookmark size={20} strokeWidth={1.75} />, label: 'Dashboard' },
     { id: 'my-courses', icon: <Video size={20} strokeWidth={1.75} />, label: 'Live Classes' },
     { id: 'recorded-classes-tab', icon: <PlayCircle size={20} strokeWidth={1.75} />, label: 'Recorded Classes' },
-    { id: 'study-materials-tab', icon: <BookOpen size={20} strokeWidth={1.75} />, label: 'Study Materials' },
     { id: 'attendance-tab', icon: <Percent size={20} strokeWidth={1.75} />, label: 'Attendance' },
     { id: 'announcements-tab', icon: <Megaphone size={20} strokeWidth={1.75} />, label: 'Announcements' },
     { id: 'profile', icon: <User size={20} strokeWidth={1.75} />, label: 'Profile' },
@@ -991,7 +990,7 @@ const StudentDashboard = () => {
                     <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
                       <BookOpen size={17} color="var(--primary-color)" /> Study Materials
                     </h3>
-                    <button onClick={() => setActiveTab('study-materials-tab')} style={{ background: 'var(--primary-light)', border: '1px solid var(--primary-border)', cursor: 'pointer', color: 'var(--primary-color)', fontSize: 12, fontWeight: 700, padding: '5px 12px', borderRadius: 20 }}>
+                    <button onClick={() => setActiveTab('recorded-classes-tab')} style={{ background: 'var(--primary-light)', border: '1px solid var(--primary-border)', cursor: 'pointer', color: 'var(--primary-color)', fontSize: 12, fontWeight: 700, padding: '5px 12px', borderRadius: 20 }}>
                       View all
                     </button>
                   </div>
@@ -1145,7 +1144,7 @@ const StudentDashboard = () => {
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                             <div style={{ padding: '14px', background: '#FEF2F2', border: '1px solid #fee2e2', borderRadius: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 6 }}>
                               <Lock size={20} strokeWidth={1.75} color="#dc2626" />
-                              <span style={{ fontSize: 12.5, fontWeight: 700, color: '#dc2626', lineHeight: 1.4 }}>Live class is locked until your fees are verified.</span>
+                              <span style={{ fontSize: 12.5, fontWeight: 700, color: '#dc2626', lineHeight: 1.4 }}>Live Class Locked until your fees are cleared.</span>
                             </div>
                             <button className="btn" disabled style={{ opacity: 0.5, cursor: 'not-allowed', width: '100%', padding: '10px', background: '#F3F4F6', color: '#9CA3AF', border: '1px solid #E5E7EB' }}>
                               Join Now
@@ -1164,11 +1163,6 @@ const StudentDashboard = () => {
         {/* RECORDED CLASSES TAB — premium Netflix-style */}
         {activeTab === 'recorded-classes-tab' && dashboardData && (
           <RecordedClassesPage dashboardData={dashboardData} isPaid={isPaid} />
-        )}
-
-        {/* STUDY MATERIALS TAB — premium Notion-style */}
-        {activeTab === 'study-materials-tab' && dashboardData && (
-          <StudyMaterialsPage dashboardData={dashboardData} isPaid={isPaid} />
         )}
 
         {/* ATTENDANCE TAB — premium GitHub heatmap */}
