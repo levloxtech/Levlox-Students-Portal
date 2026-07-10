@@ -7,7 +7,7 @@ import {
 
 const API_BASE = 'http://localhost:5000/api';
 
-const StudentProfile = ({ dashboardData, enrolledCourses = [], token }) => {
+const StudentProfile = ({ dashboardData, enrolledCourses = [], token, onProfileUpdate }) => {
   const [profileData, setProfileData] = useState(null);
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -109,6 +109,9 @@ const StudentProfile = ({ dashboardData, enrolledCourses = [], token }) => {
         showToast('Profile updated successfully ✓');
         fetchProfile();
         setEditing(false);
+        if (onProfileUpdate) {
+          onProfileUpdate({ name, profile_pic: profilePic });
+        }
       } else {
         const err = await r.json();
         showToast(err.message || 'Failed to save');
@@ -454,14 +457,9 @@ const StudentProfile = ({ dashboardData, enrolledCourses = [], token }) => {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {[
-                { label: 'Student ID', val: studentId, icon: <FileText size={15} color="var(--primary-color)" /> },
                 { label: 'Course', val: course, icon: <BookOpen size={15} color="var(--primary-color)" /> },
                 { label: 'Batch', val: batchName, icon: <Users size={15} color="var(--primary-color)" /> },
-                { label: 'Admission Date', val: admissionDate, icon: <Calendar size={15} color="var(--primary-color)" /> },
-                { label: 'Academic Year', val: batchName || '2024–25', icon: <Calendar size={15} color="var(--primary-color)" /> },
-                { label: 'Trainer', val: trainer, icon: <UserCheck size={15} color="var(--primary-color)" /> },
-                { label: 'Attendance %', val: `${attendancePct}%`, icon: <Percent size={15} color="var(--primary-color)" /> },
-                { label: 'Course Completion %', val: `${courseCompletionPct}%`, icon: <Percent size={15} color="var(--primary-color)" /> }
+                { label: 'Attendance %', val: `${attendancePct}%`, icon: <Percent size={15} color="var(--primary-color)" /> }
               ].map((f, i) => (
                 <div
                   key={i}

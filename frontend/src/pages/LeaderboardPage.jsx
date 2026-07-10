@@ -32,20 +32,16 @@ const LeaderboardPage = ({ token, user }) => {
   const [leaderboardData, setLeaderboardData] = useState([]);
   const [loading, setLoading] = useState(false);
   
-  // Filters (Only Month and Week as requested)
-  const [selectedMonth, setSelectedMonth] = useState('all');
-  const [selectedWeek, setSelectedWeek] = useState('all');
-
   useEffect(() => {
     fetchLeaderboard();
-  }, [activeTab, selectedMonth, selectedWeek]);
+  }, [activeTab]);
 
   const fetchLeaderboard = async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({
-        month: selectedMonth,
-        week: selectedWeek
+        month: 'all',
+        week: 'all'
       });
       
       const endpoint = `${API_BASE}/student/leaderboard/${activeTab === 'activity' ? 'live-class-activity' : activeTab}`;
@@ -102,46 +98,7 @@ const LeaderboardPage = ({ token, user }) => {
         </div>
       </div>
 
-      {/* FILTER BAR */}
-      <div style={{ 
-        background: 'white', 
-        border: '1.5px solid var(--border-color)', 
-        borderRadius: 16, 
-        padding: '16px 20px', 
-        marginBottom: 24, 
-        boxShadow: 'var(--shadow-sm)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 16
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginRight: 8 }}>
-          <Filter size={16} color="var(--primary-color)" />
-          <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Filter By</span>
-        </div>
 
-        <div style={{ display: 'flex', gap: 12 }}>
-          {/* Month Selector */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <select style={{ border: '1px solid var(--border-color)', borderRadius: 8, padding: '6px 12px', fontSize: 12.5, fontWeight: 600, outline: 'none', background: 'white', color: 'var(--text-primary)' }} value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)}>
-              <option value="all">All Months</option>
-              <option value="July">July</option>
-              <option value="August">August</option>
-              <option value="September">September</option>
-            </select>
-          </div>
-
-          {/* Week Selector */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <select style={{ border: '1px solid var(--border-color)', borderRadius: 8, padding: '6px 12px', fontSize: 12.5, fontWeight: 600, outline: 'none', background: 'white', color: 'var(--text-primary)' }} value={selectedWeek} onChange={e => setSelectedWeek(e.target.value)}>
-              <option value="all">All Weeks</option>
-              <option value="1">Week 1 (1-7)</option>
-              <option value="2">Week 2 (8-14)</option>
-              <option value="3">Week 3 (15-21)</option>
-              <option value="4">Week 4 (22-31)</option>
-            </select>
-          </div>
-        </div>
-      </div>
 
       {/* TOP PODIUM */}
       {leaderboardData.length > 0 && (
@@ -199,12 +156,14 @@ const LeaderboardPage = ({ token, user }) => {
                 {topThree[0].profile_pic ? <img src={topThree[0].profile_pic} alt="avatar" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : (topThree[0].name?.[0] || 'S')}
               </div>
               <h4 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 800 }}>{topThree[0].name}</h4>
-              <p style={{ margin: '0 0 10px', fontSize: 11.5, color: '#D97706', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <Crown size={12} color="#D97706" /> Batch Champion
-              </p>
-              <span style={{ fontSize: 13.5, fontWeight: 800, color: 'white', background: 'var(--primary-color)', padding: '6px 14px', borderRadius: 20, boxShadow: '0 4px 10px rgba(108,60,240,0.2)' }}>
-                {activeTab === 'overall' ? `${topThree[0].overall_score} pts` : activeTab === 'mock' ? `${topThree[0].average_score}% Avg` : activeTab === 'tasks' ? `${topThree[0].completed_assignments} Tasks` : `${topThree[0].activity_points} pts`}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, margin: '12px 0 0', width: '100%' }}>
+                <span style={{ fontSize: 11.5, color: '#D97706', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+                  🏆 Batch Champion
+                </span>
+                <span style={{ fontSize: 13, fontWeight: 800, color: 'white', background: 'var(--primary-color)', padding: '5px 12px', borderRadius: 20, boxShadow: '0 4px 10px rgba(108,60,240,0.2)', flexShrink: 0 }}>
+                  {activeTab === 'overall' ? `${topThree[0].overall_score} pts` : activeTab === 'mock' ? `${topThree[0].average_score}% Avg` : activeTab === 'tasks' ? `${topThree[0].completed_assignments} Tasks` : `${topThree[0].activity_points} pts`}
+                </span>
+              </div>
             </div>
           )}
 

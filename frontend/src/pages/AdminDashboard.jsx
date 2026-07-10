@@ -8,6 +8,7 @@ import {
   PlayCircle, Clock3, TriangleAlert, CircleAlert, Wallet as WalletIcon, Trophy
 } from 'lucide-react';
 import CustomModal from '../components/Modal';
+import leveloxIcon from '../assets/levelox-icon-transparent.png';
 
 const API_BASE = 'http://localhost:5000/api';
 
@@ -1098,16 +1099,29 @@ const AdminDashboard = () => {
     <div className="dashboard-layout">
       {/* Collapsible Sidebar */}
       <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
-        <div className="sidebar-header">
-          <div className="sidebar-brand">
-            {portalLogo ? (
-              <img src={portalLogo} alt="logo" style={{ width: '28px', height: '28px', objectFit: 'contain', borderRadius: '4px' }} />
-            ) : (
-              <div style={{ background: '#6C3CF0', color: 'white', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <GraduationCap size={18} />
-              </div>
+        <div className="sidebar-header" style={{ 
+          display: 'flex', 
+          flexDirection: sidebarCollapsed ? 'column' : 'row',
+          alignItems: 'center', 
+          justifyContent: sidebarCollapsed ? 'center' : 'space-between', 
+          width: '100%',
+          padding: sidebarCollapsed ? '16px 0 12px' : '16px 8px 0',
+          gap: sidebarCollapsed ? '16px' : '0'
+        }}>
+          <div className="sidebar-brand" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div className="sidebar-brand-icon" style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              width: '40px', 
+              height: '40px', 
+              flexShrink: 0 
+            }}>
+              <img src={leveloxIcon} alt="Levlox Logo" style={{ width: '32px', height: '32px', objectFit: 'contain' }} />
+            </div>
+            {!sidebarCollapsed && (
+              <span className="sidebar-brand-text" style={{ color: '#FFFFFF', fontWeight: 700, fontSize: '26px', letterSpacing: '-0.5px', lineHeight: 1 }}>Levlox</span>
             )}
-            <span className="sidebar-brand-text">{portalName}</span>
           </div>
           <button className="sidebar-toggle-btn" onClick={() => setSidebarCollapsed(!sidebarCollapsed)}>
             {sidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}

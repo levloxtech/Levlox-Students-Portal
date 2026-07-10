@@ -395,6 +395,99 @@ def change_password():
     except Exception as e:
         return jsonify({'message': 'Error changing password', 'error': str(e)}), 400
 
+@student_bp.route('/update-phone/request', methods=['POST'])
+@token_required(allowed_roles=['student'])
+def update_phone_request():
+    import random
+    import bcrypt
+    data = request.get_json() or {}
+    new_phone = data.get('new_phone')
+
+    if not new_phone or len(new_phone) != 10 or not new_phone.isdigit():
+        return jsonify({'message': 'Please provide a valid 10-digit mobile number.'}), 400
+
+    new_phone = new_phone.strip()
+    
+    # Check if this phone is already taken by another user
+    existing = db.users.find_one({"phone": new_phone, "_id": {"$ne": ObjectId(g.user_id)}})
+    if existing:
+        return jsonify({'message': 'This mobile number is already in use by another account.'}), 400
+
+    # Generate secure 6-digit OTP
+    otp = "".join([str(random.randint(0, 9)) for _ in range(6)])
+    print(f"[SECURITY MOCK] SMS to {new_phone}: Your OTP code for phone update is {otp}")
+
+    # Invalidate existing active OTPs for this phone number
+    db.otps.update_many({"phone": new_phone, "status": "active"}, {"$set": {"status": "invalidated"}})
+
+    # Hash the OTP
+    otp_hash = bcrypt.hashpw(otp.encode('utf-8'), bcrypt.gensalt())
+    now = datetime.datetime.utcnow()
+    expires_at = now + datetime.timedelta(minutes=5)
+
+    db.otps.insert_one({
+        "phone": new_phone,
+        "otp_hash": otp_hash,
+        "created_at": now,
+        "expires_at": expires_at,
+        "attempts": 0,
+        "status": "active",
+        "user_id": ObjectId(g.user_id)
+    })
+
+    return jsonify({'message': 'A verification OTP has been sent to your new mobile number.'}), 200
+
+@student_bp.route('/update-phone/verify', methods=['POST'])
+@token_required(allowed_roles=['student'])
+def update_phone_verify():
+    import bcrypt
+    data = request.get_json() or {}
+    new_phone = data.get('new_phone')
+    otp = data.get('otp')
+
+    if not new_phone or not otp or len(otp) != 6:
+        return jsonify({'message': 'Mobile number and 6-digit OTP are required.'}), 400
+
+    new_phone = new_phone.strip()
+    otp = otp.strip()
+
+    otp_doc = db.otps.find_one({"phone": new_phone, "status": "active", "user_id": ObjectId(g.user_id)})
+    if not otp_doc:
+        return jsonify({'message': 'No active OTP found or it has already been used/invalidated.'}), 400
+
+    now = datetime.datetime.utcnow()
+    expires_at = otp_doc["expires_at"]
+    if isinstance(expires_at, str):
+        expires_at = datetime.datetime.fromisoformat(expires_at)
+
+    if now > expires_at:
+        db.otps.update_one({"_id": otp_doc["_id"]}, {"$set": {"status": "expired"}})
+        return jsonify({'message': 'OTP has expired.'}), 400
+
+    attempts = otp_doc.get('attempts', 0) + 1
+    db.otps.update_one({"_id": otp_doc["_id"]}, {"$set": {"attempts": attempts}})
+
+    if attempts > 5:
+        db.otps.update_one({"_id": otp_doc["_id"]}, {"$set": {"status": "invalidated"}})
+        return jsonify({'message': 'Maximum verification attempts exceeded. Please request a new OTP.'}), 400
+
+    if not bcrypt.checkpw(otp.encode('utf-8'), otp_doc["otp_hash"]):
+        if attempts >= 5:
+            db.otps.update_one({"_id": otp_doc["_id"]}, {"$set": {"status": "invalidated"}})
+            return jsonify({'message': 'Incorrect OTP. Maximum verification attempts reached. This OTP is now invalid.'}), 400
+        return jsonify({'message': f'Incorrect OTP. Remaining attempts: {5 - attempts}.'}), 400
+
+    # OTP is correct and verified
+    db.otps.update_one({"_id": otp_doc["_id"]}, {"$set": {"status": "used"}})
+
+    # Update phone number in database
+    db.users.update_one(
+        {"_id": ObjectId(g.user_id)},
+        {"$set": {"phone": new_phone}}
+    )
+
+    return jsonify({'message': 'Mobile number updated successfully!'}), 200
+
 @student_bp.route('/notifications', methods=['GET'])
 @token_required(allowed_roles=['student'])
 def get_notifications():

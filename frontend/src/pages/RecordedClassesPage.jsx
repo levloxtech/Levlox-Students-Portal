@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Play, Lock, FileText, CheckCircle, Calendar, Award, Clock, 
   ArrowRight, ArrowLeft, ChevronDown, ChevronUp, Download, HelpCircle, 
-  Send, User, AlertCircle, BookOpen, Globe, Info, CheckSquare, Square
+  Send, User, AlertCircle, BookOpen, Globe, Info, CheckSquare, Square, Search
 } from 'lucide-react';
 
 /* ── Error Boundary Component ────────────────────── */
@@ -57,6 +57,32 @@ const RecordedClassesPage = ({ initialCourseId = null, initialLessonId = null })
   const [submissionText, setSubmissionText] = useState('');
 
   const [isPlaying, setIsPlaying] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const getFilteredCourses = () => {
+    if (!searchQuery.trim()) return courses;
+    const q = searchQuery.toLowerCase();
+    return courses.filter(c => 
+      c.title.toLowerCase().includes(q) ||
+      c.trainer.toLowerCase().includes(q) ||
+      c.batch.toLowerCase().includes(q)
+    );
+  };
+
+  const getFilteredModules = () => {
+    if (!searchQuery.trim()) return playerModules;
+    const q = searchQuery.toLowerCase();
+    return playerModules.map(m => {
+      const lessons = m.lessons.filter(l => 
+        l.title.toLowerCase().includes(q) ||
+        (l.description && l.description.toLowerCase().includes(q)) ||
+        m.title.toLowerCase().includes(q) ||
+        (l.trainer && l.trainer.toLowerCase().includes(q)) ||
+        (l.subject && l.subject.toLowerCase().includes(q))
+      );
+      return { ...m, lessons };
+    }).filter(m => m.lessons.length > 0);
+  };
 
   useEffect(() => {
     setIsPlaying(false);
@@ -66,16 +92,50 @@ const RecordedClassesPage = ({ initialCourseId = null, initialLessonId = null })
   const fetchCourses = async () => {
     try {
       const token = localStorage.getItem('token');
+      if (!token) {
+        setError('Session expired. Please log in again.');
+        setLoading(false);
+        return;
+      }
       const response = await fetch('http://localhost:5000/api/student/recorded-courses', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (!response.ok) throw new Error('Failed to load courses');
+      if (response.status === 401) {
+        localStorage.clear();
+        window.location.href = '/login?reason=session_expired';
+        return;
+      }
+      if (response.status === 403) {
+        setError('Access denied. You do not have permission to view recorded classes.');
+        setLoading(false);
+        return;
+      }
+      if (response.status === 404) {
+        setError('Recorded classes endpoint not found. Please contact support.');
+        setLoading(false);
+        return;
+      }
+      if (response.status >= 500) {
+        setError('Server error. Please try again later.');
+        setLoading(false);
+        return;
+      }
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        setError('Unexpected server response. Please try again later.');
+        setLoading(false);
+        return;
+      }
       const data = await response.json();
       setCourses(data.courses || []);
       setIsPaid(data.isPaid);
     } catch (err) {
-      console.error(err);
-      setError(err.message);
+      console.error('Error fetching recorded courses:', err);
+      if (err.name === 'TypeError' && err.message.includes('fetch')) {
+        setError('Network error: Cannot reach the server. Please check your connection.');
+      } else {
+        setError(err.message || 'Failed to load recorded courses.');
+      }
     } finally {
       setLoading(false);
     }
@@ -146,7 +206,7 @@ const RecordedClassesPage = ({ initialCourseId = null, initialLessonId = null })
     if (!lesson || lesson.locked) return;
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/lessons/${lesson.id}/complete`, {
+      const response = await fetch(`http://localhost:5000/api/student/lessons/${lesson.id}/complete`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -243,6 +303,26 @@ const RecordedClassesPage = ({ initialCourseId = null, initialLessonId = null })
     );
   }
 
+  if (error) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 300, gap: 16, padding: 40 }}>
+        <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(239,68,68,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <AlertCircle size={28} color="#EF4444" />
+        </div>
+        <h4 style={{ fontSize: 17, fontWeight: 800, color: '#1E293B', margin: 0 }}>Something went wrong</h4>
+        <p style={{ fontSize: 13.5, color: '#64748B', maxWidth: 380, textAlign: 'center', margin: 0, lineHeight: 1.6 }}>{error}</p>
+        <button
+          onClick={() => { setError(null); setLoading(true); fetchCourses(); }}
+          style={{ padding: '10px 24px', background: '#6C3CF0', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13, fontFamily: 'inherit', transition: 'opacity 0.15s' }}
+          onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
+          onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
   // ====================================================
   // PAGE 1 – RECORDED COURSES LISTING
   // ====================================================
@@ -260,15 +340,65 @@ const RecordedClassesPage = ({ initialCourseId = null, initialLessonId = null })
           </div>
         </div>
 
-        {courses.length === 0 ? (
-          <div style={{ padding: 60, textAlign: 'center', background: 'white', borderRadius: 20, border: '1.5px solid #F1F5F9' }}>
-            <BookOpen size={40} color="#94A3B8" style={{ margin: '0 auto 16px' }} />
-            <h4 style={{ fontWeight: 800, color: '#1E293B', marginBottom: 6 }}>No Courses Found</h4>
-            <p style={{ color: '#64748B', fontSize: 14 }}>You are not enrolled in any recorded streams yet.</p>
+        {/* STICKY SEARCH BAR FOR RECORDED CLASSES */}
+        <div style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 100,
+          background: '#F8FAFC',
+          padding: '12px 0 16px',
+          borderBottom: '1.5px solid #EDF0F5',
+          marginBottom: 12
+        }}>
+          <div style={{ position: 'relative', maxWidth: 480, width: '100%' }}>
+            <Search 
+              size={18} 
+              color="#94A3B8" 
+              style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} 
+            />
+            <input
+              type="text"
+              placeholder="Search recordings, modules, lessons..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '10px 16px 10px 42px',
+                borderRadius: 12,
+                border: '1.5px solid #E2E8F0',
+                outline: 'none',
+                fontSize: 13.5,
+                fontWeight: 600,
+                background: 'white',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                boxSizing: 'border-box',
+                transition: 'all 0.15s'
+              }}
+            />
+          </div>
+        </div>
+
+        {getFilteredCourses().length === 0 ? (
+          <div style={{ padding: 60, textAlign: 'center', background: 'white', borderRadius: 20, border: '1.5px solid #F1F5F9', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
+            {searchQuery.trim() ? (
+              <>
+                <Search size={32} color="#94A3B8" style={{ margin: '0 auto 16px', opacity: 0.5 }} />
+                <h4 style={{ fontWeight: 800, color: '#1E293B', marginBottom: 6 }}>No recordings found</h4>
+                <p style={{ color: '#64748B', fontSize: 13.5 }}>Try searching with another keyword.</p>
+              </>
+            ) : (
+              <>
+                <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'rgba(108,60,240,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+                  <Play size={30} color="#6C3CF0" style={{ opacity: 0.6 }} />
+                </div>
+                <h4 style={{ fontWeight: 800, color: '#1E293B', marginBottom: 8, fontSize: 18 }}>No Recorded Classes Available</h4>
+                <p style={{ color: '#64748B', fontSize: 13.5, maxWidth: 360, margin: '0 auto', lineHeight: 1.6 }}>Your recorded class replays will appear here once your trainer uploads them.</p>
+              </>
+            )}
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 24 }}>
-            {courses.map((course) => (
+            {getFilteredCourses().map((course) => (
               <div 
                 key={course.id}
                 style={{ 
@@ -360,11 +490,38 @@ const RecordedClassesPage = ({ initialCourseId = null, initialLessonId = null })
   // ====================================================
   // PAGE 2 – COURSE PLAYER PAGE
   // ====================================================
-  if (playerLoading || !activeLesson) {
+  if (playerLoading) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 300, gap: 12 }}>
         <div style={{ width: 40, height: 40, border: '4px solid #F3F4F6', borderTopColor: '#6C3CF0', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
         <p style={{ color: '#64748B', fontSize: 14 }}>Loading Course Player...</p>
+      </div>
+    );
+  }
+
+  if (!activeLesson || playerModules.length === 0) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+        <button
+          onClick={() => setSelectedCourseId(null)}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: '#475569', padding: '5px 8px', borderRadius: 7, alignSelf: 'flex-start' }}
+        >
+          <ArrowLeft size={15} />
+          Back to Courses
+        </button>
+        <div style={{ padding: 60, textAlign: 'center', background: 'white', borderRadius: 20, border: '1.5px solid #F1F5F9', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
+          <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'rgba(108,60,240,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+            <Play size={30} color="#6C3CF0" style={{ opacity: 0.6 }} />
+          </div>
+          <h4 style={{ fontWeight: 800, color: '#1E293B', marginBottom: 8, fontSize: 18 }}>No Lessons Available</h4>
+          <p style={{ color: '#64748B', fontSize: 13.5, maxWidth: 360, margin: '0 auto', lineHeight: 1.6 }}>This course doesn't have any recorded lessons yet. Check back after your next class!</p>
+          <button
+            onClick={() => setSelectedCourseId(null)}
+            style={{ marginTop: 20, padding: '10px 24px', background: '#6C3CF0', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13, fontFamily: 'inherit' }}
+          >
+            Back to Courses
+          </button>
+        </div>
       </div>
     );
   }
@@ -879,11 +1036,46 @@ const RecordedClassesPage = ({ initialCourseId = null, initialLessonId = null })
             </span>
           </div>
 
-          {playerModules.map((module) => {
-            const isExpanded = !!expandedModules[module.id];
-            const doneCount = module.lessons.filter(l => l.completed).length;
-            return (
-              <div key={module.id}>
+          {/* STICKY SEARCH BAR FOR LESSONS IN PLAYER */}
+          <div style={{ padding: '0 16px 12px', borderBottom: '1px solid #EDF0F5', marginBottom: 8 }}>
+            <div style={{ position: 'relative', width: '100%' }}>
+              <Search 
+                size={15} 
+                color="#94A3B8" 
+                style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} 
+              />
+              <input
+                type="text"
+                placeholder="Search playlist..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '7px 10px 7px 30px',
+                  borderRadius: 8,
+                  border: '1.5px solid #E2E8F0',
+                  outline: 'none',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  background: 'white',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+          </div>
+
+          {getFilteredModules().length === 0 ? (
+            <div style={{ padding: 24, textAlign: 'center', color: '#94A3B8' }}>
+              <Search size={22} style={{ margin: '0 auto 8px', opacity: 0.5, display: 'block' }} />
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#1E293B' }}>No recordings found</div>
+              <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>Try searching with another keyword.</div>
+            </div>
+          ) : (
+            getFilteredModules().map((module) => {
+              const isExpanded = searchQuery.trim() ? true : !!expandedModules[module.id];
+              const doneCount = module.lessons.filter(l => l.completed).length;
+              return (
+                <div key={module.id}>
                 {/* Module header */}
                 <div
                   className="lms-module-header"
@@ -935,7 +1127,8 @@ const RecordedClassesPage = ({ initialCourseId = null, initialLessonId = null })
                 })}
               </div>
             );
-          })}
+          })
+          )}
         </div>
 
       </div>

@@ -78,7 +78,7 @@ const DayTooltip = ({ day }) => (
     pointerEvents: 'none',
   }}>
     <div style={{ fontWeight: 800, marginBottom: 2 }}>{day.dateStr}</div>
-    <div>Status: <span style={{ fontWeight: 700, color: day.status === 'Present' ? '#34D399' : day.status === 'Absent' ? '#F87171' : '#9CA3AF' }}>{day.status}</span></div>
+    <div>Status: <span style={{ fontWeight: 700, color: day.status === 'Present' ? '#34D399' : day.status === 'Absent' ? '#F87171' : day.status === 'Holiday' ? '#EAB308' : '#9CA3AF' }}>{day.status}</span></div>
     {day.markedBy && <div>By: {day.markedBy}</div>}
     {day.markedTime && <div>At: {day.markedTime}</div>}
     {/* Tooltip arrow */}
@@ -158,6 +158,7 @@ const AttendancePage = ({ dashboardData }) => {
   const getStatusColor = (status) => {
     if (status === 'Present') return '#10B981';
     if (status === 'Absent') return '#EF4444';
+    if (status === 'Holiday') return '#EAB308';
     return '#D1D5DB';
   };
 
@@ -344,7 +345,8 @@ const AttendancePage = ({ dashboardData }) => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <LegendItem color="#10B981" label="Present" />
             <LegendItem color="#EF4444" label="Absent" />
-            <LegendItem color="#D1D5DB" label="Holiday / No Class" />
+            <LegendItem color="#EAB308" label="Holiday" />
+            <LegendItem color="#D1D5DB" label="No Class" />
           </div>
         </div>
 

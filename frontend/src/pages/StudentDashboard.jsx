@@ -10,11 +10,13 @@ import {
   Crown, Medal, Flame, Activity, Trophy
 } from 'lucide-react';
 import StudentProfile from './StudentProfile';
+import StudentSettings from './StudentSettings';
 import AttendancePage from './AttendancePage';
 import RecordedClassesPage from './RecordedClassesPage';
 import StudyMaterialsPage from './StudyMaterialsPage';
 import LeaderboardPage from './LeaderboardPage';
 import CustomModal from '../components/Modal';
+import leveloxIcon from '../assets/levelox-icon-transparent.png';
 
 const API_BASE = 'http://localhost:5000/api';
 
@@ -375,6 +377,16 @@ const StudentDashboard = () => {
     } catch (e) { console.error(e); }
   };
 
+  const handleProfileUpdate = (updatedProfile) => {
+    if (updatedProfile) {
+      if (updatedProfile.name !== undefined) setProfileName(updatedProfile.name);
+      if (updatedProfile.profile_pic !== undefined) setProfilePic(updatedProfile.profile_pic);
+      fetchDashboard();
+      fetchLearningRanking();
+      fetchLeaderboards();
+    }
+  };
+
   const saveProfile = async (e) => {
     e.preventDefault();
     try {
@@ -606,15 +618,29 @@ const StudentDashboard = () => {
 
       {/* ═══ SIDEBAR ═══════════════════════════════ */}
       <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''} ${mobileMenuOpen ? 'mobile-open' : ''}`}>
-        <div className="sidebar-header">
-          <div className="sidebar-brand">
-            <div className="sidebar-brand-icon">
-              {portalLogo
-                ? <img src={portalLogo} alt="logo" style={{ width: 22, height: 22, objectFit: 'contain' }} />
-                : <GraduationCap size={20} strokeWidth={1.75} color="white" />
-              }
+        <div className="sidebar-header" style={{ 
+          display: 'flex', 
+          flexDirection: sidebarCollapsed ? 'column' : 'row',
+          alignItems: 'center', 
+          justifyContent: sidebarCollapsed ? 'center' : 'space-between', 
+          width: '100%',
+          padding: sidebarCollapsed ? '16px 0 12px' : '16px 8px 0',
+          gap: sidebarCollapsed ? '16px' : '0'
+        }}>
+          <div className="sidebar-brand" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div className="sidebar-brand-icon" style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              width: '40px', 
+              height: '40px', 
+              flexShrink: 0 
+            }}>
+              <img src={leveloxIcon} alt="Levlox Logo" style={{ width: '32px', height: '32px', objectFit: 'contain' }} />
             </div>
-            <span className="sidebar-brand-text" style={{ color: 'white', fontWeight: 800, letterSpacing: -0.5, fontSize: 17 }}>{portalName}</span>
+            {!sidebarCollapsed && (
+              <span className="sidebar-brand-text" style={{ color: '#FFFFFF', fontWeight: 700, fontSize: '26px', letterSpacing: '-0.5px', lineHeight: 1 }}>Levlox</span>
+            )}
           </div>
           <button className="sidebar-toggle-btn" onClick={() => setSidebarCollapsed(!sidebarCollapsed)}>
             {sidebarCollapsed ? <ChevronRight size={16} strokeWidth={2} /> : <ChevronLeft size={16} strokeWidth={2} />}
@@ -652,16 +678,9 @@ const StudentDashboard = () => {
             <Menu size={22} strokeWidth={1.75} />
           </button>
 
-          <div className="top-navbar-left">
-            <div className="search-bar-container">
-              <Search size={16} strokeWidth={1.75} color="var(--text-muted)" />
-              <input
-                className="search-bar-input"
-                placeholder="Search classes, materials, announcements…"
-                value={globalSearch}
-                onChange={e => { setGlobalSearch(e.target.value); setMatQuery(e.target.value); setVidQuery(e.target.value); }}
-              />
-            </div>
+          <div className="top-navbar-left" style={{ paddingLeft: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <img src={leveloxIcon} alt="Levlox Logo" style={{ height: '36px', width: '36px', objectFit: 'contain', borderRadius: '8px' }} />
+            <span style={{ fontSize: '22px', fontWeight: 800, color: '#111827', letterSpacing: '-0.5px', lineHeight: 1 }}>Levlox</span>
           </div>
 
           <div className="navbar-actions">
@@ -800,30 +819,7 @@ const StudentDashboard = () => {
 
               {/* LEFT COLUMN: LEARNING PROGRESS DASHBOARD */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                {/* ─── OVERALL COURSE PROGRESS ─── */}
-                <div style={{ background: 'white', border: '1px solid var(--border-color)', borderRadius: 20, padding: 24, boxShadow: 'var(--shadow-sm)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                    <h4 style={{ fontSize: 14, fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-primary)' }}>
-                      <TrendingUp size={16} color="var(--primary-color)" /> Overall Course Progress
-                    </h4>
-                    <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--primary-color)' }}>
-                      {activeAnalytics.overall_progress.percentage}%
-                    </span>
-                  </div>
-                  <div style={{ width: '100%', height: 8, background: '#FAF9FF', border: '1px solid var(--border-color)', borderRadius: 4, overflow: 'hidden', marginBottom: 14 }}>
-                    <div style={{
-                      width: `${activeAnalytics.overall_progress.percentage}%`,
-                      height: '100%',
-                      background: 'linear-gradient(135deg, var(--primary-color) 0%, #4c22bc 100%)',
-                      borderRadius: 4,
-                      transition: 'width 1s cubic-bezier(0.4, 0, 0.2, 1)'
-                    }} />
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)' }}>
-                    <span>Completed Modules: <strong>{activeAnalytics.overall_progress.completed_modules}</strong></span>
-                    <span>Remaining Modules: <strong>{activeAnalytics.overall_progress.remaining_modules}</strong></span>
-                  </div>
-                </div>
+
 
                 {/* ─── LEARNING RANKING WIDGET ─── */}
                 <div style={{ background: 'white', border: '1px solid var(--border-color)', borderRadius: 20, padding: 24, boxShadow: 'var(--shadow-sm)' }}>
@@ -1197,10 +1193,12 @@ const StudentDashboard = () => {
               <button className="btn btn-outline" style={{ padding: '6px 12px', fontSize: 12 }} onClick={fetchLiveClasses}>Refresh Schedule</button>
             </div>
             {liveClassesList.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '60px 20px', background: 'white', borderRadius: 18, border: '1px solid var(--border-color)' }}>
-                <div style={{ fontSize: 36, marginBottom: 12 }}>📅</div>
-                <h4 style={{ fontWeight: 800, fontSize: 16, margin: '0 0 6px' }}>No Live Classes Available</h4>
-                <p style={{ color: 'var(--text-secondary)', fontSize: 13, maxWidth: 320, margin: '0 auto' }}>There are no published live sessions scheduled right now. Check back later!</p>
+              <div style={{ textAlign: 'center', padding: '60px 20px', background: 'white', borderRadius: 18, border: '1.5px solid var(--border-color)', boxShadow: 'var(--shadow-sm)' }}>
+                <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'rgba(108,60,240,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+                  <Video size={32} strokeWidth={1.5} color="var(--primary-color)" style={{ opacity: 0.7 }} />
+                </div>
+                <h4 style={{ fontWeight: 800, fontSize: 18, margin: '0 0 8px', color: 'var(--text-primary)', letterSpacing: -0.3 }}>No Live Classes Scheduled</h4>
+                <p style={{ color: 'var(--text-secondary)', fontSize: 13.5, maxWidth: 360, margin: '0 auto', lineHeight: 1.6 }}>Your upcoming live classes will appear here once your trainer schedules them.</p>
               </div>
             ) : (
               <div className="cards-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 24 }}>
@@ -1279,7 +1277,7 @@ const StudentDashboard = () => {
         )}
 
         {/* RECORDED CLASSES TAB — premium Netflix-style */}
-        {activeTab === 'recorded-classes-tab' && dashboardData && (
+        {activeTab === 'recorded-classes-tab' && (
           <RecordedClassesPage
             dashboardData={dashboardData}
             isPaid={isPaid}
@@ -1332,16 +1330,16 @@ const StudentDashboard = () => {
             dashboardData={dashboardData}
             enrolledCourses={enrolledCourses}
             token={token}
+            onProfileUpdate={handleProfileUpdate}
           />
         )}
 
         {/* SETTINGS TAB */}
         {activeTab === 'settings' && (
-          <StudentProfile
-            dashboardData={dashboardData}
-            enrolledCourses={enrolledCourses}
+          <StudentSettings
             token={token}
-            initialSection="settings"
+            user={user}
+            showModal={showModal}
           />
         )}
       </main>
