@@ -6,7 +6,7 @@ import {
 
 const API_BASE = 'http://localhost:5000/api';
 
-const StudentSettings = ({ token, user, showModal }) => {
+const StudentSettings = ({ token, user, showModal, onPasswordChanged }) => {
   const [profileData, setProfileData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [savingAccount, setSavingAccount] = useState(false);
@@ -213,6 +213,10 @@ const StudentSettings = ({ token, user, showModal }) => {
         setCurrPassword('');
         setNewPassword('');
         setConfirmPassword('');
+        const lu = JSON.parse(localStorage.getItem('user') || '{}');
+        lu.must_change_password = false;
+        localStorage.setItem('user', JSON.stringify(lu));
+        if (onPasswordChanged) onPasswordChanged();
       } else {
         showModal('Update Failed', d.message || 'Incorrect current password.', 'error');
       }

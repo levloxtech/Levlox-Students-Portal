@@ -389,7 +389,7 @@ def change_password():
         hashed = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
         db.users.update_one(
             {"_id": ObjectId(g.user_id)},
-            {"$set": {"password": hashed}}
+            {"$set": {"password": hashed, "must_change_password": False}}
         )
         return jsonify({'message': 'Password changed successfully!'}), 200
     except Exception as e:

@@ -20,29 +20,266 @@ def create_notification(noti_type, title, message, student_id=None):
 @admin_bp.route('/stats', methods=['GET'])
 @token_required(allowed_roles=['admin'])
 def get_stats():
+    import datetime
+    today_iso = datetime.date.today().isoformat()
+    today_pretty = datetime.date.today().strftime("%B %d, %Y")
+    today_pretty_short = datetime.date.today().strftime("%b %d, %Y")
+
     # Gather database stats
     total_students = db.users.count_documents({"role": "student"})
-    paid_students = db.users.count_documents({"role": "student", "feesStatus": "Paid"})
-    pending_students = db.users.count_documents({"role": "student", "feesStatus": {"$ne": "Paid"}})
-    total_live_classes = db.live_classes.count_documents({})
-    total_recorded_classes = db.recorded_classes.count_documents({})
-    total_notes = db.study_materials.count_documents({})
-
-    # Average attendance percentage
+    total_batches = db.batches.count_documents({})
+    
+    # Today's live classes query
+    live_classes_today_count = db.live_classes.count_documents({
+        "$or": [
+            {"is_today": True},
+            {"date": today_iso},
+            {"date": today_pretty},
+            {"date": today_pretty_short}
+        ]
+    })
+    
+    # Recorded courses (distinct course names)
+    recorded_courses = len(db.recorded_classes.distinct("course_title"))
+    
+    # Fees stats
     students = list(db.users.find({"role": "student"}))
+    total_collected = sum(float(s.get('feesPaidAmount', 0)) for s in students)
+    total_expected = sum(float(s.get('feesTotal', 1500)) for s in students)
+    pending_amount = sum(float(s.get('feesRemainingAmount', 0)) for s in students)
+    pending_payments_count = db.users.count_documents({"role": "student", "feesStatus": {"$ne": "Paid"}})
+    paid_students_count = db.users.count_documents({"role": "student", "feesStatus": "Paid"})
+    
+    # Overall attendance
     avg_attendance = 0
     if students:
         total_attendance = sum(s.get('attendance', {}).get('percentage', 0) for s in students)
         avg_attendance = round(total_attendance / len(students), 1)
 
+    # Today's attendance sheet lookup
+    today_attendance_pct = 95.0
+    present_today_count = 0
+    absent_today_count = 0
+    today_sheets = list(db.attendance_sheets.find({
+        "$or": [
+            {"date": today_iso},
+            {"date": today_pretty},
+            {"date": today_pretty_short}
+        ]
+    }))
+    
+    if today_sheets:
+        total_rec = 0
+        pres_rec = 0
+        for sheet in today_sheets:
+            for r in sheet.get('records', []):
+                total_rec += 1
+                if r.get('status') == 'Present':
+                    pres_rec += 1
+                    present_today_count += 1
+                else:
+                    absent_today_count += 1
+        if total_rec > 0:
+            today_attendance_pct = round((pres_rec / total_rec) * 100, 1)
+    else:
+        # fallback/estimation
+        present_today_count = round(total_students * (avg_attendance / 100.0))
+        absent_today_count = max(0, total_students - present_today_count)
+        today_attendance_pct = avg_attendance
+
+    # Recent Registrations (latest 5 students)
+    recent_students_cursor = db.users.find({"role": "student"}).sort("_id", -1).limit(5)
+    recent_students = []
+    for s in recent_students_cursor:
+        batch_id = s.get('batch_id')
+        batch_name = 'Not Assigned'
+        if batch_id:
+            try:
+                batch_doc = db.batches.find_one({"_id": ObjectId(batch_id)} if isinstance(batch_id, str) and len(batch_id) == 24 else {"_id": batch_id})
+                if batch_doc:
+                    batch_name = batch_doc.get('name', 'Not Assigned')
+            except Exception:
+                pass
+        recent_students.append({
+            "id": str(s['_id']),
+            "name": s.get('name'),
+            "profile_pic": s.get('profile_pic', ''),
+            "course": s.get('course', 'Fullstack Engineering'),
+            "batch_name": batch_name,
+            "join_date": s.get('join_date', '')
+        })
+
+    # Today's live classes details
+    today_classes_cursor = db.live_classes.find({
+        "$or": [
+            {"is_today": True},
+            {"date": today_iso},
+            {"date": today_pretty},
+            {"date": today_pretty_short}
+        ]
+    })
+    today_classes = []
+    for c in today_classes_cursor:
+        batch_id = c.get('batch_id')
+        batch_name = 'Common'
+        course_name = 'General'
+        if batch_id:
+            try:
+                batch_doc = db.batches.find_one({"_id": ObjectId(batch_id)} if isinstance(batch_id, str) and len(batch_id) == 24 else {"_id": batch_id})
+                if batch_doc:
+                    batch_name = batch_doc.get('name', 'Common')
+                    course_name = batch_doc.get('course_name', 'General')
+            except Exception:
+                pass
+        today_classes.append({
+            "id": str(c['_id']),
+            "title": c.get('title'),
+            "instructor": c.get('instructor'),
+            "time": c.get('time'),
+            "meet_link": c.get('meet_link', ''),
+            "course_name": course_name,
+            "batch_name": batch_name,
+            "status": c.get('status', 'Upcoming')
+        })
+
+    # Recent announcements
+    recent_ann_cursor = db.announcements.find().sort("uploaded_at", -1).limit(5)
+    recent_announcements = []
+    for ann in recent_ann_cursor:
+        recent_announcements.append({
+            "id": str(ann['_id']),
+            "title": ann.get('title'),
+            "content": ann.get('content'),
+            "priority": ann.get('priority', 'Medium'),
+            "is_pinned": ann.get('is_pinned', False),
+            "date": ann.get('date', '')
+        })
+
+    # Dynamic Activity Timeline
+    timeline_activities = []
+    
+    # 1. Student registrations
+    stu_reg = db.users.find({"role": "student"}).sort("_id", -1).limit(5)
+    for s in stu_reg:
+        timeline_activities.append({
+            "type": "student",
+            "message": f"Student registered: {s.get('name')} ({s.get('rollNumber', 'N/A')})",
+            "date": s.get('join_date', 'Recently'),
+            "timestamp": s.get('created_at') or s['_id'].generation_time
+        })
+        # 2. Fee received
+        if s.get('feesStatus') == 'Paid' and s.get('feesPaymentDate'):
+            timeline_activities.append({
+                "type": "fee",
+                "message": f"Fee received: {s.get('name')} completed payment of ${s.get('feesPaidAmount', 1500)}",
+                "date": s.get('feesPaymentDate'),
+                "timestamp": s['_id'].generation_time
+            })
+            
+    # 3. Live classes scheduled
+    lc_sched = db.live_classes.find().sort("_id", -1).limit(5)
+    for c in lc_sched:
+        timeline_activities.append({
+            "type": "class",
+            "message": f"Live class scheduled: {c.get('title')} by {c.get('instructor')}",
+            "date": c.get('date'),
+            "timestamp": c['_id'].generation_time
+        })
+        
+    # 4. Recordings uploaded
+    rec_uploaded = db.recorded_classes.find().sort("_id", -1).limit(5)
+    for r in rec_uploaded:
+        timeline_activities.append({
+            "type": "recording",
+            "message": f"Recording uploaded: {r.get('title')} in {r.get('module')}",
+            "date": r.get('created_at') or 'Recently',
+            "timestamp": r['_id'].generation_time
+        })
+        
+    # 5. Notes uploaded
+    notes_uploaded = db.study_materials.find().sort("_id", -1).limit(5)
+    for n in notes_uploaded:
+        timeline_activities.append({
+            "type": "notes",
+            "message": f"Notes uploaded: {n.get('title')} ({n.get('type')})",
+            "date": n.get('uploaded_at') or 'Recently',
+            "timestamp": n['_id'].generation_time
+        })
+        
+    # 6. Attendance updated
+    att_updated = db.attendance_sheets.find().sort("_id", -1).limit(5)
+    for a in att_updated:
+        timeline_activities.append({
+            "type": "attendance",
+            "message": f"Attendance updated for: {a.get('class_title')} ({a.get('date')})",
+            "date": a.get('date'),
+            "timestamp": a.get('saved_at') or a['_id'].generation_time
+        })
+        
+    # 7. Announcements published
+    ann_published = db.announcements.find().sort("uploaded_at", -1).limit(5)
+    for p in ann_published:
+        timeline_activities.append({
+            "type": "announcement",
+            "message": f"Announcement published: {p.get('title')}",
+            "date": p.get('date'),
+            "timestamp": p.get('uploaded_at') or p['_id'].generation_time
+        })
+
+    # Sort timeline by timestamp descending
+    def get_time(item):
+        ts = item.get('timestamp')
+        if not ts:
+            return datetime.datetime.min
+        if isinstance(ts, str):
+            try:
+                dt = datetime.datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                return dt.replace(tzinfo=None)
+            except:
+                return datetime.datetime.min
+        if isinstance(ts, datetime.datetime):
+            return ts.replace(tzinfo=None)
+        try:
+            return ts.replace(tzinfo=None)
+        except:
+            return datetime.datetime.min
+        
+    timeline_activities.sort(key=get_time, reverse=True)
+    timeline_activities = timeline_activities[:10]
+    for act in timeline_activities:
+        if isinstance(act.get('timestamp'), datetime.datetime):
+            act['timestamp'] = act['timestamp'].isoformat()
+        else:
+            act['timestamp'] = str(act.get('timestamp'))
+
     stats = {
         "totalStudents": total_students,
-        "paidStudents": paid_students,
-        "pendingStudents": pending_students,
-        "totalLiveClasses": total_live_classes,
-        "totalRecordedClasses": total_recorded_classes,
-        "totalNotes": total_notes,
-        "attendancePercentage": avg_attendance
+        "totalBatches": total_batches,
+        "liveClassesToday": live_classes_today_count,
+        "recordedCourses": recorded_courses,
+        "feesCollected": total_collected,
+        "pendingPaymentsCount": pending_payments_count,
+        "pendingAmount": pending_amount,
+        
+        "recentStudents": recent_students,
+        "todayLiveClasses": today_classes,
+        "recentAnnouncements": recent_announcements,
+        
+        "attendanceOverview": {
+            "percentage": avg_attendance,
+            "todayPercentage": today_attendance_pct,
+            "presentCount": present_today_count,
+            "absentCount": absent_today_count
+        },
+        
+        "feeOverview": {
+            "totalCollected": total_collected,
+            "pendingAmount": pending_amount,
+            "paidStudents": paid_students_count,
+            "pendingStudentsCount": pending_payments_count
+        },
+        
+        "recentActivity": timeline_activities
     }
     return jsonify(stats), 200
 
@@ -54,6 +291,8 @@ def get_students():
     search = request.args.get('search', '').strip()
     status = request.args.get('status', '').strip()
     fees_paid = request.args.get('feesPaid', '').strip()
+    course = request.args.get('course', '').strip()
+    batch = request.args.get('batch', '').strip()
 
     query = {"role": "student"}
 
@@ -61,16 +300,27 @@ def get_students():
         query["$or"] = [
             {"name": {"$regex": search, "$options": "i"}},
             {"email": {"$regex": search, "$options": "i"}},
-            {"rollNumber": {"$regex": search, "$options": "i"}}
+            {"rollNumber": {"$regex": search, "$options": "i"}},
+            {"phone": {"$regex": search, "$options": "i"}}
         ]
 
     if status in ['active', 'inactive']:
         query["status"] = status
+    elif status == 'Suspended':
+        query["status"] = 'inactive'
+    elif status == 'Active Only':
+        query["status"] = 'active'
 
     if fees_paid == 'paid':
         query["feesStatus"] = "Paid"
-    elif fees_paid == 'unpaid':
+    elif fees_paid == 'unpaid' or fees_paid == 'Pending':
         query["feesStatus"] = {"$ne": "Paid"}
+
+    if course:
+        query["course"] = course
+
+    if batch:
+        query["batch_id"] = batch
 
     total_count = db.users.count_documents(query)
     skip = (page - 1) * limit
@@ -81,6 +331,10 @@ def get_students():
         s['id'] = str(s['_id'])
         s.pop('_id', None)
         s.pop('password', None)
+        if 'created_at' in s and s['created_at']:
+            s['created_at'] = str(s['created_at'])
+        if 'batch_id' in s and s['batch_id']:
+            s['batch_id'] = str(s['batch_id'])
         if 'status' not in s:
             s['status'] = 'active'
         if 'attendance_history' not in s:
@@ -91,6 +345,16 @@ def get_students():
                 {"date": "2026-07-04", "status": "Absent"},
                 {"date": "2026-07-03", "status": "Present"}
             ]
+        # Look up batch name
+        batch_id = s.get('batch_id')
+        s['batch_name'] = 'Not Assigned'
+        if batch_id:
+            try:
+                batch_doc = db.batches.find_one({"_id": ObjectId(batch_id)} if isinstance(batch_id, str) and len(batch_id) == 24 else {"_id": batch_id})
+                if batch_doc:
+                    s['batch_name'] = batch_doc.get('name', 'Not Assigned')
+            except Exception:
+                pass
 
     import math
     total_pages = math.ceil(total_count / limit)
@@ -103,6 +367,278 @@ def get_students():
         "limit": limit
     }), 200
 
+@admin_bp.route('/students', methods=['POST'])
+@token_required(allowed_roles=['admin'])
+def create_student():
+    import random
+    import bcrypt
+    import re
+    data = request.get_json() or {}
+    name = data.get('name')
+    email = data.get('email')
+    phone = data.get('phone')
+    course = data.get('course')
+    batch_id = data.get('batch_id')
+    feesStatus = 'Pending'
+    status = 'active'
+    join_date = datetime.datetime.utcnow().strftime("%B %d, %Y")
+    profile_pic = ''
+    college = "Levlox Technical Institute"
+    permanent_address = ''
+    current_location = ''
+    company = ''
+
+    if not name or not email or not phone:
+        return jsonify({'message': 'Missing name, email, or mobile number'}), 400
+
+    # Clean inputs
+    name = name.strip()
+    email = email.strip().lower()
+    phone = phone.strip()
+
+    # Check if user already exists
+    if db.users.find_one({"phone": phone}):
+        return jsonify({'message': 'Mobile number already registered'}), 400
+    if db.users.find_one({"email": email}):
+        return jsonify({'message': 'Email already registered'}), 400
+
+    # Auto generate sequence-based rollNumber (LSP-2026-XXXX)
+    max_seq = 0
+    pattern = re.compile(r"^LSP-2026-(\d{4})$")
+    for u in db.users.find({"role": "student", "rollNumber": {"$regex": "^LSP-2026-"}}):
+        match = pattern.match(u.get('rollNumber', ''))
+        if match:
+            try:
+                seq = int(match.group(1))
+                if seq > max_seq:
+                    max_seq = seq
+            except ValueError:
+                pass
+    rollNumber = f"LSP-2026-{max_seq + 1:04d}"
+
+    # Use password passed from frontend, otherwise auto generate an 8-character password
+    temp_pass = data.get('password') or data.get('temporary_password')
+    if not temp_pass:
+        chars = "ABCDEFGHJKLMNOPQRSTUVWXYZ23456789"
+        temp_pass = "".join(random.choice(chars) for _ in range(8))
+
+    hashed_password = bcrypt.hashpw(temp_pass.encode('utf-8'), bcrypt.gensalt())
+
+    # Build User doc
+    user_doc = {
+        "name": name,
+        "email": email,
+        "phone": phone,
+        "role": "student",
+        "status": status,
+        "password": hashed_password,
+        "must_change_password": True,
+        "rollNumber": rollNumber,
+        "course": course or "Fullstack Engineering",
+        "batch_id": batch_id or None,
+        "join_date": join_date,
+        "college": college,
+        "profile_pic": profile_pic,
+        "current_location": current_location,
+        "permanent_address": permanent_address,
+        "company": company,
+        "feesPaid": False,
+        "feesTotal": 1500,
+        "feesPaidAmount": 0,
+        "feesRemainingAmount": 1500,
+        "feesStatus": feesStatus,
+        "feesPaymentDate": "",
+        "feesDueDate": "2026-08-31",
+        "attendance": {
+            "percentage": 0,
+            "present": 0,
+            "absent": 0
+        },
+        "attendance_history": [],
+        "created_at": datetime.datetime.utcnow()
+    }
+
+    # Save to database
+    result = db.users.insert_one(user_doc)
+    user_id = result.inserted_id
+
+    # Sync with batch if assigned
+    if batch_id:
+        try:
+            db.batches.update_one(
+                {"_id": ObjectId(batch_id)},
+                {"$addToSet": {"student_ids": str(user_id)}}
+            )
+        except Exception:
+            pass
+
+    return jsonify({
+        "message": "Student created successfully!",
+        "student": {
+            "id": str(user_id),
+            "name": name,
+            "rollNumber": rollNumber,
+            "phone": phone,
+            "email": email,
+            "temporary_password": temp_pass
+        }
+    }), 201
+
+@admin_bp.route('/students/<student_id>', methods=['GET'])
+@token_required(allowed_roles=['admin'])
+def get_student_details(student_id):
+    try:
+        student = db.users.find_one({"_id": ObjectId(student_id), "role": "student"})
+        if not student:
+            return jsonify({'message': 'Student not found'}), 404
+
+        # Calculate Rank
+        rank = 0
+        try:
+            # Re-compute leaderboard rankings to find the rank
+            all_students = list(db.users.find({"role": "student"}))
+            leaderboard = []
+            for s in all_students:
+                s_id_str = str(s['_id'])
+                s_id_obj = s['_id']
+                hist = s.get('attendance_history', [])
+                if hist:
+                    present = sum(1 for h in hist if h.get('status') == 'Present')
+                    attendance_pct = round((present / len(hist)) * 100)
+                else:
+                    attendance_pct = s.get('attendance', {}).get('percentage', 92)
+                s_batch = s.get('batch_id')
+                total_assigns = db.assignments.count_documents({"batch_id": s_batch} if s_batch else {}) or 10
+                subs_cnt = db.submissions.count_documents({"student_id": s_id_obj})
+                submission_rate = round((subs_cnt / max(1, total_assigns)) * 100)
+                interviews = list(db.mock_interviews.find({"student_id": s_id_obj}))
+                avg_mock = sum(i.get('score', 0) for i in interviews) / len(interviews) if interviews else 75.0
+                activity_points = s.get('activity_points', 0)
+                overall_score = round((attendance_pct * 2) + (submission_rate * 3) + (avg_mock * 3) + min(200, activity_points))
+                leaderboard.append({"student_id": s_id_str, "overall_score": overall_score})
+            leaderboard.sort(key=lambda x: x['overall_score'], reverse=True)
+            for idx, item in enumerate(leaderboard):
+                if item['student_id'] == str(student_id):
+                    rank = idx + 1
+                    break
+        except Exception as e:
+            print("Error calculating rank:", e)
+
+        # Get Batch Name
+        batch_id = student.get('batch_id')
+        batch_name = "Not Assigned"
+        if batch_id:
+            try:
+                batch_doc = db.batches.find_one({"_id": ObjectId(batch_id)} if isinstance(batch_id, str) and len(batch_id) == 24 else {"_id": batch_id})
+                if batch_doc:
+                    batch_name = batch_doc.get('name', 'Not Assigned')
+            except Exception:
+                pass
+
+        # Progress
+        completed_lessons = 0
+        total_lessons = 1
+        try:
+            progress_docs = list(db.lesson_progress.find({"student_id": ObjectId(student_id)}))
+            completed_lessons = sum(1 for p in progress_docs if p.get('completed'))
+            total_lessons = db.recorded_classes.count_documents({"batch_id": batch_id} if batch_id else {}) or 1
+        except Exception:
+            pass
+
+        # Recent activities
+        recent_activities = []
+        try:
+            # Submissions
+            submissions = list(db.submissions.find({"student_id": ObjectId(student_id)}).sort("_id", -1).limit(5))
+            for sub in submissions:
+                assign = db.assignments.find_one({"_id": ObjectId(sub['assignment_id'])} if isinstance(sub['assignment_id'], str) else {"_id": sub['assignment_id']})
+                title = assign.get('title', 'Assignment') if assign else 'Assignment'
+                recent_activities.append({
+                    "type": "Assignment Submission",
+                    "title": f"Submitted assignment: {title}",
+                    "date": sub.get('submitted_at', datetime.datetime.utcnow().strftime("%B %d, %Y"))
+                })
+            
+            # Mock Interviews
+            interviews = list(db.mock_interviews.find({"student_id": ObjectId(student_id)}).sort("_id", -1).limit(5))
+            for iv in interviews:
+                recent_activities.append({
+                    "type": "Mock Interview",
+                    "title": f"Completed mock interview with score: {iv.get('score')}%",
+                    "date": iv.get('date', iv.get('scheduled_date', ''))
+                })
+            
+            # Live Class Activities
+            activities = list(db.live_class_activity.find({"student_id": ObjectId(student_id)}).sort("created_at", -1).limit(5))
+            for act in activities:
+                recent_activities.append({
+                    "type": "Live Class Activity",
+                    "title": f"Awarded {act.get('points')} pts for: {act.get('activity_type')}",
+                    "date": act.get('date', '')
+                })
+            
+            recent_activities = recent_activities[:5]
+        except Exception as e:
+            print("Error retrieving activities:", e)
+
+        # Build response
+        details = {
+            "id": str(student['_id']),
+            "name": student.get('name'),
+            "email": student.get('email'),
+            "phone": student.get('phone', ''),
+            "rollNumber": student.get('rollNumber', ''),
+            "college": student.get('college', ''),
+            "course": student.get('course', ''),
+            "join_date": student.get('join_date', ''),
+            "feesStatus": student.get('feesStatus', 'Pending'),
+            "profile_pic": student.get('profile_pic', ''),
+            "current_location": student.get('current_location', ''),
+            "permanent_address": student.get('permanent_address', ''),
+            "company": student.get('company', ''),
+            "batch_name": batch_name,
+            "attendance": student.get('attendance', {}).get('percentage', 0),
+            "rank": rank,
+            "progress": {
+                "completed": completed_lessons,
+                "total": total_lessons,
+                "percentage": round((completed_lessons / max(1, total_lessons)) * 100)
+            },
+            "recent_activities": recent_activities,
+            "status": student.get('status', 'active')
+        }
+        return jsonify(details), 200
+    except Exception as e:
+        return jsonify({'message': 'Error retrieving student details', 'error': str(e)}), 400
+
+@admin_bp.route('/students/<student_id>/reset-password', methods=['POST'])
+@token_required(allowed_roles=['admin'])
+def reset_student_password(student_id):
+    import random
+    import bcrypt
+    try:
+        student = db.users.find_one({"_id": ObjectId(student_id), "role": "student"})
+        if not student:
+            return jsonify({'message': 'Student not found'}), 404
+
+        # Auto generate new temporary password
+        temp_pass = f"Levlox@{random.randint(1000, 9999)}"
+        hashed_password = bcrypt.hashpw(temp_pass.encode('utf-8'), bcrypt.gensalt())
+
+        db.users.update_one(
+            {"_id": ObjectId(student_id)},
+            {"$set": {
+                "password": hashed_password,
+                "must_change_password": True
+            }}
+        )
+        return jsonify({
+            'message': 'Password reset successfully!',
+            'temporary_password': temp_pass
+        }), 200
+    except Exception as e:
+        return jsonify({'message': 'Error resetting password', 'error': str(e)}), 400
+
 @admin_bp.route('/students/<student_id>', methods=['PUT'])
 @token_required(allowed_roles=['admin'])
 def update_student(student_id):
@@ -110,23 +646,87 @@ def update_student(student_id):
     name = data.get('name')
     email = data.get('email')
     rollNumber = data.get('rollNumber')
+    phone = data.get('phone')
+    course = data.get('course')
+    batch_id = data.get('batch_id')
+    feesStatus = data.get('feesStatus')
+    college = data.get('college')
+    profile_pic = data.get('profile_pic')
+    current_location = data.get('current_location')
+    permanent_address = data.get('permanent_address')
+    company = data.get('company')
+    status = data.get('status')
 
-    if not name or not email or not rollNumber:
-        return jsonify({'message': 'Missing name, email, or rollNumber'}), 400
+    if not name or not email or not rollNumber or not phone:
+        return jsonify({'message': 'Missing required fields: name, email, rollNumber, or phone'}), 400
 
     try:
-        # Check if email is already taken by another user
-        existing = db.users.find_one({"email": email.strip().lower(), "_id": {"$ne": ObjectId(student_id)}})
-        if existing:
-            return jsonify({'message': 'Email already in use by another account'}), 400
+        # Check uniqueness
+        existing_email = db.users.find_one({"email": email.strip().lower(), "_id": {"$ne": ObjectId(student_id)}})
+        if existing_email:
+            return jsonify({'message': 'Email already registered to another account'}), 400
+        
+        existing_phone = db.users.find_one({"phone": phone.strip(), "_id": {"$ne": ObjectId(student_id)}})
+        if existing_phone:
+            return jsonify({'message': 'Mobile number already registered to another account'}), 400
+
+        existing_roll = db.users.find_one({"rollNumber": rollNumber.strip(), "_id": {"$ne": ObjectId(student_id)}})
+        if existing_roll:
+            return jsonify({'message': 'Student ID / Roll Number already registered to another account'}), 400
+
+        student = db.users.find_one({"_id": ObjectId(student_id)})
+        if not student:
+            return jsonify({'message': 'Student not found'}), 404
+
+        # Sync Batches if changed
+        old_batch_id = student.get('batch_id')
+        if batch_id != old_batch_id:
+            if old_batch_id:
+                try:
+                    db.batches.update_one(
+                        {"_id": ObjectId(old_batch_id)} if isinstance(old_batch_id, str) and len(old_batch_id) == 24 else {"_id": old_batch_id},
+                        {"$pull": {"student_ids": str(student_id)}}
+                    )
+                except Exception:
+                    pass
+            if batch_id:
+                try:
+                    db.batches.update_one(
+                        {"_id": ObjectId(batch_id)},
+                        {"$addToSet": {"student_ids": str(student_id)}}
+                    )
+                except Exception:
+                    pass
+
+        # Prepare update doc
+        update_doc = {
+            "name": name.strip(),
+            "email": email.strip().lower(),
+            "rollNumber": rollNumber.strip(),
+            "phone": phone.strip(),
+            "course": course or student.get('course', 'Fullstack Engineering'),
+            "batch_id": batch_id or None,
+            "college": college or student.get('college', 'Levlox Technical Institute'),
+            "profile_pic": profile_pic if profile_pic is not None else student.get('profile_pic', ''),
+            "current_location": current_location if current_location is not None else student.get('current_location', ''),
+            "permanent_address": permanent_address if permanent_address is not None else student.get('permanent_address', ''),
+            "company": company if company is not None else student.get('company', '')
+        }
+
+        if status:
+            update_doc["status"] = status.strip().lower()
+
+        if feesStatus:
+            update_doc["feesStatus"] = feesStatus
+            update_doc["feesPaid"] = feesStatus == 'Paid'
+            update_doc["feesPaidAmount"] = 1500 if feesStatus == 'Paid' else 0
+            update_doc["feesRemainingAmount"] = 0 if feesStatus == 'Paid' else 1500
+            if feesStatus == 'Paid':
+                update_doc["feesPaymentDate"] = datetime.datetime.utcnow().strftime("%Y-%m-%d")
 
         db.users.update_one(
             {"_id": ObjectId(student_id)},
-            {"$set": {
-                "name": name.strip(),
-                "email": email.strip().lower(),
-                "rollNumber": rollNumber.strip()
-            }}
+            {"$set": update_doc}
         )
         return jsonify({'message': 'Student profile updated successfully!'}), 200
     except Exception as e:
@@ -136,6 +736,7 @@ def update_student(student_id):
 @token_required(allowed_roles=['admin'])
 def delete_student(student_id):
     try:
+        db.batches.update_many({}, {"$pull": {"student_ids": str(student_id)}})
         result = db.users.delete_one({"_id": ObjectId(student_id), "role": "student"})
         if result.deleted_count == 0:
             return jsonify({'message': 'Student not found'}), 404
@@ -354,8 +955,10 @@ def list_recorded_classes():
         classes = list(db.recorded_classes.find().sort("sort_order", 1))
         for c in classes:
             c['_id'] = str(c['_id'])
-            if 'created_by' in c:
+            if 'created_by' in c and c['created_by']:
                 c['created_by'] = str(c['created_by'])
+            if 'batch_id' in c and c['batch_id']:
+                c['batch_id'] = str(c['batch_id'])
         return jsonify({"recorded_classes": classes}), 200
     except Exception as e:
         return jsonify({'message': 'Error fetching classes', 'error': str(e)}), 400
@@ -452,6 +1055,18 @@ def delete_recorded_class(class_id):
         return jsonify({'message': 'Error deleting recorded class', 'error': str(e)}), 400
 
 # Notes (Study Materials) CRUD
+@admin_bp.route('/notes', methods=['GET'])
+@token_required(allowed_roles=['admin'])
+def get_notes():
+    try:
+        notes = list(db.study_materials.find({}))
+        for n in notes:
+            n['id'] = str(n['_id'])
+            n.pop('_id', None)
+        return jsonify({"studyMaterials": notes}), 200
+    except Exception as e:
+        return jsonify({'message': 'Error retrieving notes', 'error': str(e)}), 400
+
 @admin_bp.route('/notes', methods=['POST'])
 @token_required(allowed_roles=['admin'])
 def create_note():
@@ -496,6 +1111,20 @@ def delete_note(note_id):
         return jsonify({'message': 'Error deleting note', 'error': str(e)}), 400
 
 # Announcements CRUD
+@admin_bp.route('/announcements', methods=['GET'])
+@token_required(allowed_roles=['admin'])
+def get_announcements():
+    try:
+        ann = list(db.announcements.find({}))
+        for a in ann:
+            a['id'] = str(a['_id'])
+            a.pop('_id', None)
+            if 'uploaded_at' in a and isinstance(a['uploaded_at'], datetime.datetime):
+                a['uploaded_at'] = a['uploaded_at'].isoformat()
+        return jsonify({"announcements": ann}), 200
+    except Exception as e:
+        return jsonify({'message': 'Error retrieving announcements', 'error': str(e)}), 400
+
 @admin_bp.route('/announcements', methods=['POST'])
 @token_required(allowed_roles=['admin'])
 def create_announcement():

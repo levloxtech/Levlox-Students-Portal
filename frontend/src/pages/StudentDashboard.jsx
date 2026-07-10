@@ -196,7 +196,9 @@ const StudentDashboard = () => {
     }
   };
 
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const initialUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const [mustChangePassword, setMustChangePassword] = useState(initialUser.must_change_password || false);
+  const [activeTab, setActiveTab] = useState(initialUser.must_change_password ? 'settings' : 'dashboard');
   const [dashboardData, setDashboardData] = useState(null);
   const [courses, setCourses] = useState([]);
   const [enrolledCourses, setEnrolledCourses] = useState([]);
@@ -245,6 +247,17 @@ const StudentDashboard = () => {
   const [replayTarget, setReplayTarget] = useState(null); // { courseId, lessonId }
   const notiRef = useRef(null);
   const profileRef = useRef(null);
+
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [mobileMenuOpen]);
 
   const showModal = (title, text, type = 'info') => {
     setModalTitle(title);
@@ -611,6 +624,177 @@ const StudentDashboard = () => {
   ];
 
   /* ── RENDER ─────────────────────────────────── */
+  if (mustChangePassword) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        background: 'linear-gradient(135deg, #050308 0%, #0D0A1A 30%, #110C24 55%, #0A0814 80%, #070510 100%)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '24px 16px',
+        position: 'relative',
+        overflow: 'hidden',
+        fontFamily: "'Plus Jakarta Sans', 'Inter', sans-serif",
+      }}>
+        {/* Decorative orbs */}
+        <div style={{ position: 'absolute', top: '-15%', left: '-10%', width: 520, height: 520, borderRadius: '50%', background: 'radial-gradient(circle, rgba(108,60,240,0.14) 0%, transparent 65%)', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', bottom: '-20%', right: '-8%', width: 600, height: 600, borderRadius: '50%', background: 'radial-gradient(circle, rgba(76,34,188,0.10) 0%, transparent 65%)', pointerEvents: 'none' }} />
+
+        {/* Glassmorphism Card */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', maxWidth: 440, zIndex: 1 }}>
+          <div style={{
+            width: '100%',
+            background: 'rgba(255, 255, 255, 0.04)',
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 24,
+            padding: '44px 40px 40px',
+            boxShadow: '0 32px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(108,60,240,0.08), inset 0 1px 0 rgba(255,255,255,0.06)',
+            position: 'relative',
+          }}>
+            {/* Card top accent line */}
+            <div style={{
+              position: 'absolute', top: 0, left: '10%', right: '10%', height: 1,
+              background: 'linear-gradient(90deg, transparent, rgba(108,60,240,0.6), rgba(167,139,250,0.4), transparent)',
+              borderRadius: '0 0 4px 4px',
+            }} />
+
+            {/* Header info */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 32 }}>
+              <div style={{
+                width: 60, height: 60, borderRadius: 16,
+                background: 'linear-gradient(135deg, #6C3CF0 0%, #4c22bc 100%)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 8px 24px rgba(108,60,240,0.4), 0 0 0 1px rgba(108,60,240,0.3)',
+                marginBottom: 18,
+              }}>
+                <Lock size={28} color="white" strokeWidth={1.75} />
+              </div>
+
+              <h1 style={{
+                fontSize: 22, fontWeight: 800, color: '#FFFFFF',
+                letterSpacing: -0.5, margin: '0 0 6px', textAlign: 'center',
+              }}>
+                Secure Your <span style={{ color: '#A78BFA' }}>Account</span>
+              </h1>
+              <p style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.5)', margin: 0, textAlign: 'center', fontWeight: 500, lineHeight: 1.4 }}>
+                For security reasons, please change your temporary password to continue.
+              </p>
+            </div>
+
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              if (newPassword.length < 8) {
+                showModal('Validation Error', 'Password must be at least 8 characters long.', 'warning');
+                return;
+              }
+              if (newPassword !== confirmPassword) {
+                showModal('Validation Error', 'Passwords do not match.', 'warning');
+                return;
+              }
+              setLoading(true);
+              try {
+                const r = await fetch(`${API_BASE}/student/change-password`, {
+                  method: 'PUT',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                  },
+                  body: JSON.stringify({
+                    current_password: currPassword,
+                    new_password: newPassword
+                  })
+                });
+                const d = await r.json();
+                if (r.ok) {
+                  showModal('Success', 'Password updated successfully! Welcome to your dashboard.', 'success');
+                  const lu = JSON.parse(localStorage.getItem('user') || '{}');
+                  lu.must_change_password = false;
+                  localStorage.setItem('user', JSON.stringify(lu));
+                  setMustChangePassword(false);
+                  setActiveTab('dashboard');
+                } else {
+                  showModal('Error', d.message || 'Incorrect current/temporary password.', 'error');
+                }
+              } catch (err) {
+                console.error(err);
+                showModal('Error', 'An error occurred during password change.', 'error');
+              } finally {
+                setLoading(false);
+              }
+            }}>
+              {/* Current / Temporary Password */}
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.7)', marginBottom: 8 }}>Temporary Password</label>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, height: 48 }}>
+                  <span style={{ position: 'absolute', left: 16, color: 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center' }}><Lock size={16} /></span>
+                  <input
+                    type="password"
+                    placeholder="Enter the temporary password"
+                    value={currPassword}
+                    onChange={e => setCurrPassword(e.target.value)}
+                    required
+                    style={{ width: '100%', height: '100%', background: 'transparent', border: 'none', outline: 'none', paddingLeft: 44, paddingRight: 16, color: '#FFFFFF', fontSize: 14.5, fontFamily: 'inherit' }}
+                  />
+                </div>
+              </div>
+
+              {/* New Password */}
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.7)', marginBottom: 8 }}>New Password</label>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, height: 48 }}>
+                  <span style={{ position: 'absolute', left: 16, color: 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center' }}><Lock size={16} /></span>
+                  <input
+                    type="password"
+                    placeholder="Min. 8 characters"
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    required
+                    style={{ width: '100%', height: '100%', background: 'transparent', border: 'none', outline: 'none', paddingLeft: 44, paddingRight: 16, color: '#FFFFFF', fontSize: 14.5, fontFamily: 'inherit' }}
+                  />
+                </div>
+              </div>
+
+              {/* Confirm Password */}
+              <div style={{ marginBottom: 24 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.7)', marginBottom: 8 }}>Confirm New Password</label>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, height: 48 }}>
+                  <span style={{ position: 'absolute', left: 16, color: 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center' }}><Lock size={16} /></span>
+                  <input
+                    type="password"
+                    placeholder="Re-enter new password"
+                    value={confirmPassword}
+                    onChange={e => setConfirmPassword(e.target.value)}
+                    required
+                    style={{ width: '100%', height: '100%', background: 'transparent', border: 'none', outline: 'none', paddingLeft: 44, paddingRight: 16, color: '#FFFFFF', fontSize: 14.5, fontFamily: 'inherit' }}
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                style={{
+                  width: '100%', height: 50, borderRadius: 12, border: 'none',
+                  background: 'linear-gradient(135deg, #6C3CF0 0%, #4c22bc 100%)',
+                  color: 'white',
+                  fontSize: 15, fontWeight: 800, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                  boxShadow: '0 8px 24px rgba(108,60,240,0.35)',
+                  transition: 'all 0.2s',
+                }}
+              >
+                {loading ? 'Saving Password...' : 'Save & Continue'}
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="dashboard-layout">
       {/* Mobile Sidebar Backdrop */}
@@ -649,24 +833,37 @@ const StudentDashboard = () => {
 
         <nav className="sidebar-menu">
           <span className="sidebar-section-label">Main Menu</span>
-          {navItems.map(item => (
-            <button
-              key={item.id}
-              className={`sidebar-link ${activeTab === item.id ? 'active' : ''}`}
-              onClick={() => { setActiveTab(item.id); setSelectedCourse(null); setMobileMenuOpen(false); }}
-            >
-              {item.icon}
-              <span className="sidebar-link-text">{item.label}</span>
-            </button>
-          ))}
-          <div className="sidebar-footer">
-            <span className="sidebar-section-label">Account</span>
-            <button className="sidebar-link" onClick={handleLogout} style={{ color: 'rgba(239,68,68,0.7)' }}>
-              <LogOut size={20} strokeWidth={1.75} style={{ color: 'rgba(239,68,68,0.7)' }} />
-              <span className="sidebar-link-text">Logout</span>
-            </button>
-          </div>
+          {navItems.map(item => {
+            const isDisabled = mustChangePassword && item.id !== 'settings';
+            return (
+              <button
+                key={item.id}
+                className={`sidebar-link ${activeTab === item.id ? 'active' : ''}`}
+                onClick={() => {
+                  if (isDisabled) {
+                    showModal('Security Alert', 'You are logged in with a temporary password. Please change your password to unlock the student portal.', 'warning');
+                    return;
+                  }
+                  setActiveTab(item.id);
+                  setSelectedCourse(null);
+                  setMobileMenuOpen(false);
+                }}
+                style={isDisabled ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
+              >
+                {item.icon}
+                <span className="sidebar-link-text">{item.label}</span>
+              </button>
+            );
+          })}
         </nav>
+
+        <div className="sidebar-footer">
+          <span className="sidebar-section-label">Account</span>
+          <button className="sidebar-link" onClick={handleLogout} style={{ color: 'rgba(239,68,68,0.7)' }}>
+            <LogOut size={20} strokeWidth={1.75} style={{ color: 'rgba(239,68,68,0.7)' }} />
+            <span className="sidebar-link-text">Logout</span>
+          </button>
+        </div>
       </aside>
 
       {/* ═══ MAIN ═══════════════════════════════════ */}
@@ -740,9 +937,16 @@ const StudentDashboard = () => {
                     <p style={{ margin: '2px 0 0', fontSize: 11.5, color: 'var(--text-secondary)' }}>{user.email}</p>
                   </div>
                   <button
-                    onClick={() => { setActiveTab('profile'); setShowProfileDropdown(false); }}
-                    style={{ width: '100%', padding: '9px 12px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, color: 'var(--text-primary)', cursor: 'pointer', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'inherit', fontWeight: 600, transition: 'background 0.15s' }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-alt)'}
+                    onClick={() => {
+                      if (mustChangePassword) {
+                        showModal('Security Alert', 'You are logged in with a temporary password. Please change your password to unlock the student portal.', 'warning');
+                        return;
+                      }
+                      setActiveTab('profile');
+                      setShowProfileDropdown(false);
+                    }}
+                    style={{ width: '100%', padding: '9px 12px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, color: 'var(--text-primary)', cursor: mustChangePassword ? 'not-allowed' : 'pointer', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'inherit', fontWeight: 600, transition: 'background 0.15s', opacity: mustChangePassword ? 0.4 : 1 }}
+                    onMouseEnter={e => !mustChangePassword && (e.currentTarget.style.background = 'var(--surface-alt)')}
                     onMouseLeave={e => e.currentTarget.style.background = 'none'}
                   >
                     <User size={15} color="var(--text-secondary)" /> View Profile
@@ -1332,11 +1536,32 @@ const StudentDashboard = () => {
 
         {/* SETTINGS TAB */}
         {activeTab === 'settings' && (
-          <StudentSettings
-            token={token}
-            user={user}
-            showModal={showModal}
-          />
+          <div>
+            {mustChangePassword && (
+              <div style={{
+                background: '#FEF2F2',
+                border: '1.5px solid #FCA5A5',
+                borderRadius: '12px',
+                padding: '16px',
+                marginBottom: '20px',
+                color: '#991B1B',
+                fontSize: '13.5px',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px'
+              }}>
+                <TriangleAlert size={18} color="#ef4444" />
+                <span>Security Notice: You are logged in with a temporary password. You must change your password immediately to unlock portal access.</span>
+              </div>
+            )}
+            <StudentSettings
+              token={token}
+              user={user}
+              showModal={showModal}
+              onPasswordChanged={() => setMustChangePassword(false)}
+            />
+          </div>
         )}
       </main>
 

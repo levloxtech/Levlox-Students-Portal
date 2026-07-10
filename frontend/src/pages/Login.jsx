@@ -183,12 +183,32 @@ const Login = () => {
 
     // Validate
     let valid = true;
-    const countryLength = selectedCountry.length;
-    if (phone.length !== countryLength || isNaN(phone)) {
-      setPhoneError(`Enter a valid ${countryLength}-digit mobile number`);
-      valid = false;
-    } else if (selectedCountry.pattern && !selectedCountry.pattern.test(phone)) {
-      setPhoneError(`Invalid phone number format for ${selectedCountry.name}`);
+    const isEmail = phone.includes('@');
+    const isStudentID = phone.toLowerCase().startsWith('stu') || phone.toLowerCase().startsWith('lsp') || (phone.length > 5 && isNaN(phone));
+    const isPhoneNumber = !isNaN(phone);
+
+    if (isPhoneNumber) {
+      const countryLength = selectedCountry.length;
+      if (phone.length !== countryLength) {
+        setPhoneError(`Enter a valid ${countryLength}-digit mobile number`);
+        valid = false;
+      } else if (selectedCountry.pattern && !selectedCountry.pattern.test(phone)) {
+        setPhoneError(`Invalid phone number format for ${selectedCountry.name}`);
+        valid = false;
+      }
+    } else if (isEmail) {
+      const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailPattern.test(phone)) {
+        setPhoneError('Invalid email format');
+        valid = false;
+      }
+    } else if (isStudentID) {
+      if (phone.trim().length < 4) {
+        setPhoneError('Invalid Student ID / Username');
+        valid = false;
+      }
+    } else {
+      setPhoneError('Enter a valid mobile number, email, or Student ID');
       valid = false;
     }
     if (password.length < 8) {
@@ -545,17 +565,16 @@ const Login = () => {
                     id="phone"
                     className="premium-input phone-input-field"
                     style={{ cursor: isLocked ? 'not-allowed' : 'text' }}
-                    type="tel"
-                    maxLength={selectedCountry.length}
-                    placeholder="Enter your mobile number"
+                    type="text"
+                    placeholder="Enter mobile number, email, or Student ID"
                     value={phone}
-                    onChange={e => { setPhone(e.target.value.replace(/\D/g, '')); setPhoneError(''); }}
+                    onChange={e => { setPhone(e.target.value); setPhoneError(''); }}
                     disabled={isLocked}
                     autoComplete="off"
                     required
                   />
 
-                  {phone.length === selectedCountry.length && !phoneError && (
+                  {((!isNaN(phone) && phone.length === selectedCountry.length) || (phone.includes('@') && phone.length > 5) || ((phone.toLowerCase().startsWith('stu') || phone.toLowerCase().startsWith('lsp')) && phone.length > 5)) && !phoneError && (
                     <div style={{ paddingRight: 18, display: 'flex', alignItems: 'center', color: '#10B981', flexShrink: 0 }}>
                       <Check size={15} />
                     </div>

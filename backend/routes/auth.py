@@ -104,19 +104,24 @@ def login():
     password = data.get('password')
 
     if not phone or not password:
-        return jsonify({'message': 'Mobile number and password are required.'}), 400
+        return jsonify({'message': 'Credentials and password are required.'}), 400
 
     phone = phone.strip()
-    user = db.users.find_one({"phone": phone})
+    user = db.users.find_one({
+        "$or": [
+            {"phone": phone},
+            {"rollNumber": phone},
+            {"email": phone.lower()}
+        ]
+    })
 
     if not user:
-        return jsonify({'message': 'Invalid mobile number or password!'}), 401
+        return jsonify({'message': 'Invalid credentials or password!'}), 401
 
     # Check lockout
     now = datetime.datetime.utcnow()
     lockout_until = user.get('lockout_until')
     if lockout_until:
-        # MongoDB dates parsed as datetime objects or strings
         if isinstance(lockout_until, str):
             lockout_until = datetime.datetime.fromisoformat(lockout_until)
         if now < lockout_until:
@@ -139,7 +144,7 @@ def login():
                 {"_id": user["_id"]},
                 {"$set": {"failed_login_attempts": attempts}}
             )
-            return jsonify({'message': 'Invalid mobile number or password!'}), 401
+            return jsonify({'message': 'Invalid credentials or password!'}), 401
 
     if user.get('status') == 'inactive':
         return jsonify({'message': 'Your account is deactivated. Please contact administration.'}), 403
@@ -166,7 +171,8 @@ def login():
             'email': user.get('email', ''),
             'name': user['name'],
             'role': user['role'],
-            'feesStatus': user.get('feesStatus', 'Pending')
+            'feesStatus': user.get('feesStatus', 'Pending'),
+            'must_change_password': user.get('must_change_password', False)
         }
     }), 200
 
