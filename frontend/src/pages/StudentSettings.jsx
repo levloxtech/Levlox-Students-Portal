@@ -421,7 +421,7 @@ const StudentSettings = ({ token, user, showModal }) => {
       <div className="dashboard-main-grid" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 24, alignItems: 'start' }}>
         
         {/* CARD 1: ACCOUNT MODULE */}
-        <div style={{
+        <div className="clickable-card-hover" style={{
           background: '#FFF',
           border: '1.5px solid var(--border-color)',
           borderRadius: 20,
@@ -664,7 +664,7 @@ const StudentSettings = ({ token, user, showModal }) => {
           
           {/* STANDARD PASSWORD UPDATE CARD */}
           {!showForgotFlow ? (
-            <div style={{
+            <div className="clickable-card-hover" style={{
               background: '#FFF',
               border: '1.5px solid var(--border-color)',
               borderRadius: 20,
@@ -795,7 +795,7 @@ const StudentSettings = ({ token, user, showModal }) => {
           ) : (
             
             /* OTP FORGOT PASSWORD STEPPER WIZARD */
-            <div style={{
+            <div className="clickable-card-hover" style={{
               background: '#FFF',
               border: '1.5px solid var(--border-color)',
               borderRadius: 20,

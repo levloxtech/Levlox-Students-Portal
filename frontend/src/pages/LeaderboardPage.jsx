@@ -77,7 +77,7 @@ const LeaderboardPage = ({ token, user }) => {
     <div className="animate-fade-in" style={{ padding: '4px 0' }}>
       
       {/* Header */}
-      <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+      <div className="leaderboard-header" style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
         <div>
           <h2 style={{ fontSize: 24, fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>LMS Leaderboard</h2>
           <p style={{ margin: '4px 0 0', fontSize: 13.5, color: 'var(--text-secondary)' }}>
@@ -86,12 +86,12 @@ const LeaderboardPage = ({ token, user }) => {
         </div>
 
         {/* Global Summary Badge */}
-        <div style={{ display: 'flex', gap: 12 }}>
-          <div style={{ background: 'var(--primary-light)', border: '1px solid var(--primary-border)', borderRadius: 14, padding: '8px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 90 }}>
+        <div className="leaderboard-badges-container" style={{ display: 'flex', gap: 12 }}>
+          <div style={{ background: 'var(--primary-light)', border: '1px solid var(--primary-border)', borderRadius: 14, padding: '8px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 90, flex: 1 }}>
             <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--primary-color)' }}>{currentStudentRank > 0 ? `#${currentStudentRank}` : '-'}</span>
             <span style={{ fontSize: 10, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: 0.5 }}>Your Rank</span>
           </div>
-          <div style={{ background: 'var(--surface-alt)', border: '1px solid var(--border-color)', borderRadius: 14, padding: '8px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 90 }}>
+          <div style={{ background: 'var(--surface-alt)', border: '1px solid var(--border-color)', borderRadius: 14, padding: '8px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 90, flex: 1 }}>
             <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)' }}>{totalStudents}</span>
             <span style={{ fontSize: 10, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: 0.5 }}>Total Users</span>
           </div>
@@ -100,9 +100,9 @@ const LeaderboardPage = ({ token, user }) => {
 
 
 
-      {/* TOP PODIUM */}
+      {/* TOP PODIUM (DESKTOP) */}
       {leaderboardData.length > 0 && (
-        <div style={{ 
+        <div className="desktop-only" style={{ 
           display: 'grid', 
           gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
           gap: 20, 
@@ -110,7 +110,7 @@ const LeaderboardPage = ({ token, user }) => {
         }}>
           {/* 2nd Place */}
           {topThree[1] && (
-            <div style={{
+            <div className="clickable-card-hover" style={{
               background: 'white',
               border: '1.5px solid var(--border-color)',
               borderTop: '4px solid #94A3B8',
@@ -136,7 +136,7 @@ const LeaderboardPage = ({ token, user }) => {
 
           {/* 1st Place */}
           {topThree[0] && (
-            <div style={{
+            <div className="clickable-card-hover" style={{
               background: 'white',
               border: '1.5px solid var(--border-color)',
               borderTop: '4px solid #F59E0B',
@@ -169,7 +169,7 @@ const LeaderboardPage = ({ token, user }) => {
 
           {/* 3rd Place */}
           {topThree[2] && (
-            <div style={{
+            <div className="clickable-card-hover" style={{
               background: 'white',
               border: '1.5px solid var(--border-color)',
               borderTop: '4px solid #B45309',
@@ -195,8 +195,75 @@ const LeaderboardPage = ({ token, user }) => {
         </div>
       )}
 
+      {/* TOP PODIUM (MOBILE) */}
+      {leaderboardData.length > 0 && (
+        <div className="mobile-only mobile-podium-list" style={{ display: 'none', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
+          {/* 1st Place */}
+          {topThree[0] && (
+            <div className="mobile-podium-card clickable-card-hover" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 18, background: 'white', border: '1.5px solid var(--border-color)', borderLeft: '4px solid #F59E0B', borderRadius: 16, boxShadow: 'var(--shadow-sm)', cursor: 'pointer' }}>
+              <div style={{ position: 'relative', width: 44, height: 44, borderRadius: '50%', background: '#FEF3C7', border: '2.5px solid #F59E0B', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, flexShrink: 0 }}>
+                <Crown size={14} color="#F59E0B" style={{ position: 'absolute', top: -11, left: 'calc(50% - 7px)' }} />
+                {topThree[0].profile_pic ? <img src={topThree[0].profile_pic} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : (topThree[0].name?.[0] || 'S')}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <h4 style={{ margin: '0 0 2px', fontSize: 16, fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{topThree[0].name}</h4>
+                <span style={{ fontSize: 11.5, color: '#D97706', fontWeight: 800 }}>🏆 Champion</span>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0, paddingRight: 8 }}>
+                <span className="mobile-podium-points" style={{ fontSize: 14, fontWeight: 800, color: 'var(--primary-color)' }}>
+                  {activeTab === 'overall' ? `${topThree[0].overall_score} pts` : activeTab === 'mock' ? `${topThree[0].average_score}% Avg` : activeTab === 'tasks' ? `${topThree[0].completed_assignments} Tasks` : `${topThree[0].activity_points} pts`}
+                </span>
+              </div>
+              <div style={{ flexShrink: 0 }}>
+                <CustomPodiumMedal rank={1} size={24} />
+              </div>
+            </div>
+          )}
+          {/* 2nd Place */}
+          {topThree[1] && (
+            <div className="mobile-podium-card clickable-card-hover" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 18, background: 'white', border: '1.5px solid var(--border-color)', borderLeft: '4px solid #94A3B8', borderRadius: 16, boxShadow: 'var(--shadow-sm)', cursor: 'pointer' }}>
+              <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#F1F5F9', border: '2px solid #94A3B8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, flexShrink: 0 }}>
+                {topThree[1].profile_pic ? <img src={topThree[1].profile_pic} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : (topThree[1].name?.[0] || 'S')}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <h4 style={{ margin: '0 0 2px', fontSize: 16, fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{topThree[1].name}</h4>
+                <span style={{ fontSize: 11.5, color: '#64748B', fontWeight: 800 }}>🥈 2nd Performer</span>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0, paddingRight: 8 }}>
+                <span className="mobile-podium-points" style={{ fontSize: 14, fontWeight: 800, color: 'var(--primary-color)' }}>
+                  {activeTab === 'overall' ? `${topThree[1].overall_score} pts` : activeTab === 'mock' ? `${topThree[1].average_score}% Avg` : activeTab === 'tasks' ? `${topThree[1].completed_assignments} Tasks` : `${topThree[1].activity_points} pts`}
+                </span>
+              </div>
+              <div style={{ flexShrink: 0 }}>
+                <CustomPodiumMedal rank={2} size={24} />
+              </div>
+            </div>
+          )}
+          {/* 3rd Place */}
+          {topThree[2] && (
+            <div className="mobile-podium-card clickable-card-hover" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 18, background: 'white', border: '1.5px solid var(--border-color)', borderLeft: '4px solid #B45309', borderRadius: 16, boxShadow: 'var(--shadow-sm)', cursor: 'pointer' }}>
+              <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#FAF8F5', border: '2px solid #B45309', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, flexShrink: 0 }}>
+                {topThree[2].profile_pic ? <img src={topThree[2].profile_pic} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : (topThree[2].name?.[0] || 'S')}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <h4 style={{ margin: '0 0 2px', fontSize: 16, fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{topThree[2].name}</h4>
+                <span style={{ fontSize: 11.5, color: '#B45309', fontWeight: 800 }}>🥉 3rd Performer</span>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0, paddingRight: 8 }}>
+                <span className="mobile-podium-points" style={{ fontSize: 14, fontWeight: 800, color: 'var(--primary-color)' }}>
+                  {activeTab === 'overall' ? `${topThree[2].overall_score} pts` : activeTab === 'mock' ? `${topThree[2].average_score}% Avg` : activeTab === 'tasks' ? `${topThree[2].completed_assignments} Tasks` : `${topThree[2].activity_points} pts`}
+                </span>
+              </div>
+              <div style={{ flexShrink: 0 }}>
+                <CustomPodiumMedal rank={3} size={24} />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* TABS CONTAINER */}
-      <div style={{ display: 'flex', borderBottom: '2.5px solid var(--border-color)', marginBottom: 24, gap: 16, overflowX: 'auto', paddingBottom: 2 }}>
+      <div className="leaderboard-tabs-bar" style={{ display: 'flex', borderBottom: '2.5px solid var(--border-color)', marginBottom: 24, gap: 16, overflowX: 'auto', paddingBottom: 2 }}>
         {[
           { id: 'overall', label: 'Overall Ranking', icon: <Trophy size={18} /> },
           { id: 'mock', label: 'Mock Interview', icon: <Mic size={18} /> },
@@ -206,6 +273,7 @@ const LeaderboardPage = ({ token, user }) => {
           <button
             key={t.id}
             onClick={() => setActiveTab(t.id)}
+            className={`leaderboard-tab-btn ${activeTab === t.id ? 'active-chip' : ''}`}
             style={{
               padding: '10px 18px',
               background: 'none',
@@ -229,8 +297,8 @@ const LeaderboardPage = ({ token, user }) => {
         ))}
       </div>
 
-      {/* LIST TABLE VIEW */}
-      <div style={{
+      {/* LIST TABLE VIEW (DESKTOP) */}
+      <div className="desktop-only" style={{
         background: 'white',
         border: '1.5px solid var(--border-color)',
         borderRadius: 20,
@@ -296,9 +364,10 @@ const LeaderboardPage = ({ token, user }) => {
                         borderBottom: '1px solid var(--border-color)',
                         background: row.is_current ? 'rgba(108,60,240,0.04)' : 'transparent',
                         borderLeft: row.is_current ? '4.5px solid var(--primary-color)' : '4.5px solid transparent',
-                        transition: 'background 0.15s'
+                        transition: 'background 0.22s ease',
+                        cursor: 'pointer'
                       }}
-                      onMouseEnter={e => e.currentTarget.style.background = row.is_current ? 'rgba(108,60,240,0.06)' : 'var(--surface-alt)'}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(109, 76, 255, 0.06)'}
                       onMouseLeave={e => e.currentTarget.style.background = row.is_current ? 'rgba(108,60,240,0.04)' : 'transparent'}
                     >
                       {/* Rank Column */}
@@ -383,6 +452,88 @@ const LeaderboardPage = ({ token, user }) => {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+      </div>
+
+      {/* LIST CARD VIEW (MOBILE) */}
+      <div className="mobile-only" style={{ display: 'none' }}>
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+            Sorting rankings...
+          </div>
+        ) : leaderboardData.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-secondary)' }}>
+            <Trophy size={28} style={{ opacity: 0.3, marginBottom: 8 }} />
+            <p style={{ margin: 0, fontWeight: 600, fontSize: 13 }}>No ranks found.</p>
+          </div>
+        ) : (
+          <div className="mobile-ranking-list" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {leaderboardData.map((row) => {
+              const isGold = row.rank === 1;
+              const isSilver = row.rank === 2;
+              const isBronze = row.rank === 3;
+              const medalIcon = isGold ? '🥇' : isSilver ? '🥈' : isBronze ? '🥉' : null;
+              const rankBubble = medalIcon ? (
+                <span style={{ fontSize: 20 }}>{medalIcon}</span>
+              ) : (
+                <span style={{ fontSize: 12.5, fontWeight: 900, color: 'var(--text-secondary)', background: 'var(--surface-alt)', width: 26, height: 26, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-color)' }}>
+                  {row.rank}
+                </span>
+              );
+
+              const badgeText = row.badge ? row.badge.replace(/[^\w\s]/g, '').trim() : 'Consistent Student';
+              
+              const pointsVal = activeTab === 'overall' 
+                ? `${row.overall_score} pts` 
+                : activeTab === 'mock' 
+                ? `${row.average_score}% Avg` 
+                : activeTab === 'tasks' 
+                ? `${row.completed_assignments} Tasks` 
+                : `${row.activity_points} pts`;
+
+              return (
+                <div
+                  key={row.student_id}
+                  className="mobile-ranking-card clickable-card-hover"
+                  style={{
+                    background: 'white',
+                    border: '1.5px solid var(--border-color)',
+                    borderLeft: row.is_current ? '4.5px solid var(--primary-color)' : '1.5px solid var(--border-color)',
+                    borderRadius: 16,
+                    padding: 16,
+                    boxShadow: 'var(--shadow-card)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 16,
+                    cursor: 'pointer'
+                  }}
+                >
+                  {/* Left Column: Rank + Avatar */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                    <div style={{ width: 28, display: 'flex', justifyContent: 'center' }}>
+                      {rankBubble}
+                    </div>
+                    <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800 }}>
+                      {row.profile_pic ? <img src={row.profile_pic} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : (row.name?.[0]?.toUpperCase() || 'S')}
+                    </div>
+                  </div>
+                  
+                  {/* Right Column: Name, Badge, Points stacked vertically */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 0 }}>
+                    <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {row.name} {row.is_current && <span style={{ fontSize: 9.5, background: 'var(--primary-color)', color: 'white', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>You</span>}
+                    </span>
+                    <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>
+                      {badgeText}
+                    </span>
+                    <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--primary-color)' }}>
+                      {pointsVal}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

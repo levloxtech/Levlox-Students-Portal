@@ -206,7 +206,7 @@ const StudentProfile = ({ dashboardData, enrolledCourses = [], token, onProfileU
       <div className="dashboard-main-grid" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 24, alignItems: 'start' }}>
         
         {/* LEFT CARD - PERSONAL INFORMATION */}
-        <div style={{
+        <div className="clickable-card-hover" style={{
           background: '#FFF',
           border: '1.5px solid var(--border-color)',
           borderRadius: 20,
@@ -442,7 +442,7 @@ const StudentProfile = ({ dashboardData, enrolledCourses = [], token, onProfileU
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           
           {/* ACADEMIC INFORMATION CARD */}
-          <div style={{
+          <div className="clickable-card-hover" style={{
             background: '#FFF',
             border: '1.5px solid var(--border-color)',
             borderRadius: 20,
@@ -484,7 +484,7 @@ const StudentProfile = ({ dashboardData, enrolledCourses = [], token, onProfileU
           </div>
 
           {/* PAYMENT INFORMATION CARD */}
-          <div id="profile-payment-card" style={{
+          <div id="profile-payment-card" className="clickable-card-hover" style={{
             background: '#FFF',
             border: '1.5px solid var(--border-color)',
             borderRadius: 20,

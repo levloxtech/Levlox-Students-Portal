@@ -167,7 +167,7 @@ const AttendancePage = ({ dashboardData }) => {
 
   return (
     <div
-      className="animate-fade-in"
+      className="animate-fade-in attendance-page-layout"
       style={{
         display: 'grid',
         gridTemplateColumns: '300px 1fr',
@@ -182,7 +182,7 @@ const AttendancePage = ({ dashboardData }) => {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
         {/* ── Student Profile Card ── */}
-        <div style={{
+        <div className="clickable-card-hover" style={{
           background: '#fff',
           border: '1px solid #E8E8F2',
           borderRadius: 18,
@@ -237,7 +237,7 @@ const AttendancePage = ({ dashboardData }) => {
         </div>
 
         {/* ── Attendance Statistics ── */}
-        <div style={{
+        <div className="clickable-card-hover" style={{
           background: '#fff',
           border: '1.5px solid var(--border-color)',
           borderRadius: 18,
@@ -276,7 +276,7 @@ const AttendancePage = ({ dashboardData }) => {
         </div>
 
         {/* ── Current Month Summary ── */}
-        <div style={{
+        <div className="clickable-card-hover" style={{
           background: '#fff',
           border: '1.5px solid var(--border-color)',
           borderRadius: 18,
@@ -334,7 +334,7 @@ const AttendancePage = ({ dashboardData }) => {
         </div>
 
         {/* ── Legend ── */}
-        <div style={{
+        <div className="clickable-card-hover" style={{
           background: '#fff',
           border: '1.5px solid var(--border-color)',
           borderRadius: 18,

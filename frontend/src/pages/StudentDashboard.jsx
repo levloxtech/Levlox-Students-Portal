@@ -767,7 +767,7 @@ const StudentDashboard = () => {
         {activeTab === 'dashboard' && dashboardData && (
           <div className="animate-fade-in">
             {/* ── WELCOME CARD ── */}
-            <div style={{
+            <div className="welcome-card-premium" style={{
               marginBottom: 28,
               background: 'white',
               border: '1.5px solid var(--border-color)',
@@ -838,7 +838,7 @@ const StudentDashboard = () => {
                   </div>
 
                   {/* Top Performers Grid (1st, 2nd, 3rd) */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 20 }}>
+                  <div className="top-performers-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 20 }}>
                     {learningRanking?.topPerformers?.map((performer, idx) => {
                       const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉';
                       const label = idx === 0 ? 'Top Performer' : idx === 1 ? '2nd' : '3rd';
@@ -846,6 +846,8 @@ const StudentDashboard = () => {
                       return (
                         <div
                           key={idx}
+                          className="clickable-card-hover"
+                          onClick={() => setActiveTab('leaderboard-tab')}
                           style={{
                             background: isCurrent ? 'rgba(108,60,240,0.05)' : 'var(--surface-alt)',
                             border: `1.5px solid ${isCurrent ? 'var(--primary-color)' : 'var(--border-color)'}`,
@@ -929,10 +931,7 @@ const StudentDashboard = () => {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {dashboardData.upcomingLiveClasses?.length > 0
                       ? dashboardData.upcomingLiveClasses.slice(0, 3).map((c, i) => (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', background: 'var(--surface-alt)', borderRadius: 12, border: '1.5px solid var(--border-color)', borderLeft: '3px solid var(--primary-color)', transition: 'all 0.2s' }}
-                          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--primary-color)'; e.currentTarget.style.background = 'white'; e.currentTarget.style.boxShadow = 'var(--shadow-sm)'; }}
-                          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.background = 'var(--surface-alt)'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderLeft = '3px solid var(--primary-color)'; }}
-                        >
+                        <div key={i} className="clickable-card-hover" onClick={() => setActiveTab('my-courses')} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', background: 'var(--surface-alt)', borderRadius: 12, border: '1.5px solid var(--border-color)', borderLeft: '3px solid var(--primary-color)' }}>
                           <div style={{ width: 38, height: 38, borderRadius: 10, background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary-color)', flexShrink: 0 }}>
                             <Video size={17} strokeWidth={1.75} />
                           </div>
@@ -1004,15 +1003,12 @@ const StudentDashboard = () => {
                         return (
                           <div
                             key={v.id || i}
+                            className="clickable-card-hover"
                             style={{
                               display: 'flex', gap: 14, alignItems: 'flex-start',
                               padding: '14px 20px',
                               borderBottom: isLast ? 'none' : '1px solid var(--border-color)',
-                              transition: 'background 0.15s',
-                              cursor: 'pointer',
                             }}
-                            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(108,60,240,0.028)'; }}
-                            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                             onClick={hasAccess ? () => openReplayInPlayer(v) : navigateToPaymentDetails}
                           >
                             {/* Thumbnail — 16:9 */}

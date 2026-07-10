@@ -64,6 +64,7 @@
   --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-card: 0.28s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-slow: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-hover: 0.22s ease;
 
   /* Sidebar */
   --sidebar-width: 264px;
@@ -348,7 +349,7 @@ button, input, select, textarea {
   border-radius: var(--radius-md);
   border: 1.5px solid transparent;
   cursor: pointer;
-  transition: all var(--transition-normal);
+  transition: all var(--transition-hover);
   text-decoration: none;
   font-family: inherit;
   gap: 8px;
@@ -567,7 +568,7 @@ button, input, select, textarea {
   border-radius: var(--radius-md);
   font-weight: 600;
   font-size: 13.5px;
-  transition: all var(--transition-normal);
+  transition: all var(--transition-hover);
   cursor: pointer;
   border: none;
   background: transparent;
@@ -580,18 +581,19 @@ button, input, select, textarea {
 
 .sidebar-link svg {
   color: rgba(255, 255, 255, 0.4);
-  transition: color var(--transition-normal);
+  transition: color var(--transition-hover);
   stroke-width: 1.75px;
   flex-shrink: 0;
 }
 
 .sidebar-link:hover {
-  color: rgba(255, 255, 255, 0.85);
-  background-color: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+  background-color: rgba(109, 76, 255, 0.25);
+  border-radius: var(--radius-md);
 }
 
 .sidebar-link:hover svg {
-  color: rgba(255, 255, 255, 0.8);
+  color: #ffffff;
 }
 
 .sidebar-link.active {
@@ -1115,7 +1117,7 @@ button, input, select, textarea {
 }
 
 .table-premium tr:hover td {
-  background-color: #fafafd;
+  background-color: rgba(109, 76, 255, 0.06);
 }
 
 /* ══════════════════════════════════════════════════════
@@ -1684,4 +1686,317 @@ button, input, select, textarea {
     margin-top: -65px;
   }
 }
+
+/* ==========================================================================
+   CLICKABLE CARD HOVER INTERACTION
+   ========================================================================== */
+.clickable-card-hover {
+  cursor: pointer;
+  transition: transform var(--transition-hover), box-shadow var(--transition-hover), border-color var(--transition-hover), background-color var(--transition-hover) !important;
+}
+
+.clickable-card-hover:hover {
+  transform: translateY(-3px) !important;
+  box-shadow: 0 12px 32px rgba(109, 76, 255, 0.15), 0 4px 12px rgba(0, 0, 0, 0.03) !important;
+  background-color: #faf9ff !important;
+  border-color: #6D4CFF !important;
+}
+
+/* ══════════════════════════════════════════════════════
+   MOBILE & TABLET RESPONSIVENESS SYSTEM (ONLY < 1024px)
+   ══════════════════════════════════════════════════════ */
+
+/* Drawer Toggle button default hidden on Desktop */
+.drawer-toggle-btn {
+  display: none;
+}
+
+/* Mobile Sidebar Backdrop */
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-normal);
+}
+.sidebar-backdrop.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* TABLET & MOBILE (Under 1024px) */
+@media (max-width: 1023px) {
+  /* Sidebar to Slide-out Drawer */
+  .sidebar {
+    position: fixed !important;
+    left: -264px !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    height: 100vh !important;
+    width: 264px !important;
+    z-index: 1000 !important;
+    transition: left var(--transition-normal) !important;
+    box-shadow: var(--shadow-lg) !important;
+  }
+  .sidebar.mobile-open {
+    left: 0 !important;
+  }
+  /* Keep full width and display items properly when drawer is open, even if sidebarCollapsed is true */
+  .sidebar.collapsed {
+    width: 264px !important;
+  }
+  .sidebar.collapsed .sidebar-link-text,
+  .sidebar.collapsed .sidebar-brand-text,
+  .sidebar.collapsed .sidebar-section-label {
+    opacity: 1 !important;
+    width: auto !important;
+    display: block !important;
+  }
+  .sidebar.collapsed .sidebar-header {
+    justify-content: space-between !important;
+    flex-direction: row !important;
+    padding: 16px 8px 0 !important;
+    gap: 0 !important;
+  }
+  .sidebar.collapsed .sidebar-link {
+    justify-content: flex-start !important;
+    padding: 11px 12px !important;
+  }
+  .sidebar-toggle-btn {
+    display: none !important; /* Hide sidebar collapse button on mobile/tablet */
+  }
+
+  /* Main Content layout reset */
+  .main-content {
+    margin-left: 0 !important;
+    padding: 0 20px 32px !important;
+  }
+  .main-content.expanded {
+    margin-left: 0 !important;
+  }
+
+  /* Top Navbar layout adjustments */
+  .top-navbar {
+    margin: 16px 0 24px !important;
+    padding: 12px 18px !important;
+    position: sticky !important;
+    top: 10px !important;
+  }
+  .drawer-toggle-btn {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface-alt);
+    border: 1.5px solid var(--border-color);
+    cursor: pointer;
+    color: var(--text-secondary);
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-md);
+    transition: all var(--transition-normal);
+  }
+  .drawer-toggle-btn:hover {
+    background: white;
+    border-color: var(--primary-border);
+    color: var(--primary-color);
+  }
+
+  /* Bento grid to vertical stack */
+  .dashboard-main-grid {
+    grid-template-columns: 1fr !important;
+    gap: 20px !important;
+  }
+
+  /* Attendance page layout grid to vertical stack */
+  .attendance-page-layout {
+    grid-template-columns: 1fr !important;
+    gap: 20px !important;
+  }
+
+  /* Prevent table overflow and enable horizontal scroll */
+  .attendance-page-layout table,
+  table {
+    min-width: 600px;
+  }
+  div[style*="overflowX: auto"],
+  div[style*="overflow-x: auto"],
+  .table-responsive {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+    margin-bottom: 16px;
+  }
+}
+
+/* MOBILE VIEWPORTS ONLY (320px - 767px) */
+@media (max-width: 767px) {
+  /* Main Content spacing */
+  .main-content {
+    padding: 0 12px 24px !important;
+  }
+
+  /* Welcome Card - Stack text & stats vertically */
+  .welcome-card-premium {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    padding: 24px 20px !important;
+    gap: 18px !important;
+  }
+  .welcome-card-premium > div:last-child {
+    width: 100% !important;
+    justify-content: flex-start !important;
+  }
+
+  /* Top Performers grid - Stack vertically */
+  .top-performers-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  /* Top Navbar actions space optimization */
+  .navbar-date-chip {
+    display: none !important;
+  }
+  .user-profile-badge {
+    padding: 6px !important;
+    border-left: none !important;
+  }
+  .user-profile-badge .profile-info {
+    display: none !important;
+  }
+
+  /* Responsive image rule */
+  img {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  /* Settings, password, and forms field scaling */
+  .form-input, .form-select {
+    padding: 10px 14px !important;
+    font-size: 13.5px !important;
+  }
+  .btn {
+    height: 40px !important;
+    padding: 0 16px !important;
+    font-size: 13px !important;
+  }
+
+  /* Mobile Leaderboard page specific styling */
+  .leaderboard-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 16px !important;
+  }
+  .leaderboard-badges-container {
+    width: 100% !important;
+    display: flex !important;
+    gap: 12px !important;
+  }
+  .leaderboard-badges-container > div {
+    flex: 1 !important;
+  }
+
+  /* Podium stacking & full width */
+  .desktop-only {
+    display: none !important;
+  }
+  .mobile-only {
+    display: flex !important;
+  }
+  .mobile-podium-list {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    width: 100% !important;
+  }
+  .mobile-podium-card {
+    display: flex !important;
+    align-items: center !important;
+    gap: 16px !important;
+    padding: 18px !important;
+    background: white !important;
+    border: 1.5px solid var(--border-color) !important;
+    border-radius: 16px !important;
+    box-shadow: var(--shadow-card) !important;
+    cursor: pointer !important;
+    min-height: 85px !important; /* Card height to 80–90px */
+    box-sizing: border-box !important;
+    width: 100% !important;
+  }
+  .mobile-podium-card h4 {
+    font-size: 16px !important; /* Student name font size to 16px */
+  }
+  .mobile-podium-points {
+    font-size: 17px !important; /* Points font size more prominent */
+    font-weight: 800 !important;
+    color: var(--primary-color) !important;
+  }
+
+  /* Horizontally scrollable ranking tab bar chips */
+  .leaderboard-tabs-bar {
+    display: flex !important;
+    overflow-x: auto !important;
+    scrollbar-width: none !important;
+    border-bottom: none !important; /* Remove bottom border */
+    margin-bottom: 24px !important;
+    gap: 10px !important;
+    padding-bottom: 8px !important;
+    -webkit-overflow-scrolling: touch !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .leaderboard-tabs-bar::-webkit-scrollbar {
+    display: none !important;
+  }
+  .leaderboard-tabs-bar button {
+    flex-shrink: 0 !important;
+    min-height: 44px !important;
+    padding: 10px 20px !important; /* Increased chip padding */
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: var(--surface-alt) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 24px !important; /* Rounded pill chips */
+    color: var(--text-secondary) !important;
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    transition: all var(--transition-normal) !important;
+  }
+  .leaderboard-tabs-bar button.active-chip {
+    background: var(--primary-color) !important; /* Active Levlox purple theme highlight */
+    color: white !important;
+    border-color: var(--primary-color) !important;
+    box-shadow: 0 4px 12px rgba(108, 60, 240, 0.2) !important;
+  }
+
+  /* Mobile Ranking list cards */
+  .mobile-ranking-list {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 16px !important; /* Increased spacing between cards to 16px */
+    width: 100% !important;
+  }
+  .mobile-ranking-card {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 16px !important;
+    padding: 16px !important; /* Card padding to 16px */
+    background: white !important;
+    border: 1.5px solid var(--border-color) !important;
+    border-radius: 16px !important;
+    box-shadow: var(--shadow-card) !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+  }
+}
+
 

@@ -407,19 +407,10 @@ const RecordedClassesPage = ({ initialCourseId = null, initialLessonId = null })
                   borderRadius: 20, 
                   padding: 24,
                   boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.02)',
-                  transition: 'all 0.25s ease',
-                  cursor: 'pointer'
                 }}
-                className="course-card-premium"
+                className="course-card-premium clickable-card-hover"
                 onClick={() => loadCoursePlayer(course.id)}
               >
-                <style dangerouslySetInnerHTML={{__html: `
-                  .course-card-premium:hover {
-                    transform: translateY(-4px);
-                    box-shadow: 0 12px 20px -8px rgba(108, 60, 240, 0.12);
-                    border-color: rgba(108, 60, 240, 0.2);
-                  }
-                `}} />
                 
                 {/* Thumbnail placeholder */}
                 <div style={{ 
@@ -1099,9 +1090,8 @@ const RecordedClassesPage = ({ initialCourseId = null, initialLessonId = null })
                   return (
                     <div
                       key={les.id}
-                      className={`lms-playlist-lesson${isActive ? ' active' : ''}`}
+                      className={`lms-playlist-lesson${isActive ? ' active' : ''}${!les.locked ? ' clickable-card-hover' : ''}`}
                       onClick={() => !les.locked && setActiveLesson(les)}
-                      style={{ cursor: les.locked ? 'default' : 'pointer' }}
                     >
                       {/* Status icon */}
                       <div style={{ flexShrink: 0 }}>
