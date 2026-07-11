@@ -1796,26 +1796,15 @@ const AdminDashboard = () => {
         
         {/* Top Navbar */}
         <header className="top-navbar">
-          {activeTab === 'dashboard' || activeTab === 'students' ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-              <img src={leveloxIcon} alt="Levlox Logo" style={{ width: '42px', height: '42px', objectFit: 'contain' }} />
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <span style={{ fontWeight: 800, fontSize: '18px', color: 'var(--text-primary)', lineHeight: 1.2 }}>Levlox</span>
-                <span style={{ fontSize: '11.5px', color: 'var(--text-tertiary)', fontWeight: 500 }}>Portal Administrator</span>
-              </div>
+          <div className="admin-branding">
+            <div className="branding-logo-wrap">
+              <img src={leveloxIcon} alt="Levlox Logo" className="branding-logo" />
             </div>
-          ) : (
-            <div className="search-bar-container">
-              <Search size={16} style={{ color: 'var(--text-secondary)' }} />
-              <input 
-                type="text" 
-                placeholder="Search databases..." 
-                className="search-bar-input"
-                value={searchQuery}
-                onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-              />
+            <div className="branding-text">
+              <span className="branding-title">Levlox</span>
+              <span className="branding-subtitle">Portal Administrator</span>
             </div>
-          )}
+          </div>
 
           <div className="navbar-actions">
             <div className="user-profile-badge">

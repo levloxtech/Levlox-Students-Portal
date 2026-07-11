@@ -2450,16 +2450,16 @@ button, input, select, textarea {
 }
 
 /* Column Width Rules */
-.col-profile { width: 70px; }
-.col-name { width: 180px; }
-.col-id { width: 140px; }
-.col-email { width: 220px; }
-.col-mobile { width: 140px; }
-.col-course { width: 180px; }
-.col-batch { width: 130px; }
-.col-fee { width: 120px; text-align: center !important; }
-.col-status { width: 110px; text-align: center !important; }
-.col-actions { width: 150px; }
+.col-profile { width: 50px; }
+.col-name { width: 120px; }
+.col-id { width: 100px; }
+.col-email { width: 160px; }
+.col-mobile { width: 110px; }
+.col-course { width: 130px; }
+.col-batch { width: 110px; }
+.col-fee { width: 85px; text-align: center !important; }
+.col-status { width: 85px; text-align: center !important; }
+.col-actions { width: 120px; }
 
 /* Enable horizontal scrolling and sticky actions only on mobile/tablet viewports (<992px) */
 @media (max-width: 992px) {
@@ -2503,13 +2503,13 @@ button, input, select, textarea {
 
 /* Action Icon Buttons & Tooltips */
 .col-actions {
-  width: 190px !important;
-  padding-right: 24px !important;
+  width: 120px !important;
+  padding-right: 0 !important;
 }
 
 .action-icon-btn {
-  width: 40px !important;
-  height: 40px !important;
+  width: 32px !important;
+  height: 32px !important;
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -2773,3 +2773,87 @@ button, input, select, textarea {
     width: 100% !important;
   }
 }
+
+/* ==========================================================================
+   ADMIN PORTAL BRANDING STYLES
+   ========================================================================== */
+.admin-branding {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.branding-logo-wrap {
+  width: 48px;
+  height: 48px;
+  background-color: var(--primary-color, #6C3CF0);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  flex-shrink: 0;
+}
+
+.branding-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.branding-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.branding-title {
+  font-size: 30px;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.1;
+}
+
+.branding-subtitle {
+  font-size: 16px;
+  font-weight: 500;
+  color: #6B7280;
+  line-height: 1.2;
+}
+
+/* Tablet view styling */
+@media (max-width: 992px) {
+  .branding-title {
+    font-size: 24px;
+  }
+  .branding-subtitle {
+    font-size: 14px;
+  }
+  .branding-logo-wrap {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+  }
+  .admin-branding {
+    gap: 12px;
+  }
+}
+
+/* Mobile view styling */
+@media (max-width: 576px) {
+  .branding-subtitle {
+    display: none !important;
+  }
+  .branding-title {
+    font-size: 20px;
+  }
+  .branding-logo-wrap {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    padding: 4px;
+  }
+  .admin-branding {
+    gap: 10px;
+  }
+}
+
