@@ -9,6 +9,7 @@ import {
   Key, RefreshCw, ChevronDown, X, Download, FileText, FileSpreadsheet
 } from 'lucide-react';
 import CustomModal from '../components/Modal';
+import FilterBar from '../components/FilterBar';
 import leveloxIcon from '../assets/levelox-icon-transparent.png';
 
 const API_BASE = 'http://localhost:5000/api';
@@ -141,6 +142,7 @@ const AdminDashboard = () => {
 
   // Batch Management states
   const [batches, setBatches] = useState([]);
+  const [courses, setCourses] = useState([]);
   const [selectedBatchId, setSelectedBatchId] = useState('');
   const [batchName, setBatchName] = useState('');
   const [batchCourseName, setBatchCourseName] = useState('');
@@ -163,6 +165,60 @@ const AdminDashboard = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
+  // Batch filters
+  const [batchSearchQuery, setBatchSearchQuery] = useState('');
+  const [batchCourseFilter, setBatchCourseFilter] = useState('');
+  const [batchStatusFilter, setBatchStatusFilter] = useState('');
+  const [batchTrainerFilter, setBatchTrainerFilter] = useState('');
+  const [batchStartDateFilter, setBatchStartDateFilter] = useState('');
+  const [batchEndDateFilter, setBatchEndDateFilter] = useState('');
+
+  // Live classes additional filters
+  const [liveCourseFilter, setLiveCourseFilter] = useState('');
+  const [liveBatchFilter, setLiveBatchFilter] = useState('');
+  const [liveStatusFilter, setLiveStatusFilter] = useState('');
+
+  // Recorded classes filters
+  const [recordedSearchQuery, setRecordedSearchQuery] = useState('');
+  const [recordedCourseFilter, setRecordedCourseFilter] = useState('');
+  const [recordedBatchFilter, setRecordedBatchFilter] = useState('');
+  const [recordedVisibilityFilter, setRecordedVisibilityFilter] = useState('');
+  const [recordedUploadTypeFilter, setRecordedUploadTypeFilter] = useState('');
+
+  // Fees page filters
+  const [feesSearchQuery, setFeesSearchQuery] = useState('');
+  const [feesCourseFilter, setFeesCourseFilter] = useState('');
+  const [feesBatchFilter, setFeesBatchFilter] = useState('');
+  const [feesStatusFilter, setFeesStatusFilter] = useState('');
+  const [feesPaymentMethodFilter, setFeesPaymentMethodFilter] = useState('');
+  const [feesStartDateFilter, setFeesStartDateFilter] = useState('');
+  const [feesEndDateFilter, setFeesEndDateFilter] = useState('');
+
+  // Activity score filters
+  const [activitySearchQuery, setActivitySearchQuery] = useState('');
+  const [activityCourseFilter, setActivityCourseFilter] = useState('');
+  const [activityBatchFilter, setActivityBatchFilter] = useState('');
+  const [activityTypeFilter, setActivityTypeFilter] = useState('');
+  const [activityScoreMin, setActivityScoreMin] = useState('');
+  const [activityScoreMax, setActivityScoreMax] = useState('');
+  const [activityStartDate, setActivityStartDate] = useState('');
+  const [activityEndDate, setActivityEndDate] = useState('');
+
+  // Attendance filters
+  const [attSearchQuery, setAttSearchQuery] = useState('');
+  const [attCourseFilter, setAttCourseFilter] = useState('');
+  const [attBatchFilter, setAttBatchFilter] = useState('');
+  const [attStatusFilter, setAttStatusFilter] = useState('');
+  const [attDateFilter, setAttDateFilter] = useState('This Month');
+  const [attStartDateFilter, setAttStartDateFilter] = useState('');
+  const [attEndDateFilter, setAttEndDateFilter] = useState('');
+
+  // Announcements filters
+  const [annSearchQuery, setAnnSearchQuery] = useState('');
+  const [annCourseFilter, setAnnCourseFilter] = useState('');
+  const [annBatchFilter, setAnnBatchFilter] = useState('');
+  const [annAudienceFilter, setAnnAudienceFilter] = useState('');
+
   // Responsive design width tracking
   const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
   useEffect(() => {
@@ -170,6 +226,7 @@ const AdminDashboard = () => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
 
   // Separate pagination states
   const [batchesPage, setBatchesPage] = useState(1);
@@ -323,7 +380,7 @@ const AdminDashboard = () => {
 
   const exportBatchesToCSV = () => {
     const headers = ['Batch Code', 'Batch Name', 'Course Name', 'Instructor', 'Start Date', 'End Date', 'Status', 'Students Count', 'Max Students'];
-    const rows = batches.map(b => [
+    const rows = filteredBatches.map(b => [
       `"${b.code || ''}"`,
       `"${b.name || ''}"`,
       `"${b.course_name || ''}"`,
@@ -347,7 +404,7 @@ const AdminDashboard = () => {
 
   const exportBatchesToExcel = () => {
     const headers = ['Batch Code', 'Batch Name', 'Course Name', 'Instructor', 'Start Date', 'End Date', 'Status', 'Students Count', 'Max Students'];
-    const rows = batches.map(b => [
+    const rows = filteredBatches.map(b => [
       b.code || '',
       b.name || '',
       b.course_name || '',
@@ -372,7 +429,7 @@ const AdminDashboard = () => {
   const exportBatchesToPDF = () => {
     const printWindow = window.open('', '_blank');
     let rowsHtml = '';
-    batches.forEach(b => {
+    filteredBatches.forEach(b => {
       rowsHtml += `
         <tr>
           <td>${b.code || ''}</td>
@@ -505,6 +562,104 @@ const AdminDashboard = () => {
                 <th>Attendance Rate</th>
                 <th>Present Classes</th>
                 <th>Absent Sessions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+          <script>
+            window.onload = function() {
+              window.print();
+              window.close();
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  const exportAttHistoryToCSV = () => {
+    const headers = ['Date', 'Batch Name', 'Course Name', 'Present Count', 'Absent Count', 'Attendance Rate'];
+    const rows = filteredAttSheets.map(s => [
+      `"${s.date || ''}"`,
+      `"${s.batch_name || ''}"`,
+      `"${s.course_name || ''}"`,
+      s.present_count ?? 0,
+      s.absent_count ?? 0,
+      `"${s.attendance_percentage ?? 100}%"`
+    ]);
+    const content = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'attendance_history_export.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportAttHistoryToExcel = () => {
+    const headers = ['Date', 'Batch Name', 'Course Name', 'Present Count', 'Absent Count', 'Attendance Rate'];
+    const rows = filteredAttSheets.map(s => [
+      s.date || '',
+      s.batch_name || '',
+      s.course_name || '',
+      s.present_count ?? 0,
+      s.absent_count ?? 0,
+      `${s.attendance_percentage ?? 100}%`
+    ]);
+    const content = [headers.join('\t'), ...rows.map(r => r.join('\t'))].join('\n');
+    const blob = new Blob([content], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'attendance_history_export.xls');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportAttHistoryToPDF = () => {
+    const printWindow = window.open('', '_blank');
+    let rowsHtml = '';
+    filteredAttSheets.forEach(s => {
+      rowsHtml += `
+        <tr>
+          <td>${s.date || ''}</td>
+          <td>${s.batch_name || ''}</td>
+          <td>${s.course_name || ''}</td>
+          <td>${s.present_count ?? 0}</td>
+          <td>${s.absent_count ?? 0}</td>
+          <td>${s.attendance_percentage ?? 100}%</td>
+        </tr>
+      `;
+    });
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Attendance History Logs Report</title>
+          <style>
+             body { font-family: sans-serif; padding: 20px; }
+             h1 { color: #6C3CF0; }
+             table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+             th, td { border: 1px solid #E5E7EB; padding: 10px; text-align: left; }
+             th { background-color: #F9FAFB; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <h1>Attendance History Logs Report</h1>
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Batch Name</th>
+                <th>Course Name</th>
+                <th>Present Count</th>
+                <th>Absent Count</th>
+                <th>Attendance Rate</th>
               </tr>
             </thead>
             <tbody>
@@ -727,7 +882,7 @@ const AdminDashboard = () => {
 
   const exportRecordedClassesToCSV = () => {
     const headers = ['Lesson Title', 'Module', 'Course Title', 'Duration', 'Visibility', 'Drive Link', 'Youtube Link'];
-    const rows = recordedClasses.map(c => [
+    const rows = filteredRecorded.map(c => [
       `"${c.title || ''}"`,
       `"${c.module || ''}"`,
       `"${c.course_title || ''}"`,
@@ -749,7 +904,7 @@ const AdminDashboard = () => {
 
   const exportRecordedClassesToExcel = () => {
     const headers = ['Lesson Title', 'Module', 'Course Title', 'Duration', 'Visibility', 'Drive Link', 'Youtube Link'];
-    const rows = recordedClasses.map(c => [
+    const rows = filteredRecorded.map(c => [
       c.title || '',
       c.module || '',
       c.course_title || '',
@@ -772,7 +927,7 @@ const AdminDashboard = () => {
   const exportRecordedClassesToPDF = () => {
     const printWindow = window.open('', '_blank');
     let rowsHtml = '';
-    recordedClasses.forEach(c => {
+    filteredRecorded.forEach(c => {
       rowsHtml += `
         <tr>
           <td>${c.title || ''}</td>
@@ -1009,7 +1164,7 @@ const AdminDashboard = () => {
 
   const exportFeesToCSV = () => {
     const headers = ['Roll Number', 'Name', 'Total Package', 'Paid Amount', 'Dues Outstanding', 'Ledger Status', 'Payment Date'];
-    const rows = students.map(s => [
+    const rows = filteredStudentsForFees.map(s => [
       `"${s.rollNumber || ''}"`,
       `"${s.name || ''}"`,
       s.feesTotal || 1500,
@@ -1031,7 +1186,7 @@ const AdminDashboard = () => {
 
   const exportFeesToExcel = () => {
     const headers = ['Roll Number', 'Name', 'Total Package', 'Paid Amount', 'Dues Outstanding', 'Ledger Status', 'Payment Date'];
-    const rows = students.map(s => [
+    const rows = filteredStudentsForFees.map(s => [
       s.rollNumber || '',
       s.name || '',
       s.feesTotal || 1500,
@@ -1054,7 +1209,7 @@ const AdminDashboard = () => {
   const exportFeesToPDF = () => {
     const printWindow = window.open('', '_blank');
     let rowsHtml = '';
-    students.forEach(s => {
+    filteredStudentsForFees.forEach(s => {
       rowsHtml += `
         <tr>
           <td>${s.rollNumber || ''}</td>
@@ -1111,7 +1266,7 @@ const AdminDashboard = () => {
 
   const exportActivityToCSV = () => {
     const headers = ['Date', 'Student Name', 'Batch', 'Meeting', 'Activity Type', 'Points', 'Remarks'];
-    const rows = activityLogs.map(l => [
+    const rows = filteredActivityLogs.map(l => [
       `"${l.date || ''}"`,
       `"${l.student_name || ''}"`,
       `"${l.batch_name || ''}"`,
@@ -1133,7 +1288,7 @@ const AdminDashboard = () => {
 
   const exportActivityToExcel = () => {
     const headers = ['Date', 'Student Name', 'Batch', 'Meeting', 'Activity Type', 'Points', 'Remarks'];
-    const rows = activityLogs.map(l => [
+    const rows = filteredActivityLogs.map(l => [
       l.date || '',
       l.student_name || '',
       l.batch_name || '',
@@ -1156,7 +1311,7 @@ const AdminDashboard = () => {
   const exportActivityToPDF = () => {
     const printWindow = window.open('', '_blank');
     let rowsHtml = '';
-    activityLogs.forEach(l => {
+    filteredActivityLogs.forEach(l => {
       rowsHtml += `
         <tr>
           <td>${l.date || ''}</td>
@@ -1255,8 +1410,6 @@ const AdminDashboard = () => {
   const [attBatchId, setAttBatchId] = useState('');
   const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().substring(0, 10));
-  const [attStatusFilter, setAttStatusFilter] = useState('All');
-  const [attSearchQuery, setAttSearchQuery] = useState('');
   const [attSheetsHistory, setAttSheetsHistory] = useState([]);
   const [viewingHistoryRecord, setViewingHistoryRecord] = useState(null);
 
@@ -1337,6 +1490,144 @@ const AdminDashboard = () => {
   const [actRemarks, setActRemarks] = useState('');
   const [batchStudents, setBatchStudents] = useState([]);
   const [activityLogs, setActivityLogs] = useState([]);
+
+  // Compute filtered datasets for client-side filtered tabs
+  const filteredAttSheets = attSheetsHistory.filter(sheet => {
+    const query = attSearchQuery.toLowerCase();
+    const matchesSearch = !query || 
+      (sheet.batch_name || '').toLowerCase().includes(query) ||
+      (sheet.course_name || '').toLowerCase().includes(query);
+      
+    const matchesCourse = !attCourseFilter || sheet.course_name === attCourseFilter;
+    const matchesBatch = !attBatchFilter || sheet.batch_id === attBatchFilter || sheet.batch_name === attBatchFilter;
+    
+    const pct = sheet.attendance_percentage ?? 100;
+    let matchesStatus = true;
+    if (attStatusFilter === 'high') matchesStatus = pct >= 80;
+    else if (attStatusFilter === 'low') matchesStatus = pct < 80;
+
+    let matchesDate = true;
+    if (attDateFilter && sheet.date) {
+      const sheetDate = new Date(sheet.date);
+      const now = new Date('2026-07-10T23:27:53');
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+
+      if (attDateFilter === 'Today') {
+        matchesDate = sheetDate >= startOfToday && sheetDate <= endOfToday;
+      } else if (attDateFilter === 'This Week') {
+        const firstDayOfWeek = new Date(now);
+        firstDayOfWeek.setDate(firstDayOfWeek.getDate() - firstDayOfWeek.getDay());
+        firstDayOfWeek.setHours(0,0,0,0);
+        const lastDayOfWeek = new Date(firstDayOfWeek);
+        lastDayOfWeek.setDate(lastDayOfWeek.getDate() + 7);
+        lastDayOfWeek.setHours(23,59,59,999);
+        matchesDate = sheetDate >= firstDayOfWeek && sheetDate <= lastDayOfWeek;
+      } else if (attDateFilter === 'This Month') {
+        const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        matchesDate = sheetDate >= firstDayOfMonth && sheetDate <= lastDayOfMonth;
+      } else if (attDateFilter === 'This Year') {
+        const firstDayOfYear = new Date(now.getFullYear(), 0, 1);
+        const lastDayOfYear = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
+        matchesDate = sheetDate >= firstDayOfYear && sheetDate <= lastDayOfYear;
+      } else if (attDateFilter === 'Custom Range') {
+        const start = attStartDateFilter ? new Date(attStartDateFilter) : null;
+        const end = attEndDateFilter ? new Date(attEndDateFilter) : null;
+        if (end) end.setHours(23, 59, 59);
+        if (start && end) {
+          matchesDate = sheetDate >= start && sheetDate <= end;
+        } else if (start) {
+          matchesDate = sheetDate >= start;
+        } else if (end) {
+          matchesDate = sheetDate <= end;
+        }
+      }
+    }
+    
+    return matchesSearch && matchesCourse && matchesBatch && matchesStatus && matchesDate;
+  });
+
+  const filteredBatches = batches.filter(b => {
+    const query = batchSearchQuery.toLowerCase();
+    const matchesSearch = !query || 
+      (b.code || '').toLowerCase().includes(query) ||
+      (b.name || '').toLowerCase().includes(query) ||
+      (b.trainer_name || '').toLowerCase().includes(query);
+    const matchesCourse = !batchCourseFilter || b.course_name === batchCourseFilter;
+    const matchesStatus = !batchStatusFilter || b.status === batchStatusFilter;
+    const matchesTrainer = !batchTrainerFilter || b.trainer_name === batchTrainerFilter;
+    const matchesStartDate = !batchStartDateFilter || b.start_date >= batchStartDateFilter;
+    const matchesEndDate = !batchEndDateFilter || b.end_date <= batchEndDateFilter;
+    return matchesSearch && matchesCourse && matchesStatus && matchesTrainer && matchesStartDate && matchesEndDate;
+  });
+
+  const filteredAnnouncements = announcements.filter(item => {
+    const query = annSearchQuery.toLowerCase();
+    const matchesSearch = !query || 
+      (item.title || '').toLowerCase().includes(query) ||
+      (item.content || '').toLowerCase().includes(query);
+    const matchesBatch = !annBatchFilter || item.batch_id === annBatchFilter;
+    const annBatch = batches.find(b => b.id === item.batch_id);
+    const matchesCourse = !annCourseFilter || (annBatch && annBatch.course_name === annCourseFilter);
+    let matchesAudience = true;
+    if (annAudienceFilter === 'pinned') matchesAudience = item.is_pinned;
+    else if (annAudienceFilter === 'high') matchesAudience = item.priority === 'High';
+    else if (annAudienceFilter === 'medium') matchesAudience = item.priority === 'Medium';
+    else if (annAudienceFilter === 'low') matchesAudience = item.priority === 'Low';
+    return matchesSearch && matchesBatch && matchesCourse && matchesAudience;
+  });
+
+  const filteredRecorded = recordedClasses.filter(c => {
+    const query = recordedSearchQuery.toLowerCase();
+    const matchesSearch = !query || 
+      (c.title || '').toLowerCase().includes(query) ||
+      (c.module || '').toLowerCase().includes(query);
+    const matchesCourse = !recordedCourseFilter || c.course_title === recordedCourseFilter;
+    const matchesBatch = !recordedBatchFilter || c.batch_id === recordedBatchFilter;
+    const matchesVisibility = !recordedVisibilityFilter || c.visibility === recordedVisibilityFilter;
+    
+    let uploadType = 'Google Drive';
+    if (c.video_source_type === 'upload') {
+      uploadType = 'Uploaded';
+    }
+    const matchesUploadType = !recordedUploadTypeFilter || uploadType === recordedUploadTypeFilter;
+    
+    return matchesSearch && matchesCourse && matchesBatch && matchesVisibility && matchesUploadType;
+  });
+
+  // Client-side sub-filtering for Fees (since Payment Method & Date Range are client-only)
+  const filteredStudentsForFees = students.filter(s => {
+    const matchesStartDate = !feesStartDateFilter || (s.feesPaymentDate && s.feesPaymentDate >= feesStartDateFilter);
+    const matchesEndDate = !feesEndDateFilter || (s.feesPaymentDate && s.feesPaymentDate <= feesEndDateFilter);
+    const matchesPaymentMethod = !feesPaymentMethodFilter || (s.paymentMethod || 'Credit Card').toLowerCase() === feesPaymentMethodFilter.toLowerCase();
+    return matchesStartDate && matchesEndDate && matchesPaymentMethod;
+  });
+
+  const filteredActivityLogs = activityLogs.filter(l => {
+    const query = activitySearchQuery.toLowerCase();
+    const matchesSearch = !query || 
+      (l.student_name || '').toLowerCase().includes(query) ||
+      (l.student_roll || l.rollNumber || '').toLowerCase().includes(query);
+    
+    const matchesBatch = !activityBatchFilter || l.batch_id === activityBatchFilter || l.batch_name === activityBatchFilter;
+    
+    const logBatch = batches.find(b => b.id === l.batch_id || b.name === l.batch_name);
+    const matchesCourse = !activityCourseFilter || (logBatch && logBatch.course_name === activityCourseFilter);
+    
+    const matchesType = !activityTypeFilter || (l.activity_type || '').toLowerCase().includes(activityTypeFilter.toLowerCase());
+    
+    const points = l.points || 0;
+    let matchesScore = true;
+    if (activityScoreMin === 'positive') matchesScore = points >= 0;
+    else if (activityScoreMin === 'negative') matchesScore = points < 0;
+    else if (activityScoreMin === 'high') matchesScore = points > 5;
+    
+    const matchesStartDate = !activityStartDate || l.date >= activityStartDate;
+    const matchesEndDate = !activityEndDate || l.date <= activityEndDate;
+    
+    return matchesSearch && matchesBatch && matchesCourse && matchesType && matchesScore && matchesStartDate && matchesEndDate;
+  });
 
   const handleActBatchChange = async (batchId) => {
     setActBatchId(batchId);
@@ -1480,9 +1771,25 @@ const AdminDashboard = () => {
     reader.readAsDataURL(file);
   };
 
+
+
   // ══════════════════════════════════════════════════════
   // BATCH MANAGEMENT EVENT HANDLERS
   // ══════════════════════════════════════════════════════
+  const fetchCourses = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/admin/course-titles`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setCourses(data.courses || []);
+      }
+    } catch (error) {
+      console.error("Error fetching courses:", error);
+    }
+  };
+
   const fetchBatches = async () => {
     try {
       const response = await fetch(`${API_BASE}/admin/batches`, {
@@ -1540,6 +1847,7 @@ const AdminDashboard = () => {
         setBatchMaxStudents(30);
         showModal("Success", "New batch created successfully!", "success");
         fetchBatches();
+        fetchCourses();
       } else {
         const err = await response.json();
         showModal("Error", err.message || "Failed to create batch", "error");
@@ -1590,6 +1898,7 @@ const AdminDashboard = () => {
         setBatchMaxStudents(30);
         showModal("Success", "Batch details updated successfully!", "success");
         fetchBatches();
+        fetchCourses();
       } else {
         const err = await response.json();
         showModal("Error", err.message || "Failed to update batch", "error");
@@ -1654,6 +1963,7 @@ const AdminDashboard = () => {
   };
 
   useEffect(() => {
+    fetchCourses();
     if (activeTab === 'students' || activeTab === 'fees-management') {
       fetchStudents();
     } else if (activeTab === 'attendance') {
@@ -1675,7 +1985,7 @@ const AdminDashboard = () => {
       fetchBatches();
       fetchActivityLogs();
     }
-  }, [activeTab, currentPage, attendancePage, feesPage, searchQuery, statusFilter, feesFilter, courseFilter, batchFilter]);
+  }, [activeTab, currentPage, attendancePage, feesPage, searchQuery, statusFilter, feesFilter, courseFilter, batchFilter, feesSearchQuery, feesStatusFilter, feesCourseFilter, feesBatchFilter]);
 
   useEffect(() => {
     if (activeTab === 'attendance') {
@@ -1720,14 +2030,28 @@ const AdminDashboard = () => {
         pageNum = currentPage;
       }
 
+      let searchVal = searchQuery;
+      let statusVal = statusFilter;
+      let feesVal = feesFilter;
+      let courseVal = courseFilter;
+      let batchVal = batchFilter;
+
+      if (activeTab === 'fees-management') {
+        searchVal = feesSearchQuery;
+        statusVal = '';
+        feesVal = feesStatusFilter;
+        courseVal = feesCourseFilter;
+        batchVal = feesBatchFilter;
+      }
+
       const queryParams = new URLSearchParams({
         page: pageNum,
         limit: 5,
-        search: searchQuery,
-        status: statusFilter,
-        feesPaid: feesFilter,
-        course: courseFilter,
-        batch: batchFilter
+        search: searchVal,
+        status: statusVal,
+        feesPaid: feesVal,
+        course: courseVal,
+        batch: batchVal
       });
       
       const response = await fetch(`${API_BASE}/admin/students?${queryParams}`, {
@@ -2950,92 +3274,128 @@ const AdminDashboard = () => {
 
         {/* Batches Management Tab */}
         {activeTab === 'batches' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: '30px' }}>
-            {/* Create / Edit Batch Form */}
-            <div className="dashboard-card-section">
-              <h4 style={{ marginBottom: '18px', fontSize: '15px', fontWeight: '700' }}>
-                {editingBatch ? 'Edit Batch Details' : 'Create New Batch'}
-              </h4>
-              <form onSubmit={editingBatch ? saveBatchEdit : createBatch}>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="batchName">Batch Name</label>
-                  <input id="batchName" type="text" className="form-input" value={batchName} onChange={(e) => setBatchName(e.target.value)} placeholder="e.g. Fullstack MERN Web Dev - Alpha" required />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="batchCourseName">Course Title</label>
-                  <input id="batchCourseName" type="text" className="form-input" value={batchCourseName} onChange={(e) => setBatchCourseName(e.target.value)} placeholder="e.g. Fullstack Engineering" required />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="batchTrainerName">Trainer / Instructor</label>
-                  <input id="batchTrainerName" type="text" className="form-input" value={batchTrainerName} onChange={(e) => setBatchTrainerName(e.target.value)} placeholder="e.g. Dr. Sarah Jenkins" required />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="batchStartDate">Start Date</label>
-                  <input id="batchStartDate" type="date" className="form-input" value={batchStartDate} onChange={(e) => setBatchStartDate(e.target.value)} required />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="batchEndDate">End Date</label>
-                  <input id="batchEndDate" type="date" className="form-input" value={batchEndDate} onChange={(e) => setBatchEndDate(e.target.value)} required />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="batchStatusSelect">Batch Status</label>
-                  <select id="batchStatusSelect" className="form-select" value={batchStatus} onChange={(e) => setBatchStatus(e.target.value)}>
-                    <option value="Active">Active</option>
-                    <option value="Completed">Completed</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="batchMaxStudents">Maximum Seats</label>
-                  <input id="batchMaxStudents" type="number" className="form-input" value={batchMaxStudents} onChange={(e) => setBatchMaxStudents(e.target.value)} required />
-                </div>
-                <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                  {editingBatch && (
-                    <button type="button" className="btn btn-outline" style={{ flex: 1 }} onClick={() => {
-                      setEditingBatch(null);
-                      setBatchName('');
-                      setBatchCourseName('');
-                      setBatchTrainerName('');
-                      setBatchStartDate('');
-                      setBatchEndDate('');
-                      setBatchStatus('Active');
-                      setBatchMaxStudents(30);
-                    }}>
-                      Cancel
-                    </button>
-                  )}
-                  <button type="submit" className="btn btn-primary" style={{ flex: 2 }}>
-                    {editingBatch ? 'Save Batch Changes' : 'Confirm New Batch'}
-                  </button>
-                </div>
-              </form>
-            </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
+            <FilterBar
+              searchPlaceholder="Search Batch Name or Trainer..."
+              searchValue={batchSearchQuery}
+              onSearchChange={(val) => { setBatchSearchQuery(val); setBatchesPage(1); }}
+              filters={[
+                {
+                  label: 'Course',
+                  value: batchCourseFilter,
+                  onChange: (val) => { setBatchCourseFilter(val); setBatchesPage(1); },
+                  options: Array.from(new Set(batches.map(b => b.course_name))).filter(Boolean).map(c => ({ value: c, label: c }))
+                },
+                {
+                  label: 'Trainer',
+                  value: batchTrainerFilter,
+                  onChange: (val) => { setBatchTrainerFilter(val); setBatchesPage(1); },
+                  options: Array.from(new Set(batches.map(b => b.trainer_name))).filter(Boolean).map(t => ({ value: t, label: t }))
+                },
+                {
+                  label: 'Status',
+                  value: batchStatusFilter,
+                  onChange: (val) => { setBatchStatusFilter(val); setBatchesPage(1); },
+                  options: [
+                    { value: 'Active', label: 'Active' },
+                    { value: 'Completed', label: 'Completed' }
+                  ]
+                }
+              ]}
+              showDateFilter={false}
+              onReset={() => {
+                setBatchSearchQuery('');
+                setBatchCourseFilter('');
+                setBatchStatusFilter('');
+                setBatchTrainerFilter('');
+                setBatchStartDateFilter('');
+                setBatchEndDateFilter('');
+                setBatchesPage(1);
+              }}
+              onExportCSV={exportBatchesToCSV}
+              onExportExcel={exportBatchesToExcel}
+              onExportPDF={exportBatchesToPDF}
+            />
 
-            {/* Batches List Cards */}
-            <div className="dashboard-card-section" style={{ display: 'flex', flexDirection: 'column', minHeight: '500px' }}>
-              <div className="section-header-premium" style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-                <h4 style={{ fontSize: '15.5px', fontWeight: '700', margin: 0 }}>Registered Institutional Batches</h4>
-                <div className="action-buttons-group">
-                  <ExportDropdown
-                    onExportCSV={exportBatchesToCSV}
-                    onExportExcel={exportBatchesToExcel}
-                    onExportPDF={exportBatchesToPDF}
-                  />
-                </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: '30px' }}>
+              {/* Create / Edit Batch Form */}
+              <div className="dashboard-card-section">
+                <h4 style={{ marginBottom: '18px', fontSize: '15px', fontWeight: '700' }}>
+                  {editingBatch ? 'Edit Batch Details' : 'Create New Batch'}
+                </h4>
+                <form onSubmit={editingBatch ? saveBatchEdit : createBatch}>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="batchName">Batch Name</label>
+                    <input id="batchName" type="text" className="form-input" value={batchName} onChange={(e) => setBatchName(e.target.value)} placeholder="e.g. Fullstack MERN Web Dev - Alpha" required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="batchCourseName">Course Title</label>
+                    <input id="batchCourseName" type="text" className="form-input" value={batchCourseName} onChange={(e) => setBatchCourseName(e.target.value)} placeholder="e.g. Fullstack Engineering" required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="batchTrainerName">Trainer / Instructor</label>
+                    <input id="batchTrainerName" type="text" className="form-input" value={batchTrainerName} onChange={(e) => setBatchTrainerName(e.target.value)} placeholder="e.g. Dr. Sarah Jenkins" required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="batchStartDate">Start Date</label>
+                    <input id="batchStartDate" type="date" className="form-input" value={batchStartDate} onChange={(e) => setBatchStartDate(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="batchEndDate">End Date</label>
+                    <input id="batchEndDate" type="date" className="form-input" value={batchEndDate} onChange={(e) => setBatchEndDate(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="batchStatusSelect">Batch Status</label>
+                    <select id="batchStatusSelect" className="form-select" value={batchStatus} onChange={(e) => setBatchStatus(e.target.value)}>
+                      <option value="Active">Active</option>
+                      <option value="Completed">Completed</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="batchMaxStudents">Maximum Seats</label>
+                    <input id="batchMaxStudents" type="number" className="form-input" value={batchMaxStudents} onChange={(e) => setBatchMaxStudents(e.target.value)} required />
+                  </div>
+                  <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                    {editingBatch && (
+                      <button type="button" className="btn btn-outline" style={{ flex: 1 }} onClick={() => {
+                        setEditingBatch(null);
+                        setBatchName('');
+                        setBatchCourseName('');
+                        setBatchTrainerName('');
+                        setBatchStartDate('');
+                        setBatchEndDate('');
+                        setBatchStatus('Active');
+                        setBatchMaxStudents(30);
+                      }}>
+                        Cancel
+                      </button>
+                    )}
+                    <button type="submit" className="btn btn-primary" style={{ flex: 2 }}>
+                      {editingBatch ? 'Save Batch Changes' : 'Confirm New Batch'}
+                    </button>
+                  </div>
+                </form>
               </div>
 
-              {batches.length === 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexGrow: 1, padding: '40px 20px', textAlign: 'center' }}>
-                  <div style={{ width: '80px', height: '80px', background: 'var(--primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--primary-color)' }}>
-                    <GraduationCap size={40} />
-                  </div>
-                  <h5 style={{ fontSize: '16px', fontWeight: '800', margin: '0 0 4px' }}>No Batches Found</h5>
-                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '280px', margin: 0 }}>No batches created yet. Use the left panel to configure a new batch.</p>
+              {/* Batches List Cards */}
+              <div className="dashboard-card-section" style={{ display: 'flex', flexDirection: 'column', minHeight: '500px' }}>
+                <div className="section-header-premium" style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                  <h4 style={{ fontSize: '15.5px', fontWeight: '700', margin: 0 }}>Registered Institutional Batches</h4>
                 </div>
-              ) : (() => {
-                const batchLimit = windowWidth < 768 ? 1 : (windowWidth < 1024 ? 2 : 3);
-                const totalBatchesPages = Math.ceil(batches.length / batchLimit) || 1;
-                const safeBatchesPage = Math.min(batchesPage, totalBatchesPages);
-                const paginatedBatches = batches.slice((safeBatchesPage - 1) * batchLimit, safeBatchesPage * batchLimit);
+
+                {filteredBatches.length === 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexGrow: 1, padding: '40px 20px', textAlign: 'center' }}>
+                    <div style={{ width: '80px', height: '80px', background: 'var(--primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--primary-color)' }}>
+                      <GraduationCap size={40} />
+                    </div>
+                    <h5 style={{ fontSize: '16px', fontWeight: '800', margin: '0 0 4px' }}>No Batches Found</h5>
+                    <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '280px', margin: 0 }}>No batches created yet or matching the filters.</p>
+                  </div>
+                ) : (() => {
+                  const batchLimit = windowWidth < 768 ? 1 : (windowWidth < 1024 ? 2 : 3);
+                  const totalBatchesPages = Math.ceil(filteredBatches.length / batchLimit) || 1;
+                  const safeBatchesPage = Math.min(batchesPage, totalBatchesPages);
+                  const paginatedBatches = filteredBatches.slice((safeBatchesPage - 1) * batchLimit, safeBatchesPage * batchLimit);
 
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, justifyContent: 'space-between' }}>
@@ -3120,88 +3480,68 @@ const AdminDashboard = () => {
               })()}
             </div>
           </div>
-        )}
+        </div>
+      )}
 
         {/* Students Registry Tab */}
         {activeTab === 'students' && (
           <div className="dashboard-card-section" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <div className="section-header-premium" style={{ gap: '16px', flexWrap: 'wrap', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="section-header-premium" style={{ gap: '16px', flexWrap: 'wrap', width: '100%', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <h3 className="section-title-premium" style={{ margin: 0 }}>Student Accounts Registry</h3>
-              
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', flexGrow: 1, justifyContent: 'flex-end' }}>
-                {/* Repositioned Search Box */}
-                <div className="search-bar-container" style={{ width: '160px', padding: '6px 12px', borderRadius: 'var(--radius-md)', height: '34px', margin: 0 }}>
-                  <Search size={14} style={{ color: 'var(--text-secondary)' }} />
-                  <input 
-                    type="text" 
-                    placeholder="Search students..." 
-                    style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '12px', width: '100%' }}
-                    value={searchQuery}
-                    onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-                  />
-                </div>
+              <button className="btn btn-primary" style={{ padding: '0 16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', height: '44px', borderRadius: '14px' }} onClick={() => { setCreateName(''); setCreateEmail(''); setCreatePhone(''); setCreateCourse('Fullstack Engineering'); setCreateBatchId(''); setCreateTempPassword(generateRandomPassword()); setShowCreateModal(true); }}>
+                <Plus size={14} /> Create Student
+              </button>
+            </div>
 
-                <CustomDropdown
-                  label="Course"
-                  value={courseFilter}
-                  onChange={(val) => { setCourseFilter(val); setCurrentPage(1); }}
-                  width="130px"
-                  options={[
-                    { value: '', label: 'Course' },
-                    { value: 'Fullstack Engineering', label: 'Fullstack Engineering' },
-                    { value: 'UI/UX Design', label: 'UI/UX Design' },
-                    { value: 'Data Science', label: 'Data Science' },
-                    { value: 'Mobile App Development', label: 'Mobile App Development' }
-                  ]}
-                />
-                
-                <CustomDropdown
-                  label="Batch"
-                  value={batchFilter}
-                  onChange={(val) => { setBatchFilter(val); setCurrentPage(1); }}
-                  width="110px"
-                  options={[
-                    { value: '', label: 'Batch' },
-                    ...batches.map(b => ({ value: b.id, label: b.name }))
-                  ]}
-                />
-
-                <CustomDropdown
-                  label="Status"
-                  value={statusFilter}
-                  onChange={(val) => { setStatusFilter(val); setCurrentPage(1); }}
-                  width="100px"
-                  options={[
-                    { value: '', label: 'Status' },
-                    { value: 'Active Only', label: 'Active Only' },
-                    { value: 'Suspended', label: 'Suspended' }
-                  ]}
-                />
-
-                <CustomDropdown
-                  label="Fee Status"
-                  value={feesFilter}
-                  onChange={(val) => { setFeesFilter(val); setCurrentPage(1); }}
-                  width="110px"
-                  options={[
-                    { value: '', label: 'Fee Status' },
+            <FilterBar
+              searchPlaceholder="Search Student Name, ID, Email, Mobile..."
+              searchValue={searchQuery}
+              onSearchChange={(val) => { setSearchQuery(val); setCurrentPage(1); }}
+              filters={[
+                {
+                  label: 'Course',
+                  value: courseFilter,
+                  onChange: (val) => { setCourseFilter(val); setCurrentPage(1); },
+                  options: courses.map(c => ({ value: c, label: c }))
+                },
+                {
+                  label: 'Batch',
+                  value: batchFilter,
+                  onChange: (val) => { setBatchFilter(val); setCurrentPage(1); },
+                  options: batches.map(b => ({ value: b.id, label: b.name }))
+                },
+                {
+                  label: 'Fee Status',
+                  value: feesFilter,
+                  onChange: (val) => { setFeesFilter(val); setCurrentPage(1); },
+                  options: [
                     { value: 'Paid', label: 'Fully Paid' },
                     { value: 'Pending', label: 'Pending Dues' }
-                  ]}
-                />
-
-                <div className="action-buttons-group">
-                  <ExportDropdown
-                    onExportCSV={exportToCSV}
-                    onExportExcel={exportToExcel}
-                    onExportPDF={exportToPDF}
-                  />
-                  <button className="btn btn-primary" style={{ padding: '0 16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', height: '46px', borderRadius: '14px' }} onClick={() => { setCreateName(''); setCreateEmail(''); setCreatePhone(''); setCreateCourse('Fullstack Engineering'); setCreateBatchId(''); setCreateTempPassword(generateRandomPassword()); setShowCreateModal(true); }}>
-                    <Plus size={14} /> Create Student
-                  </button>
-                </div>
-              </div>
-            </div>
+                  ]
+                },
+                {
+                  label: 'Account Status',
+                  value: statusFilter,
+                  onChange: (val) => { setStatusFilter(val); setCurrentPage(1); },
+                  options: [
+                    { value: 'Active Only', label: 'Active' },
+                    { value: 'Suspended', label: 'Inactive' }
+                  ]
+                }
+              ]}
+              showDateFilter={false}
+              onReset={() => {
+                setSearchQuery('');
+                setCourseFilter('');
+                setBatchFilter('');
+                setStatusFilter('');
+                setFeesFilter('');
+                setCurrentPage(1);
+              }}
+              onExportCSV={exportToCSV}
+              onExportExcel={exportToExcel}
+              onExportPDF={exportToPDF}
+            />
 
             {/* Desktop & Tablet: Fixed Header Table */}
             <div className="table-container-scrollable table-desktop-view">
@@ -3424,6 +3764,13 @@ const AdminDashboard = () => {
             
             if (!matchesSearch) return false;
             
+            const classBatch = batches.find(b => b.id === c.batch_id || b.name === c.batch_name);
+            const matchesCourse = !liveCourseFilter || (classBatch && classBatch.course_name === liveCourseFilter);
+            const matchesBatch = !liveBatchFilter || c.batch_id === liveBatchFilter || c.batch_name === liveBatchFilter;
+            const matchesStatus = !liveStatusFilter || c.status === liveStatusFilter;
+            
+            if (!matchesCourse || !matchesBatch || !matchesStatus) return false;
+
             if (!c.date) return true;
             const classDate = new Date(c.date);
             const now = new Date('2026-07-10T23:27:53');
@@ -3460,151 +3807,167 @@ const AdminDashboard = () => {
           });
 
           return (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '30px', alignItems: 'start' }} className="live-classes-container">
-              
-              {/* Left Side: Schedule Form */}
-              <div className="dashboard-card-section" style={{ padding: '28px' }}>
-                <h4 style={{ marginBottom: '24px', fontSize: '18px', fontWeight: '800', color: 'var(--text-primary)' }}>Schedule Live Lecture</h4>
-                <form onSubmit={addLiveClass} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label className="form-label" htmlFor="liveBatchSelect" style={{ fontWeight: 700, fontSize: '12px' }}>Target Batch</label>
-                    <CustomDropdown
-                      label="Target Batch"
-                      value={selectedBatchId}
-                      onChange={(val) => setSelectedBatchId(val)}
-                      width="100%"
-                      placeholder="-- Choose Batch --"
-                      options={[
-                        { value: '', label: '-- Choose Batch --' },
-                        ...batches.map(b => ({ value: b.id, label: `${b.name} (${b.code})` }))
-                      ]}
-                    />
-                  </div>
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label className="form-label" htmlFor="liveTitle" style={{ fontWeight: 700, fontSize: '12px' }}>Lecture Title</label>
-                    <input id="liveTitle" type="text" className="form-input form-input-lg" placeholder="e.g. Intro to React" value={liveTitle} onChange={(e) => setLiveTitle(e.target.value)} required />
-                  </div>
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label className="form-label" htmlFor="liveInstructor" style={{ fontWeight: 700, fontSize: '12px' }}>Lead Faculty</label>
-                    <input id="liveInstructor" type="text" className="form-input form-input-lg" placeholder="e.g. Sri Aakash" value={liveInstructor} onChange={(e) => setLiveInstructor(e.target.value)} required />
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label className="form-label" htmlFor="liveDate" style={{ fontWeight: 700, fontSize: '12px' }}>Date</label>
-                      <input id="liveDate" type="date" className="form-input form-input-lg" value={liveDate} onChange={(e) => setLiveDate(e.target.value)} required />
-                    </div>
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label className="form-label" htmlFor="liveTime" style={{ fontWeight: 700, fontSize: '12px' }}>Time / Schedule</label>
-                      <input id="liveTime" type="text" className="form-input form-input-lg" value={liveTime} onChange={(e) => setLiveTime(e.target.value)} placeholder="e.g. 7:00 PM - 8:30 PM" required />
-                    </div>
-                  </div>
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label className="form-label" htmlFor="liveUrl" style={{ fontWeight: 700, fontSize: '12px' }}>Google Meet Link</label>
-                    <input id="liveUrl" type="url" className="form-input form-input-lg" placeholder="https://meet.google.com/..." value={liveUrl} onChange={(e) => setLiveUrl(e.target.value)} required />
-                  </div>
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label className="form-label" htmlFor="liveStatusSelect" style={{ fontWeight: 700, fontSize: '12px' }}>Class Status</label>
-                    <CustomDropdown
-                      label="Class Status"
-                      value={liveStatus}
-                      onChange={(val) => setLiveStatus(val)}
-                      width="100%"
-                      options={[
-                        { value: 'Upcoming', label: 'Upcoming' },
-                        { value: 'Live', label: 'Live' },
-                        { value: 'Completed', label: 'Completed' }
-                      ]}
-                    />
-                  </div>
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label className="form-label" htmlFor="liveDescription" style={{ fontWeight: 700, fontSize: '12px' }}>Description</label>
-                    <textarea id="liveDescription" className="form-input" style={{ height: '70px', resize: 'none', borderRadius: '10px' }} placeholder="Brief overview of lecture contents..." value={liveDescription} onChange={(e) => setLiveDescription(e.target.value)} />
-                  </div>
-                  <div style={{ display: 'flex', gap: '16px', margin: '4px 0' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <input id="liveToday" type="checkbox" checked={liveToday} onChange={(e) => setLiveToday(e.target.checked)} />
-                      <label htmlFor="liveToday" className="form-label" style={{ marginBottom: 0, fontSize: '12.5px', cursor: 'pointer' }}>Happening Today?</label>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <input id="livePublished" type="checkbox" checked={livePublished} onChange={(e) => setLivePublished(e.target.checked)} />
-                      <label htmlFor="livePublished" className="form-label" style={{ marginBottom: 0, fontSize: '12.5px', cursor: 'pointer' }}>Publish Stream</label>
-                    </div>
-                  </div>
-                  <button type="submit" className="btn btn-primary btn-block btn-purple-gradient" style={{ height: '48px', fontSize: '14.5px' }}>Confirm Live Lecture</button>
-                </form>
-              </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
+              <FilterBar
+                searchPlaceholder="Search Lecture, Faculty..."
+                searchValue={sessionSearch}
+                onSearchChange={(val) => { setSessionSearch(val); setLivePage(1); }}
+                filters={[
+                  {
+                    label: 'Course',
+                    value: liveCourseFilter,
+                    onChange: (val) => { setLiveCourseFilter(val); setLivePage(1); },
+                    options: Array.from(new Set(batches.map(b => b.course_name))).filter(Boolean).map(c => ({ value: c, label: c }))
+                  },
+                  {
+                    label: 'Batch',
+                    value: liveBatchFilter,
+                    onChange: (val) => { setLiveBatchFilter(val); setLivePage(1); },
+                    options: batches.map(b => ({ value: b.id, label: b.name }))
+                  },
+                  {
+                    label: 'Live Status',
+                    value: liveStatusFilter,
+                    onChange: (val) => { setLiveStatusFilter(val); setLivePage(1); },
+                    options: [
+                      { value: 'Live', label: 'Live' },
+                      { value: 'Upcoming', label: 'Upcoming' },
+                      { value: 'Completed', label: 'Completed' }
+                    ]
+                  }
+                ]}
+                showDateFilter={true}
+                activeQuickFilter={dateFilter}
+                onQuickFilterChange={(pill) => { setDateFilter(pill); setLivePage(1); }}
+                startDateValue={customStartDate}
+                endDateValue={customEndDate}
+                onStartDateChange={(val) => { setCustomStartDate(val); setLivePage(1); }}
+                onEndDateChange={(val) => { setCustomEndDate(val); setLivePage(1); }}
+                onReset={() => {
+                  setSessionSearch('');
+                  setLiveCourseFilter('');
+                  setLiveBatchFilter('');
+                  setLiveStatusFilter('');
+                  setDateFilter('This Week');
+                  setCustomStartDate('');
+                  setCustomEndDate('');
+                  setLivePage(1);
+                }}
+                onExportCSV={exportLiveClassesToCSV}
+                onExportExcel={exportLiveClassesToExcel}
+                onExportPDF={exportLiveClassesToPDF}
+              />
 
-              {/* Right Side: Active Sessions Management */}
-              <div className="dashboard-card-section" style={{ display: 'flex', flexDirection: 'column', gap: '20px', minWidth: 0 }}>
-                
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-                  <h4 style={{ fontSize: '18px', fontWeight: '800', margin: 0, color: 'var(--text-primary)' }}>Active Sessions</h4>
-                  
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <ExportDropdown
-                      onExportCSV={exportLiveClassesToCSV}
-                      onExportExcel={exportLiveClassesToExcel}
-                      onExportPDF={exportLiveClassesToPDF}
-                    />
-                    {/* Search bar inside header */}
-                    <div className="search-bar-container" style={{ width: '200px', padding: '6px 12px', borderRadius: 'var(--radius-md)', height: '34px', margin: 0 }}>
-                      <Search size={14} style={{ color: 'var(--text-secondary)' }} />
-                      <input 
-                        type="text" 
-                        placeholder="Search sessions..." 
-                        style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '12px', width: '100%' }}
-                        value={sessionSearch}
-                        onChange={(e) => setSessionSearch(e.target.value)}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '30px', alignItems: 'start' }} className="live-classes-container">
+                {/* Left Side: Schedule Form */}
+                <div className="dashboard-card-section" style={{ padding: '28px' }}>
+                  <h4 style={{ marginBottom: '24px', fontSize: '18px', fontWeight: '800', color: 'var(--text-primary)' }}>Schedule Live Lecture</h4>
+                  <form onSubmit={addLiveClass} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" htmlFor="liveBatchSelect" style={{ fontWeight: 700, fontSize: '12px' }}>Target Batch</label>
+                      <CustomDropdown
+                        label="Target Batch"
+                        value={selectedBatchId}
+                        onChange={(val) => setSelectedBatchId(val)}
+                        width="100%"
+                        placeholder="-- Choose Batch --"
+                        options={[
+                          { value: '', label: '-- Choose Batch --' },
+                          ...batches.map(b => ({ value: b.id, label: `${b.name} (${b.code})` }))
+                        ]}
                       />
                     </div>
-                  </div>
-                </div>
-
-                {/* Filter Pills */}
-                <div className="date-filter-row" style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px', scrollbarWidth: 'none' }}>
-                  {['Today', 'This Week', 'This Month', 'This Year', 'Custom Range'].map(f => (
-                    <button
-                      key={f}
-                      type="button"
-                      className={`session-filter-pill ${dateFilter === f ? 'active' : ''}`}
-                      onClick={() => setDateFilter(f)}
-                    >
-                      {f}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Custom Date Range Picker */}
-                {dateFilter === 'Custom Range' && (
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', background: 'var(--surface-alt)', padding: '12px', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
-                    <input type="date" className="form-input" style={{ height: '36px', fontSize: '12.5px' }} value={customStartDate} onChange={(e) => setCustomStartDate(e.target.value)} />
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>to</span>
-                    <input type="date" className="form-input" style={{ height: '36px', fontSize: '12.5px' }} value={customEndDate} onChange={(e) => setCustomEndDate(e.target.value)} />
-                  </div>
-                )}
-
-                {/* Sessions Logs Table/Cards */}
-                {filteredClasses.length === 0 ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '40px 20px', background: 'var(--surface-alt)', borderRadius: '16px', border: '1.5px dashed var(--border-color)' }}>
-                    <div style={{ width: '80px', height: '80px', background: 'rgba(108,60,240,0.06)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--primary-color)' }}>
-                      <CalendarCheck size={40} />
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" htmlFor="liveTitle" style={{ fontWeight: 700, fontSize: '12px' }}>Lecture Title</label>
+                      <input id="liveTitle" type="text" className="form-input form-input-lg" placeholder="e.g. Intro to React" value={liveTitle} onChange={(e) => setLiveTitle(e.target.value)} required />
                     </div>
-                    <h5 style={{ fontSize: '16px', fontWeight: '800', margin: '0 0 4px' }}>No Live Sessions</h5>
-                    <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '280px', margin: '0 0 16px' }}>There are currently no active sessions.</p>
-                    <button type="button" className="btn btn-primary btn-sm" onClick={() => document.getElementById('liveTitle')?.focus()}>Schedule Session</button>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" htmlFor="liveInstructor" style={{ fontWeight: 700, fontSize: '12px' }}>Lead Faculty</label>
+                      <input id="liveInstructor" type="text" className="form-input form-input-lg" placeholder="e.g. Sri Aakash" value={liveInstructor} onChange={(e) => setLiveInstructor(e.target.value)} required />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label" htmlFor="liveDate" style={{ fontWeight: 700, fontSize: '12px' }}>Date</label>
+                        <input id="liveDate" type="date" className="form-input form-input-lg" value={liveDate} onChange={(e) => setLiveDate(e.target.value)} required />
+                      </div>
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label" htmlFor="liveTime" style={{ fontWeight: 700, fontSize: '12px' }}>Time / Schedule</label>
+                        <input id="liveTime" type="text" className="form-input form-input-lg" value={liveTime} onChange={(e) => setLiveTime(e.target.value)} placeholder="e.g. 7:00 PM - 8:30 PM" required />
+                      </div>
+                    </div>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" htmlFor="liveUrl" style={{ fontWeight: 700, fontSize: '12px' }}>Google Meet Link</label>
+                      <input id="liveUrl" type="url" className="form-input form-input-lg" placeholder="https://meet.google.com/..." value={liveUrl} onChange={(e) => setLiveUrl(e.target.value)} required />
+                    </div>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" htmlFor="liveStatusSelect" style={{ fontWeight: 700, fontSize: '12px' }}>Class Status</label>
+                      <CustomDropdown
+                        label="Class Status"
+                        value={liveStatus}
+                        onChange={(val) => setLiveStatus(val)}
+                        width="100%"
+                        options={[
+                          { value: 'Upcoming', label: 'Upcoming' },
+                          { value: 'Live', label: 'Live' },
+                          { value: 'Completed', label: 'Completed' }
+                        ]}
+                      />
+                    </div>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" htmlFor="liveDescription" style={{ fontWeight: 700, fontSize: '12px' }}>Description</label>
+                      <textarea id="liveDescription" className="form-input" style={{ height: '70px', resize: 'none', borderRadius: '10px' }} placeholder="Brief overview of lecture contents..." value={liveDescription} onChange={(e) => setLiveDescription(e.target.value)} />
+                    </div>
+                    <div style={{ display: 'flex', gap: '16px', margin: '4px 0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <input id="liveToday" type="checkbox" checked={liveToday} onChange={(e) => setLiveToday(e.target.checked)} />
+                        <label htmlFor="liveToday" className="form-label" style={{ marginBottom: 0, fontSize: '12.5px', cursor: 'pointer' }}>Happening Today?</label>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <input id="livePublished" type="checkbox" checked={livePublished} onChange={(e) => setLivePublished(e.target.checked)} />
+                        <label htmlFor="livePublished" className="form-label" style={{ marginBottom: 0, fontSize: '12.5px', cursor: 'pointer' }}>Publish Stream</label>
+                      </div>
+                    </div>
+                    <button type="submit" className="btn btn-primary btn-block btn-purple-gradient" style={{ height: '48px', fontSize: '14.5px' }}>Confirm Live Lecture</button>
+                  </form>
+                </div>
+
+                {/* Right Side: Active Sessions Management */}
+                <div className="dashboard-card-section" style={{ display: 'flex', flexDirection: 'column', gap: '20px', minWidth: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                    <h4 style={{ fontSize: '18px', fontWeight: '800', margin: 0, color: 'var(--text-primary)' }}>Active Sessions</h4>
                   </div>
-                ) : (() => {
-                  const limit = 5;
-                  const totalLivePages = Math.ceil(filteredClasses.length / limit) || 1;
-                  const safeLivePage = Math.min(livePage, totalLivePages);
-                  const paginatedClasses = filteredClasses.slice((safeLivePage - 1) * limit, safeLivePage * limit);
+
+                  {filteredClasses.length === 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '40px 20px', background: 'var(--surface-alt)', borderRadius: '16px', border: '1.5px dashed var(--border-color)' }}>
+                      <div style={{ width: '80px', height: '80px', background: 'rgba(108,60,240,0.06)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--primary-color)' }}>
+                        <CalendarCheck size={40} />
+                      </div>
+                      <h5 style={{ fontSize: '16px', fontWeight: '800', margin: '0 0 4px' }}>No Live Sessions</h5>
+                      <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '280px', margin: '0 0 16px' }}>There are currently no sessions matching the active filters.</p>
+                      <button type="button" className="btn btn-primary btn-sm" onClick={() => document.getElementById('liveTitle')?.focus()}>Schedule Session</button>
+                    </div>
+                  ) : (() => {
+                    const limit = 5;
+                    const totalLivePages = Math.ceil(filteredClasses.length / limit) || 1;
+                    const safeLivePage = Math.min(livePage, totalLivePages);
+                    const paginatedClasses = filteredClasses.slice((safeLivePage - 1) * limit, safeLivePage * limit);
 
                   return (
                     <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, justifyContent: 'space-between' }}>
                       <div>
                         {/* Desktop table view */}
                         <div className="table-container-premium table-desktop-view" style={{ border: '1px solid var(--border-color)', borderRadius: '12px', overflow: 'hidden' }}>
-                          <table className="table-premium" style={{ tableLayout: 'auto' }}>
+                          <table className="table-premium table-live-classes">
+                            <colgroup>
+                              <col style={{ width: '22%' }} />
+                              <col style={{ width: '15%' }} />
+                              <col style={{ width: '13%' }} />
+                              <col style={{ width: '11%' }} />
+                              <col style={{ width: '13%' }} />
+                              <col style={{ width: '11%' }} />
+                              <col style={{ width: '5%' }} />
+                              <col style={{ width: '10%' }} />
+                            </colgroup>
                             <thead>
                               <tr>
                                 <th>Lecture</th>
@@ -3614,20 +3977,30 @@ const AdminDashboard = () => {
                                 <th>Time</th>
                                 <th>Status</th>
                                 <th>Students</th>
-                                <th style={{ textAlign: 'center' }}>Actions</th>
+                                <th className="col-actions" style={{ textAlign: 'center' }}>Actions</th>
                               </tr>
                             </thead>
                             <tbody>
                               {paginatedClasses.map((item, idx) => {
-                                let badgeClass = 'badge-status-completed';
-                                if (item.status === 'Live') badgeClass = 'badge-status-live';
-                                else if (item.status === 'Upcoming') badgeClass = 'badge-status-upcoming';
+                                const badgeClass = item.status === 'Live' ? 'badge-status-live' : (item.status === 'Upcoming' ? 'badge-status-upcoming' : 'badge-status-completed');
 
                                 return (
                                   <tr key={item._id || idx}>
-                                    <td><strong style={{ fontSize: '13.5px' }}>{item.title}</strong></td>
-                                    <td><span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>{item.batch_name}</span></td>
-                                    <td><span style={{ fontSize: '12.5px' }}>{item.instructor}</span></td>
+                                    <td>
+                                      <div style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={item.title}>
+                                        <strong style={{ fontSize: '13.5px' }}>{item.title}</strong>
+                                      </div>
+                                    </td>
+                                    <td>
+                                      <div style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={item.batch_name}>
+                                        <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>{item.batch_name}</span>
+                                      </div>
+                                    </td>
+                                    <td>
+                                      <div style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={item.instructor}>
+                                        <span style={{ fontSize: '12.5px' }}>{item.instructor}</span>
+                                      </div>
+                                    </td>
                                     <td><span style={{ fontSize: '12.5px' }}>{item.date}</span></td>
                                     <td><span style={{ fontSize: '12.5px' }}>{item.time}</span></td>
                                     <td>
@@ -3636,23 +4009,23 @@ const AdminDashboard = () => {
                                       </span>
                                     </td>
                                     <td style={{ textAlign: 'center' }}><span style={{ fontWeight: '700' }}>{item.students_joined}</span></td>
-                                    <td>
-                                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                                    <td className="col-actions">
+                                      <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', flexWrap: 'wrap' }}>
                                         {item.status === 'Live' && (
                                           <>
-                                            <a href={item.meet_link} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-sm" style={{ height: '30px', padding: '0 10px', fontSize: '11.5px', backgroundColor: '#10B981', borderColor: '#10B981' }}>Join</a>
-                                            <button type="button" className="btn btn-outline btn-sm" style={{ height: '30px', padding: '0 8px' }} onClick={() => handleEditLiveClick(item)}>Edit</button>
-                                            <button type="button" className="btn btn-danger btn-sm" style={{ height: '30px', padding: '0 8px' }} onClick={() => deleteLiveClass(item._id)}>End</button>
+                                            <a href={item.meet_link} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-sm" style={{ height: '26px', padding: '0 8px', fontSize: '11px', backgroundColor: '#10B981', borderColor: '#10B981', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>Join</a>
+                                            <button type="button" className="btn btn-outline btn-sm" style={{ height: '26px', padding: '0 6px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => handleEditLiveClick(item)}>Edit</button>
+                                            <button type="button" className="btn btn-danger btn-sm" style={{ height: '26px', padding: '0 6px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => deleteLiveClass(item._id)}>End</button>
                                           </>
                                         )}
                                         {item.status === 'Upcoming' && (
                                           <>
-                                            <button type="button" className="btn btn-outline btn-sm" style={{ height: '30px', padding: '0 8px' }} onClick={() => handleEditLiveClick(item)}>Edit</button>
-                                            <button type="button" className="btn btn-danger btn-sm" style={{ height: '30px', padding: '0 8px', backgroundColor: 'var(--danger-color)', color: 'white' }} onClick={() => deleteLiveClass(item._id)}>Cancel</button>
+                                            <button type="button" className="btn btn-outline btn-sm" style={{ height: '26px', padding: '0 6px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => handleEditLiveClick(item)}>Edit</button>
+                                            <button type="button" className="btn btn-danger btn-sm" style={{ height: '26px', padding: '0 6px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--danger-color)', color: 'white' }} onClick={() => deleteLiveClass(item._id)}>Cancel</button>
                                           </>
                                         )}
                                         {item.status === 'Completed' && (
-                                          <button type="button" className="btn btn-outline btn-sm" style={{ height: '30px', padding: '0 10px', fontSize: '11.5px' }} onClick={() => showModal("Lecture Recording", `Viewing recording link for ${item.title}: ${item.meet_link || 'N/A'}`)}>View Recording</button>
+                                          <button type="button" className="btn btn-outline btn-sm" style={{ height: '26px', padding: '0 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => showModal("Lecture Recording", `Viewing recording link for ${item.title}: ${item.meet_link || 'N/A'}`)}>View Recording</button>
                                         )}
                                       </div>
                                     </td>
@@ -3741,238 +4114,61 @@ const AdminDashboard = () => {
                   );
                 })()}
               </div>
-
             </div>
-          );
-        })()}
+          </div>
+        );
+      })()}
 
-        {/* Attendance Tab */}
         {activeTab === 'attendance' && (
-          <div>
-            {/* Top Filter Bar */}
-            <div className="dashboard-card-section" style={{ marginBottom: '24px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', alignItems: 'end' }}>
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label">Search Student</label>
-                  <input 
-                    type="text" 
-                    className="form-input" 
-                    placeholder="Name, ID, or Mobile..." 
-                    value={attSearchQuery} 
-                    onChange={(e) => { setAttSearchQuery(e.target.value); setAttendancePage(1); }} 
-                  />
-                </div>
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label">Select Course</label>
-                  <select 
-                    className="form-select" 
-                    value={attCourse} 
-                    onChange={handleCourseChange}
-                  >
-                    <option value="">All Courses</option>
-                    {Array.from(new Set(batches.map(b => b.course_name))).filter(Boolean).map(c => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label">Select Batch</label>
-                  <select 
-                    className="form-select" 
-                    value={attBatchId} 
-                    onChange={handleBatchChange}
-                    required
-                  >
-                    <option value="">-- Choose Batch --</option>
-                    {(attCourse ? batches.filter(b => b.course_name === attCourse) : batches).map(b => (
-                      <option key={b.id} value={b.id}>{b.name} ({b.code})</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label">Attendance Date</label>
-                  <input 
-                    type="date" 
-                    className="form-input" 
-                    value={attendanceDate} 
-                    onChange={(e) => setAttendanceDate(e.target.value)} 
-                  />
-                </div>
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label">Attendance Status</label>
-                  <select 
-                    className="form-select" 
-                    value={attStatusFilter} 
-                    onChange={(e) => { setAttStatusFilter(e.target.value); setAttendancePage(1); }}
-                  >
-                    <option value="All">All Statuses</option>
-                    <option value="Present">Present</option>
-                    <option value="Absent">Absent</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Content Body */}
-            {!attBatchId ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '300px', background: 'white', borderRadius: '18px', border: '1px solid var(--border-light)', padding: '40px', boxShadow: 'var(--shadow-sm)' }}>
-                <div style={{ width: '80px', height: '80px', background: 'var(--primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--primary-color)' }}>
-                  <Users size={40} />
-                </div>
-                <h4 style={{ fontSize: '18px', fontWeight: '800', margin: '0 0 6px' }}>Select Batch</h4>
-                <p style={{ fontSize: '14px', color: 'var(--text-secondary)', margin: 0 }}>Select a batch to start marking attendance.</p>
-              </div>
-            ) : attendanceRecords.length === 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '300px', background: 'white', borderRadius: '18px', border: '1px solid var(--border-light)', padding: '40px', boxShadow: 'var(--shadow-sm)' }}>
-                <div style={{ width: '80px', height: '80px', background: 'var(--primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--primary-color)' }}>
-                  <Users size={40} />
-                </div>
-                <h4 style={{ fontSize: '18px', fontWeight: '800', margin: '0 0 6px' }}>No Students</h4>
-                <p style={{ fontSize: '14px', color: 'var(--text-secondary)', margin: 0 }}>No students assigned to this batch.</p>
-              </div>
-            ) : (() => {
-              const totalStudentsCount = attendanceRecords.length;
-              const presentCount = attendanceRecords.filter(r => r.status === 'Present').length;
-              const absentCount = attendanceRecords.filter(r => r.status === 'Absent').length;
-              const attendancePercentage = totalStudentsCount > 0 ? Math.round((presentCount / totalStudentsCount) * 100) : 100;
-
-              const filteredRecords = attendanceRecords.filter(r => {
-                const query = attSearchQuery.toLowerCase();
-                const matchesSearch = !query || 
-                  (r.student_name || '').toLowerCase().includes(query) ||
-                  (r.rollNumber || '').toLowerCase().includes(query) ||
-                  (r.phone || '').toLowerCase().includes(query);
-                const matchesStatus = attStatusFilter === 'All' || r.status === attStatusFilter;
-                return matchesSearch && matchesStatus;
-              });
-
-              const attLimit = 10;
-              const attTotalPages = Math.ceil(filteredRecords.length / attLimit) || 1;
-              const safeAttPage = Math.min(attendancePage, attTotalPages);
-              const paginatedAttRecords = filteredRecords.slice((safeAttPage - 1) * attLimit, safeAttPage * attLimit);
-
-              return (
-                <div>
-                  {/* Summary Cards */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '24px' }}>
-                    <div style={{ background: 'white', borderRadius: '18px', padding: '20px', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-light)' }}>
-                      <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '6px' }}>Total Students</div>
-                      <div style={{ fontSize: '28px', fontWeight: '800', color: 'var(--text-primary)' }}>{totalStudentsCount}</div>
-                    </div>
-                    <div style={{ background: 'white', borderRadius: '18px', padding: '20px', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-light)' }}>
-                      <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--success-color)', textTransform: 'uppercase', marginBottom: '6px' }}>Present</div>
-                      <div style={{ fontSize: '28px', fontWeight: '800', color: 'var(--success-color)' }}>{presentCount}</div>
-                    </div>
-                    <div style={{ background: 'white', borderRadius: '18px', padding: '20px', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-light)' }}>
-                      <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--danger-color)', textTransform: 'uppercase', marginBottom: '6px' }}>Absent</div>
-                      <div style={{ fontSize: '28px', fontWeight: '800', color: 'var(--danger-color)' }}>{absentCount}</div>
-                    </div>
-                    <div style={{ background: 'white', borderRadius: '18px', padding: '20px', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-light)' }}>
-                      <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--primary-color)', textTransform: 'uppercase', marginBottom: '6px' }}>Attendance Rate</div>
-                      <div style={{ fontSize: '28px', fontWeight: '800', color: 'var(--primary-color)' }}>{attendancePercentage}%</div>
-                    </div>
-                  </div>
-
-                  {/* Attendance Table Panel */}
-                  <div className="dashboard-card-section">
-                    <div className="section-header-premium" style={{ marginBottom: '18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-                      <h3 className="section-title-premium" style={{ margin: 0 }}>Attendance Sheet Register</h3>
-                      <div className="action-buttons-group" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                        <button type="button" className="btn btn-outline" style={{ padding: '8px 16px', fontSize: '13px' }} onClick={() => setAttendanceRecords(prev => prev.map(r => ({ ...r, status: 'Present' })))}>Mark All Present</button>
-                        <button type="button" className="btn btn-outline" style={{ padding: '8px 16px', fontSize: '13px' }} onClick={() => setAttendanceRecords(prev => prev.map(r => ({ ...r, status: 'Absent' })))}>Mark All Absent</button>
-                        <button type="button" className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '13px' }} onClick={saveAttendanceSheet}>Save Attendance</button>
-                        <ExportDropdown
-                           onExportCSV={exportAttendanceCSV}
-                           onExportExcel={exportAttendanceSheetToExcel}
-                           onExportPDF={exportAttendanceSheetToPDF}
-                         />
-                      </div>
-                    </div>
-
-                    <div className="table-container-premium">
-                      <table className="table-premium">
-                        <thead>
-                          <tr>
-                            <th>Profile</th>
-                            <th>Student Name</th>
-                            <th>Student ID</th>
-                            <th>Mobile</th>
-                            <th>Course</th>
-                            <th>Batch</th>
-                            <th>Attendance</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {paginatedAttRecords.map(r => (
-                            <tr key={r.student_id}>
-                              <td>
-                                <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--primary-light)', color: 'var(--primary-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '13px' }}>
-                                  {(r.student_name || 'S').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
-                                </div>
-                              </td>
-                              <td>{r.student_name}</td>
-                              <td><strong>{r.rollNumber}</strong></td>
-                              <td>{r.phone || 'N/A'}</td>
-                              <td>{r.course}</td>
-                              <td>{r.batch_name}</td>
-                              <td>
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                  <button 
-                                    type="button"
-                                    className={`btn ${r.status === 'Present' ? 'btn-primary' : 'btn-outline'}`}
-                                    style={{ 
-                                      padding: '6px 14px', 
-                                      fontSize: '12px', 
-                                      borderRadius: '20px',
-                                      borderColor: r.status === 'Present' ? '#10B981' : '#E5E7EB',
-                                      backgroundColor: r.status === 'Present' ? '#10B981' : 'transparent',
-                                      color: r.status === 'Present' ? 'white' : '#4B5563'
-                                    }}
-                                    onClick={() => handleStatusChange(r.student_id, 'Present')}
-                                  >
-                                    Present
-                                  </button>
-                                  <button 
-                                    type="button"
-                                    className={`btn ${r.status === 'Absent' ? 'btn-danger' : 'btn-outline'}`}
-                                    style={{ 
-                                      padding: '6px 14px', 
-                                      fontSize: '12px', 
-                                      borderRadius: '20px',
-                                      borderColor: r.status === 'Absent' ? '#EF4444' : '#E5E7EB',
-                                      backgroundColor: r.status === 'Absent' ? '#EF4444' : 'transparent',
-                                      color: r.status === 'Absent' ? 'white' : '#4B5563'
-                                    }}
-                                    onClick={() => handleStatusChange(r.student_id, 'Absent')}
-                                  >
-                                    Absent
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {/* Pagination */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', borderTop: '1px solid var(--border-light)', paddingTop: '15px' }}>
-                      <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                        Viewing page <strong>{safeAttPage}</strong> of {attTotalPages}
-                      </span>
-                      <div style={{ display: 'flex', gap: '6px' }}>
-                        <button type="button" className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px', height: '32px' }} disabled={safeAttPage === 1} onClick={() => setAttendancePage(prev => Math.max(prev - 1, 1))}>
-                          Prev
-                        </button>
-                        <button type="button" className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px', height: '32px' }} disabled={safeAttPage === attTotalPages} onClick={() => setAttendancePage(prev => Math.min(prev + 1, attTotalPages))}>
-                          Next
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
+            <FilterBar
+              searchPlaceholder="Search Student Name, ID..."
+              searchValue={attSearchQuery}
+              onSearchChange={(val) => { setAttSearchQuery(val); setAttendancePage(1); }}
+              filters={[
+                {
+                  label: 'Course',
+                  value: attCourseFilter,
+                  onChange: (val) => { setAttCourseFilter(val); setAttendancePage(1); },
+                  options: Array.from(new Set(batches.map(b => b.course_name))).filter(Boolean).map(c => ({ value: c, label: c }))
+                },
+                {
+                  label: 'Batch',
+                  value: attBatchFilter,
+                  onChange: (val) => { setAttBatchFilter(val); setAttendancePage(1); },
+                  options: batches.map(b => ({ value: b.id, label: b.name }))
+                },
+                {
+                  label: 'Attendance Status',
+                  value: attStatusFilter,
+                  onChange: (val) => { setAttStatusFilter(val); setAttendancePage(1); },
+                  options: [
+                    { value: 'high', label: 'High Rate (>= 80%)' },
+                    { value: 'low', label: 'Low Rate (< 80%)' }
+                  ]
+                }
+              ]}
+              showDateFilter={true}
+              activeQuickFilter={attDateFilter}
+              onQuickFilterChange={(pill) => { setAttDateFilter(pill); setAttendancePage(1); }}
+              startDateValue={attStartDateFilter}
+              endDateValue={attEndDateFilter}
+              onStartDateChange={(val) => { setAttStartDateFilter(val); setAttendancePage(1); }}
+              onEndDateChange={(val) => { setAttEndDateFilter(val); setAttendancePage(1); }}
+              onReset={() => {
+                setAttSearchQuery('');
+                setAttCourseFilter('');
+                setAttBatchFilter('');
+                setAttStatusFilter('');
+                setAttDateFilter('This Month');
+                setAttStartDateFilter('');
+                setAttEndDateFilter('');
+                setAttendancePage(1);
+              }}
+              onExportCSV={exportAttHistoryToCSV}
+              onExportExcel={exportAttHistoryToExcel}
+              onExportPDF={exportAttHistoryToPDF}
+            />
 
             {/* Attendance History Section */}
             <div className="dashboard-card-section" style={{ marginTop: '30px' }}>
@@ -3990,100 +4186,151 @@ const AdminDashboard = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {attSheetsHistory.length === 0 ? (
+                    {filteredAttSheets.length === 0 ? (
                       <tr>
                         <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-secondary)' }}>
-                          No attendance logs history found.
+                          No attendance logs history found matching the filters.
                         </td>
                       </tr>
                     ) : (
-                      attSheetsHistory.map((sheet, idx) => (
+                      filteredAttSheets.map((sheet, idx) => (
                         <tr key={sheet.id || idx}>
                           <td><strong>{sheet.date}</strong></td>
-                          <td>{sheet.batch_name}</td>
-                          <td style={{ color: 'var(--success-color)', fontWeight: '600' }}>{sheet.present_count ?? 0} students</td>
-                          <td style={{ color: 'var(--danger-color)', fontWeight: '600' }}>{sheet.absent_count ?? 0} students</td>
-                          <td style={{ color: 'var(--primary-color)', fontWeight: '700' }}>{sheet.attendance_percentage ?? 100}%</td>
-                          <td>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                              <button 
-                                type="button" 
-                                className="btn btn-outline" 
-                                style={{ padding: '6px 12px', fontSize: '12px' }}
-                                onClick={() => {
-                                  setViewingHistoryRecord(sheet);
-                                }}
-                              >
-                                View Logs
-                              </button>
-                              <button 
-                                type="button" 
-                                className="btn btn-outline" 
-                                style={{ padding: '6px 12px', fontSize: '12px' }}
-                                onClick={() => handleEditHistoryRecord(sheet)}
-                              >
-                                Edit
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Attendance View Detail Modal */}
-            {viewingHistoryRecord && (
-              <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
-                <div style={{ background: 'white', borderRadius: '20px', padding: '24px', width: '100%', maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto', boxShadow: 'var(--shadow-lg)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid var(--border-light)', paddingBottom: '12px' }}>
-                    <h4 style={{ margin: 0, fontSize: '18px', fontWeight: '800' }}>Attendance Logs Detail</h4>
-                    <button type="button" className="btn btn-outline" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => setViewingHistoryRecord(null)}>Close</button>
-                  </div>
-                  
-                  <div style={{ marginBottom: '16px', fontSize: '14px', color: 'var(--text-secondary)' }}>
-                    <p style={{ margin: '4px 0' }}><strong>Batch Name:</strong> {viewingHistoryRecord.batch_name}</p>
-                    <p style={{ margin: '4px 0' }}><strong>Course:</strong> {viewingHistoryRecord.course_name}</p>
-                    <p style={{ margin: '4px 0' }}><strong>Date:</strong> {viewingHistoryRecord.date}</p>
-                    <p style={{ margin: '4px 0' }}><strong>Attendance Rate:</strong> {viewingHistoryRecord.attendance_percentage}%</p>
-                  </div>
-
-                  <div className="table-container-premium" style={{ border: '1px solid var(--border-light)', borderRadius: '12px' }}>
-                    <table className="table-premium" style={{ fontSize: '13px' }}>
-                      <thead>
-                        <tr>
-                          <th>Roll No.</th>
-                          <th>Student Name</th>
-                          <th>Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(viewingHistoryRecord.records || []).map((rec, idx) => (
-                          <tr key={rec.student_id || idx}>
-                            <td>{rec.rollNumber}</td>
-                            <td>{rec.student_name}</td>
+                            <td>{sheet.batch_name}</td>
+                            <td style={{ color: 'var(--success-color)', fontWeight: '600' }}>{sheet.present_count ?? 0} students</td>
+                            <td style={{ color: 'var(--danger-color)', fontWeight: '600' }}>{sheet.absent_count ?? 0} students</td>
+                            <td style={{ color: 'var(--primary-color)', fontWeight: '700' }}>{sheet.attendance_percentage ?? 100}%</td>
                             <td>
-                              <span className={`badge-status ${rec.status === 'Present' ? 'paid' : 'unpaid'}`} style={{ textTransform: 'capitalize' }}>
-                                {rec.status}
-                              </span>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <button 
+                                  type="button" 
+                                  className="btn btn-outline" 
+                                  style={{ padding: '6px 12px', fontSize: '12px' }}
+                                  onClick={() => {
+                                    setViewingHistoryRecord(sheet);
+                                  }}
+                                >
+                                  View Logs
+                                </button>
+                                <button 
+                                  type="button" 
+                                  className="btn btn-outline" 
+                                  style={{ padding: '6px 12px', fontSize: '12px' }}
+                                  onClick={() => handleEditHistoryRecord(sheet)}
+                                >
+                                  Edit
+                                </button>
+                              </div>
                             </td>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
-            )}
+
+              {/* Attendance View Detail Modal */}
+              {viewingHistoryRecord && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+                  <div style={{ background: 'white', borderRadius: '20px', padding: '24px', width: '100%', maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto', boxShadow: 'var(--shadow-lg)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid var(--border-light)', paddingBottom: '12px' }}>
+                      <h4 style={{ margin: 0, fontSize: '18px', fontWeight: '800' }}>Attendance Logs Detail</h4>
+                      <button type="button" className="btn btn-outline" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => setViewingHistoryRecord(null)}>Close</button>
+                    </div>
+                    
+                    <div style={{ marginBottom: '16px', fontSize: '14px', color: 'var(--text-secondary)' }}>
+                      <p style={{ margin: '4px 0' }}><strong>Batch Name:</strong> {viewingHistoryRecord.batch_name}</p>
+                      <p style={{ margin: '4px 0' }}><strong>Course:</strong> {viewingHistoryRecord.course_name}</p>
+                      <p style={{ margin: '4px 0' }}><strong>Date:</strong> {viewingHistoryRecord.date}</p>
+                      <p style={{ margin: '4px 0' }}><strong>Attendance Rate:</strong> {viewingHistoryRecord.attendance_percentage}%</p>
+                    </div>
+
+                    <div className="table-container-premium" style={{ border: '1px solid var(--border-light)', borderRadius: '12px' }}>
+                      <table className="table-premium" style={{ fontSize: '13px' }}>
+                        <thead>
+                          <tr>
+                            <th>Roll No.</th>
+                            <th>Student Name</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(viewingHistoryRecord.records || []).map((rec, idx) => (
+                            <tr key={rec.student_id || idx}>
+                              <td>{rec.rollNumber}</td>
+                              <td>{rec.student_name}</td>
+                              <td>
+                                <span className={`badge-status ${rec.status === 'Present' ? 'paid' : 'unpaid'}`} style={{ textTransform: 'capitalize' }}>
+                                  {rec.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
 
           </div>
-        )}
+      )}
 
         {/* Recorded Classes View */}
         {activeTab === 'recorded-classes' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '30px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
+            <FilterBar
+              searchPlaceholder="Search Lesson or Module..."
+              searchValue={recordedSearchQuery}
+              onSearchChange={(val) => { setRecordedSearchQuery(val); setRecordedPage(1); }}
+              filters={[
+                {
+                  label: 'Course',
+                  value: recordedCourseFilter,
+                  onChange: (val) => { setRecordedCourseFilter(val); setRecordedPage(1); },
+                  options: Array.from(new Set(recordedClasses.map(c => c.course_title))).filter(Boolean).map(c => ({ value: c, label: c }))
+                },
+                {
+                  label: 'Batch',
+                  value: recordedBatchFilter,
+                  onChange: (val) => { setRecordedBatchFilter(val); setRecordedPage(1); },
+                  options: batches.map(b => ({ value: b.id, label: b.name }))
+                },
+                {
+                  label: 'Visibility',
+                  value: recordedVisibilityFilter,
+                  onChange: (val) => { setRecordedVisibilityFilter(val); setRecordedPage(1); },
+                  options: [
+                    { value: 'everyone', label: 'Everyone' },
+                    { value: 'paid', label: 'Paid Students Only' }
+                  ]
+                },
+                {
+                  label: 'Upload Type',
+                  value: recordedUploadTypeFilter,
+                  onChange: (val) => { setRecordedUploadTypeFilter(val); setRecordedPage(1); },
+                  options: [
+                    { value: 'Google Drive', label: 'Google Drive' },
+                    { value: 'Uploaded', label: 'Uploaded File' }
+                  ]
+                }
+              ]}
+              showDateFilter={false}
+              onReset={() => {
+                setRecordedSearchQuery('');
+                setRecordedCourseFilter('');
+                setRecordedBatchFilter('');
+                setRecordedVisibilityFilter('');
+                setRecordedUploadTypeFilter('');
+                setRecordedPage(1);
+              }}
+              onExportCSV={exportRecordedClassesToCSV}
+              onExportExcel={exportRecordedClassesToExcel}
+              onExportPDF={exportRecordedClassesToPDF}
+            />
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '30px' }}>
             <div className="dashboard-card-section">
               <h4 style={{ marginBottom: '18px', fontSize: '15px', fontWeight: '700' }}>
                 {editingRecordedClass ? '✏️ Edit Lesson' : '➕ Upload New Lesson'}
@@ -4307,29 +4554,22 @@ const AdminDashboard = () => {
 
             <div className="dashboard-card-section" style={{ display: 'flex', flexDirection: 'column', minHeight: '500px' }}>
               <div className="section-header-premium" style={{ marginBottom: '18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-                <h4 style={{ fontSize: '15px', fontWeight: '700', margin: 0 }}>Curriculum Library ({recordedClasses.length} lessons)</h4>
-                <div className="action-buttons-group">
-                  <ExportDropdown
-                    onExportCSV={exportRecordedClassesToCSV}
-                    onExportExcel={exportRecordedClassesToExcel}
-                    onExportPDF={exportRecordedClassesToPDF}
-                  />
-                </div>
+                <h4 style={{ fontSize: '15px', fontWeight: '700', margin: 0 }}>Curriculum Library ({filteredRecorded.length} lessons)</h4>
               </div>
               
-              {recordedClasses.length === 0 ? (
+              {filteredRecorded.length === 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexGrow: 1, padding: '40px 20px', textAlign: 'center' }}>
                   <div style={{ width: '80px', height: '80px', background: 'var(--primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--primary-color)' }}>
                     <PlayCircle size={40} />
                   </div>
                   <h5 style={{ fontSize: '16px', fontWeight: '800', margin: '0 0 4px' }}>No Lessons Found</h5>
-                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '280px', margin: 0 }}>No lessons uploaded yet. Add your first lesson using the form.</p>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '280px', margin: 0 }}>No lessons found matching the filters.</p>
                 </div>
               ) : (() => {
                 const limit = 5;
-                const totalRecordedPages = Math.ceil(recordedClasses.length / limit) || 1;
+                const totalRecordedPages = Math.ceil(filteredRecorded.length / limit) || 1;
                 const safeRecordedPage = Math.min(recordedPage, totalRecordedPages);
-                const paginatedRecorded = recordedClasses.slice((safeRecordedPage - 1) * limit, safeRecordedPage * limit);
+                const paginatedRecorded = filteredRecorded.slice((safeRecordedPage - 1) * limit, safeRecordedPage * limit);
 
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, justifyContent: 'space-between' }}>
@@ -4420,150 +4660,236 @@ const AdminDashboard = () => {
               })()}
             </div>
           </div>
-        )}
+        </div>
+      )}
 
 
         {/* Announcements Tab */}
         {activeTab === 'announcements' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '30px' }}>
-            <div className="dashboard-card-section">
-              <h4 style={{ marginBottom: '18px', fontSize: '15px', fontWeight: '700' }}>Publish Announcement</h4>
-              <form onSubmit={addAnnouncement}>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="annBatchSelect">Target Batch</label>
-                  <select id="annBatchSelect" className="form-select" value={selectedBatchId} onChange={(e) => setSelectedBatchId(e.target.value)} required>
-                    <option value="">-- Choose Batch --</option>
-                    {batches.map(b => (
-                      <option key={b.id} value={b.id}>{b.name} ({b.code})</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="annTitle">Notice Title</label>
-                  <input id="annTitle" type="text" className="form-input" value={annTitle} onChange={(e) => setAnnTitle(e.target.value)} required />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="annPriority">Priority Level</label>
-                  <select id="annPriority" className="form-select" value={annPriority} onChange={(e) => setAnnPriority(e.target.value)}>
-                    <option value="Low">Low Priority</option>
-                    <option value="Medium">Medium Priority</option>
-                    <option value="High">High Priority</option>
-                  </select>
-                </div>
-                <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
-                  <input id="annPinned" type="checkbox" checked={annPinned} onChange={(e) => setAnnPinned(e.target.checked)} />
-                  <label htmlFor="annPinned" className="form-label" style={{ marginBottom: 0 }}>Pin Announcement?</label>
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="annContent">Message Content</label>
-                  <textarea id="annContent" className="form-input" style={{ height: '100px', resize: 'none' }} value={annContent} onChange={(e) => setAnnContent(e.target.value)} required />
-                </div>
-                <button type="submit" className="btn btn-primary btn-block">Broadcast Notice</button>
-              </form>
-            </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
+            <FilterBar
+              searchPlaceholder="Search Title..."
+              searchValue={annSearchQuery}
+              onSearchChange={(val) => { setAnnSearchQuery(val); setAnnouncementsPage(1); }}
+              filters={[
+                {
+                  label: 'Course',
+                  value: annCourseFilter,
+                  onChange: (val) => { setAnnCourseFilter(val); setAnnouncementsPage(1); },
+                  options: courses.map(c => ({ value: c, label: c }))
+                },
+                {
+                  label: 'Batch',
+                  value: annBatchFilter,
+                  onChange: (val) => { setAnnBatchFilter(val); setAnnouncementsPage(1); },
+                  options: batches.map(b => ({ value: b.id, label: b.name }))
+                },
+                {
+                  label: 'Audience',
+                  value: annAudienceFilter,
+                  onChange: (val) => { setAnnAudienceFilter(val); setAnnouncementsPage(1); },
+                  options: [
+                    { value: 'pinned', label: 'Pinned Announcements' },
+                    { value: 'high', label: 'High Priority Notices' },
+                    { value: 'medium', label: 'Medium Priority Notices' },
+                    { value: 'low', label: 'Low Priority Notices' }
+                  ]
+                }
+              ]}
+              showDateFilter={false}
+              onReset={() => {
+                setAnnSearchQuery('');
+                setAnnCourseFilter('');
+                setAnnBatchFilter('');
+                setAnnAudienceFilter('');
+                setAnnouncementsPage(1);
+              }}
+              onExportCSV={exportAnnouncementsToCSV}
+              onExportExcel={exportAnnouncementsToExcel}
+              onExportPDF={exportAnnouncementsToPDF}
+            />
 
-            <div className="dashboard-card-section" style={{ display: 'flex', flexDirection: 'column', minHeight: '500px' }}>
-              <div className="section-header-premium" style={{ marginBottom: '18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-                <h4 style={{ fontSize: '15px', fontWeight: '700', margin: 0 }}>Broadcast Logs</h4>
-                <div className="action-buttons-group">
-                  <ExportDropdown
-                    onExportCSV={exportAnnouncementsToCSV}
-                    onExportExcel={exportAnnouncementsToExcel}
-                    onExportPDF={exportAnnouncementsToPDF}
-                  />
-                </div>
-              </div>
-              
-              {announcements.length === 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexGrow: 1, padding: '40px 20px', textAlign: 'center' }}>
-                  <div style={{ width: '80px', height: '80px', background: 'var(--primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--primary-color)' }}>
-                    <Megaphone size={40} />
-                  </div>
-                  <h5 style={{ fontSize: '16px', fontWeight: '800', margin: '0 0 4px' }}>No Announcements</h5>
-                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '280px', margin: 0 }}>No announcements broadcasted yet.</p>
-                </div>
-              ) : (() => {
-                const limit = 5;
-                const totalAnnPages = Math.ceil(announcements.length / limit) || 1;
-                const safeAnnPage = Math.min(announcementsPage, totalAnnPages);
-                const paginatedAnn = announcements.slice((safeAnnPage - 1) * limit, safeAnnPage * limit);
-
-                return (
-                  <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      {paginatedAnn.map((item, idx) => (
-                        <div key={idx} className="feed-item-premium" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                              <span className="badge-status paid" style={{ fontSize: '9px' }}>{item.priority}</span>
-                              {item.is_pinned && <span style={{ fontSize: '10px', color: 'var(--primary-color)', fontWeight: '700' }}>📌 Pinned</span>}
-                            </div>
-                            <div style={{ display: 'flex', gap: '4px' }}>
-                              <button type="button" className="btn btn-outline" style={{ padding: '6px', height: '28px' }} onClick={() => handleEditAnnClick(item)}>
-                                <Pencil size={12} />
-                              </button>
-                              <button type="button" className="btn btn-danger" style={{ padding: '6px', height: '28px', backgroundColor: 'var(--danger-color)', color: 'white' }} onClick={() => deleteAnnouncement(item._id)}>
-                                <Trash2 size={12} />
-                              </button>
-                            </div>
-                          </div>
-                          <h5 style={{ fontWeight: '700', fontSize: '14.5px', margin: 0 }}>{item.title}</h5>
-                          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>{item.content}</p>
-                          <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Broadcasted: {item.date}</span>
-                        </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '30px' }}>
+              <div className="dashboard-card-section">
+                <h4 style={{ marginBottom: '18px', fontSize: '15px', fontWeight: '700' }}>Publish Announcement</h4>
+                <form onSubmit={addAnnouncement}>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="annBatchSelect">Target Batch</label>
+                    <select id="annBatchSelect" className="form-select" value={selectedBatchId} onChange={(e) => setSelectedBatchId(e.target.value)} required>
+                      <option value="">-- Choose Batch --</option>
+                      {batches.map(b => (
+                        <option key={b.id} value={b.id}>{b.name} ({b.code})</option>
                       ))}
-                    </div>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="annTitle">Notice Title</label>
+                    <input id="annTitle" type="text" className="form-input" value={annTitle} onChange={(e) => setAnnTitle(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="annPriority">Priority Level</label>
+                    <select id="annPriority" className="form-select" value={annPriority} onChange={(e) => setAnnPriority(e.target.value)}>
+                      <option value="Low">Low Priority</option>
+                      <option value="Medium">Medium Priority</option>
+                      <option value="High">High Priority</option>
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
+                    <input id="annPinned" type="checkbox" checked={annPinned} onChange={(e) => setAnnPinned(e.target.checked)} />
+                    <label htmlFor="annPinned" className="form-label" style={{ marginBottom: 0 }}>Pin Announcement?</label>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="annContent">Message Content</label>
+                    <textarea id="annContent" className="form-input" style={{ height: '100px', resize: 'none' }} value={annContent} onChange={(e) => setAnnContent(e.target.value)} required />
+                  </div>
+                  <button type="submit" className="btn btn-primary btn-block">Broadcast Notice</button>
+                </form>
+              </div>
 
-                    {/* Pagination */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', borderTop: '1px solid var(--border-light)', paddingTop: '15px' }}>
-                      <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                        Viewing page <strong>{safeAnnPage}</strong> of {totalAnnPages}
-                      </span>
-                      <div style={{ display: 'flex', gap: '6px' }}>
-                        <button type="button" className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px', height: '32px' }} disabled={safeAnnPage === 1} onClick={() => setAnnouncementsPage(prev => Math.max(prev - 1, 1))}>
-                          Prev
-                        </button>
-                        <button type="button" className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px', height: '32px' }} disabled={safeAnnPage === totalAnnPages} onClick={() => setAnnouncementsPage(prev => Math.min(prev + 1, totalAnnPages))}>
-                          Next
-                        </button>
+              <div className="dashboard-card-section" style={{ display: 'flex', flexDirection: 'column', minHeight: '500px' }}>
+                <div className="section-header-premium" style={{ marginBottom: '18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                  <h4 style={{ fontSize: '15px', fontWeight: '700', margin: 0 }}>Broadcast Logs</h4>
+                </div>
+                
+                {filteredAnnouncements.length === 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexGrow: 1, padding: '40px 20px', textAlign: 'center' }}>
+                    <div style={{ width: '80px', height: '80px', background: 'var(--primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--primary-color)' }}>
+                      <Megaphone size={40} />
+                    </div>
+                    <h5 style={{ fontSize: '16px', fontWeight: '800', margin: '0 0 4px' }}>No Announcements</h5>
+                    <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '280px', margin: 0 }}>No announcements broadcasted yet.</p>
+                  </div>
+                ) : (() => {
+                  const limit = 5;
+                  const totalAnnPages = Math.ceil(filteredAnnouncements.length / limit) || 1;
+                  const safeAnnPage = Math.min(announcementsPage, totalAnnPages);
+                  const paginatedAnn = filteredAnnouncements.slice((safeAnnPage - 1) * limit, safeAnnPage * limit);
+
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        {paginatedAnn.map((item, idx) => (
+                          <div key={idx} className="feed-item-premium" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                <span className="badge-status paid" style={{ fontSize: '9px' }}>{item.priority}</span>
+                                {item.is_pinned && <span style={{ fontSize: '10px', color: 'var(--primary-color)', fontWeight: '700' }}>📌 Pinned</span>}
+                              </div>
+                              <div style={{ display: 'flex', gap: '4px' }}>
+                                <button type="button" className="btn btn-outline" style={{ padding: '6px', height: '28px' }} onClick={() => handleEditAnnClick(item)}>
+                                  <Pencil size={12} />
+                                </button>
+                                <button type="button" className="btn btn-danger" style={{ padding: '6px', height: '28px', backgroundColor: 'var(--danger-color)', color: 'white' }} onClick={() => deleteAnnouncement(item._id)}>
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            </div>
+                            <h5 style={{ fontWeight: '700', fontSize: '14.5px', margin: 0 }}>{item.title}</h5>
+                            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>{item.content}</p>
+                            <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Broadcasted: {item.date}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Pagination */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', borderTop: '1px solid var(--border-light)', paddingTop: '15px' }}>
+                        <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                          Viewing page <strong>{safeAnnPage}</strong> of {totalAnnPages}
+                        </span>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button type="button" className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px', height: '32px' }} disabled={safeAnnPage === 1} onClick={() => setAnnouncementsPage(prev => Math.max(prev - 1, 1))}>
+                            Prev
+                          </button>
+                          <button type="button" className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px', height: '32px' }} disabled={safeAnnPage === totalAnnPages} onClick={() => setAnnouncementsPage(prev => Math.min(prev + 1, totalAnnPages))}>
+                            Next
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })()}
+                  );
+                })()}
+              </div>
             </div>
           </div>
         )}
 
         {/* Fees Management Tab */}
         {activeTab === 'fees-management' && (
-          <div className="dashboard-card-section">
-            <div className="section-header-premium" style={{ marginBottom: '18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-              <h3 className="section-title-premium" style={{ margin: 0 }}>Student Financial Ledger</h3>
-              <div className="action-buttons-group">
-                <ExportDropdown
-                  onExportCSV={exportFeesToCSV}
-                  onExportExcel={exportFeesToExcel}
-                  onExportPDF={exportFeesToPDF}
-                />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
+            <FilterBar
+              searchPlaceholder="Search Student or Invoice..."
+              searchValue={feesSearchQuery}
+              onSearchChange={(val) => { setFeesSearchQuery(val); setFeesPage(1); }}
+              filters={[
+                {
+                  label: 'Course',
+                  value: feesCourseFilter,
+                  onChange: (val) => { setFeesCourseFilter(val); setFeesPage(1); },
+                  options: courses.map(c => ({ value: c, label: c }))
+                },
+                {
+                  label: 'Batch',
+                  value: feesBatchFilter,
+                  onChange: (val) => { setFeesBatchFilter(val); setFeesPage(1); },
+                  options: batches.map(b => ({ value: b.id, label: b.name }))
+                },
+                {
+                  label: 'Payment Status',
+                  value: feesStatusFilter,
+                  onChange: (val) => { setFeesStatusFilter(val); setFeesPage(1); },
+                  options: [
+                    { value: 'Paid', label: 'Fully Paid' },
+                    { value: 'Pending', label: 'Pending Dues' }
+                  ]
+                },
+                {
+                  label: 'Payment Method',
+                  value: feesPaymentMethodFilter,
+                  onChange: (val) => { setFeesPaymentMethodFilter(val); setFeesPage(1); },
+                  options: [
+                    { value: 'Credit Card', label: 'Credit Card' },
+                    { value: 'Bank Transfer', label: 'Bank Transfer' },
+                    { value: 'UPI / NetBanking', label: 'UPI / NetBanking' },
+                    { value: 'Cash', label: 'Cash' }
+                  ]
+                }
+              ]}
+              showDateFilter={false}
+              onReset={() => {
+                setFeesSearchQuery('');
+                setFeesCourseFilter('');
+                setFeesBatchFilter('');
+                setFeesStatusFilter('');
+                setFeesPaymentMethodFilter('');
+                setFeesStartDateFilter('');
+                setFeesEndDateFilter('');
+                setFeesPage(1);
+              }}
+              onExportCSV={exportFeesToCSV}
+              onExportExcel={exportFeesToExcel}
+              onExportPDF={exportFeesToPDF}
+            />
+
+            <div className="dashboard-card-section">
+              <div className="section-header-premium" style={{ marginBottom: '18px' }}>
+                <h3 className="section-title-premium" style={{ margin: 0 }}>Student Financial Ledger</h3>
               </div>
-            </div>
-            <div className="table-container-premium">
-              <table className="table-premium">
-                <thead>
-                  <tr>
-                    <th>Roll Number</th>
-                    <th>Name</th>
-                    <th>Total Package</th>
-                    <th>Paid Amount</th>
-                    <th>Dues Outstanding</th>
-                    <th>Ledger Status</th>
-                    <th>Payment Date</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {students.map((student) => (
+              <div className="table-container-premium">
+                <table className="table-premium">
+                  <thead>
+                    <tr>
+                      <th>Roll Number</th>
+                      <th>Name</th>
+                      <th>Total Package</th>
+                      <th>Paid Amount</th>
+                      <th>Dues Outstanding</th>
+                      <th>Ledger Status</th>
+                      <th>Payment Date</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredStudentsForFees.map((student) => (
                     <tr key={student.id}>
                       <td><strong>{student.rollNumber}</strong></td>
                       <td>{student.name}</td>
@@ -4612,11 +4938,69 @@ const AdminDashboard = () => {
             </div>
 
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Activity Scores Tab */}
         {activeTab === 'activity-score' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '30px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
+            <FilterBar
+              searchPlaceholder="Search Student or Activity..."
+              searchValue={activitySearchQuery}
+              onSearchChange={(val) => { setActivitySearchQuery(val); setActivityPage(1); }}
+              filters={[
+                {
+                  label: 'Course',
+                  value: activityCourseFilter,
+                  onChange: (val) => { setActivityCourseFilter(val); setActivityPage(1); },
+                  options: Array.from(new Set(batches.map(b => b.course_name))).filter(Boolean).map(c => ({ value: c, label: c }))
+                },
+                {
+                  label: 'Batch',
+                  value: activityBatchFilter,
+                  onChange: (val) => { setActivityBatchFilter(val); setActivityPage(1); },
+                  options: batches.map(b => ({ value: b.id, label: b.name }))
+                },
+                {
+                  label: 'Activity',
+                  value: activityTypeFilter,
+                  onChange: (val) => { setActivityTypeFilter(val); setActivityPage(1); },
+                  options: [
+                    { value: 'Questions', label: 'Questions' },
+                    { value: 'Participation', label: 'Participation' },
+                    { value: 'Attendance', label: 'Attendance on Time' },
+                    { value: 'Helped', label: 'Helped Others' },
+                    { value: 'Camera', label: 'Camera On' },
+                    { value: 'Penalty', label: 'Deductions' }
+                  ]
+                },
+                {
+                  label: 'Score',
+                  value: activityScoreMin,
+                  onChange: (val) => { setActivityScoreMin(val); setActivityPage(1); },
+                  options: [
+                    { value: 'positive', label: 'Positive Points' },
+                    { value: 'negative', label: 'Deductions Only' },
+                    { value: 'high', label: 'High Scores (> 5)' }
+                  ]
+                }
+              ]}
+              showDateFilter={false}
+              onReset={() => {
+                setActivitySearchQuery('');
+                setActivityCourseFilter('');
+                setActivityBatchFilter('');
+                setActivityTypeFilter('');
+                setActivityScoreMin('');
+                setActivityStartDate('');
+                setActivityEndDate('');
+                setActivityPage(1);
+              }}
+              onExportCSV={exportActivityToCSV}
+              onExportExcel={exportActivityToExcel}
+              onExportPDF={exportActivityToPDF}
+            />
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '30px' }}>
             <div className="dashboard-card-section">
               <h4 style={{ marginBottom: '18px', fontSize: '15px', fontWeight: '700' }}>Award Activity Points</h4>
               <form onSubmit={handleAwardActivity}>
@@ -4700,28 +5084,21 @@ const AdminDashboard = () => {
             <div className="dashboard-card-section" style={{ display: 'flex', flexDirection: 'column', minHeight: '500px' }}>
               <div className="section-header-premium" style={{ marginBottom: '18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                 <h4 style={{ fontSize: '15px', fontWeight: '700', margin: 0 }}>Activity Logs History</h4>
-                <div className="action-buttons-group">
-                  <ExportDropdown
-                    onExportCSV={exportActivityToCSV}
-                    onExportExcel={exportActivityToExcel}
-                    onExportPDF={exportActivityToPDF}
-                  />
-                </div>
               </div>
               
-              {activityLogs.length === 0 ? (
+              {filteredActivityLogs.length === 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexGrow: 1, padding: '40px 20px', textAlign: 'center' }}>
                   <div style={{ width: '80px', height: '80px', background: 'var(--primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--primary-color)' }}>
                     <Trophy size={40} />
                   </div>
                   <h5 style={{ fontSize: '16px', fontWeight: '800', margin: '0 0 4px' }}>No Activity Logs</h5>
-                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '280px', margin: 0 }}>No activity points awarded yet.</p>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '280px', margin: 0 }}>No activity logs found matching the filters.</p>
                 </div>
               ) : (() => {
                 const limit = 5;
-                const totalActivityPages = Math.ceil(activityLogs.length / limit) || 1;
+                const totalActivityPages = Math.ceil(filteredActivityLogs.length / limit) || 1;
                 const safeActivityPage = Math.min(activityPage, totalActivityPages);
-                const paginatedActivity = activityLogs.slice((safeActivityPage - 1) * limit, safeActivityPage * limit);
+                const paginatedActivity = filteredActivityLogs.slice((safeActivityPage - 1) * limit, safeActivityPage * limit);
 
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, justifyContent: 'space-between' }}>
@@ -4769,7 +5146,8 @@ const AdminDashboard = () => {
               })()}
             </div>
           </div>
-        )}
+        </div>
+      )}
 
         {/* Settings Tab */}
         {activeTab === 'settings' && (
@@ -4914,10 +5292,16 @@ const AdminDashboard = () => {
                 <div className="form-group">
                   <label className="form-label" htmlFor="editCourse">Course Name</label>
                   <select id="editCourse" className="form-select" value={editCourse} onChange={(e) => setEditCourse(e.target.value)}>
-                    <option value="Fullstack Engineering">Fullstack Engineering</option>
-                    <option value="UI/UX Design">UI/UX Design</option>
-                    <option value="Data Science">Data Science</option>
-                    <option value="Mobile App Development">Mobile App Development</option>
+                    {courses.length === 0 ? (
+                      <option value="">No courses available</option>
+                    ) : (
+                      <>
+                        <option value="">-- Select Course --</option>
+                        {courses.map(c => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </>
+                    )}
                   </select>
                 </div>
                 <div className="form-group">
@@ -5146,10 +5530,16 @@ const AdminDashboard = () => {
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label" htmlFor="createCourse" style={{ fontSize: '12.5px', fontWeight: '700', color: 'var(--text-secondary)', marginBottom: '6px', display: 'block' }}>Course *</label>
                   <select id="createCourse" className="form-select" value={createCourse} onChange={(e) => setCreateCourse(e.target.value)} required style={{ height: '48px', borderRadius: '10px' }}>
-                    <option value="Fullstack Engineering">Fullstack Engineering</option>
-                    <option value="UI/UX Design">UI/UX Design</option>
-                    <option value="Data Science">Data Science</option>
-                    <option value="Mobile App Development">Mobile App Development</option>
+                    {courses.length === 0 ? (
+                      <option value="">No courses available</option>
+                    ) : (
+                      <>
+                        <option value="">-- Select Course --</option>
+                        {courses.map(c => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </>
+                    )}
                   </select>
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>

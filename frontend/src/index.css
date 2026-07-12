@@ -2700,26 +2700,93 @@ button, input, select, textarea {
 }
 
 .session-filter-pill {
-  padding: 8px 16px;
-  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 42px;
+  padding: 0 18px;
+  border-radius: 14px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1px solid #E5E7EB;
+  transition: all 200ms ease;
+  border: 1.5px solid var(--border-color);
   background-color: white;
-  color: #4B5563;
+  color: var(--text-primary);
+  white-space: nowrap;
 }
 
 .session-filter-pill:hover {
-  background-color: #F9FAFB;
-  color: #111827;
+  background-color: #F6F3FF;
+  color: #6D3EF5;
+  border-color: #6D3EF5;
 }
 
 .session-filter-pill.active {
-  background-color: #111827 !important;
+  background: linear-gradient(135deg, #6D3EF5 0%, #7C4DFF 100%) !important;
   color: white !important;
-  border-color: #111827 !important;
+  border-color: transparent !important;
+  box-shadow: 0 4px 14px rgba(109, 62, 245, 0.3) !important;
+}
+
+/* Responsive row for session filter pills */
+.date-filter-row {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+
+.date-filter-row::-webkit-scrollbar {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .date-filter-row {
+    flex-wrap: nowrap;
+    overflow-x: visible;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .date-filter-row {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+}
+
+@media (max-width: 767px) {
+  .date-filter-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Compact Live Classes Table */
+.table-live-classes {
+  width: 100% !important;
+  table-layout: fixed !important;
+}
+
+.table-live-classes th {
+  padding: 10px 8px !important;
+  font-size: 11px !important;
+  text-align: left;
+}
+
+.table-live-classes td {
+  padding: 12px 8px !important;
+  font-size: 12.5px !important;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.table-live-classes td.col-actions {
+  overflow: visible;
+  white-space: normal;
 }
 
 /* Reusable Export Button Styles */
@@ -2918,4 +2985,296 @@ button, input, select, textarea {
     gap: 10px;
   }
 }
+
+/* ==================================================
+   ADVANCED FILTER SYSTEM (UNIFIED BRANDING)
+   ================================================== */
+.levlox-filter-bar {
+  background-color: #ffffff;
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow-sm);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.levlox-filter-row-1 {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+@media (min-width: 1024px) {
+  .levlox-filter-row-1 {
+    flex-wrap: nowrap;
+  }
+}
+
+.levlox-filter-search-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 200px;
+}
+
+@media (min-width: 1024px) {
+  .levlox-filter-search-container {
+    flex: 0 0 240px;
+    width: 240px;
+  }
+}
+
+.levlox-filter-search-icon {
+  position: absolute;
+  left: 14px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.levlox-filter-search-input {
+  width: 100%;
+  padding: 12px 16px 12px 42px;
+  background-color: var(--surface-alt);
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: 13.5px;
+  color: var(--text-primary);
+  outline: none;
+  transition: all var(--transition-normal);
+  height: 44px;
+  box-sizing: border-box;
+}
+
+.levlox-filter-search-input:focus {
+  border-color: var(--primary-color);
+  background-color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(108, 60, 240, 0.12);
+}
+
+.levlox-filter-dropdown-container {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  flex: 1 1 auto;
+}
+
+@media (min-width: 1024px) {
+  .levlox-filter-dropdown-container {
+    flex-wrap: nowrap;
+    flex: 0 1 auto;
+  }
+}
+
+.levlox-filter-dropdown {
+  background-color: var(--surface-alt);
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0 36px 0 16px;
+  font-size: 13.5px;
+  color: var(--text-primary);
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%235E6478'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 14px;
+  transition: all var(--transition-normal);
+  min-width: 120px;
+  height: 44px;
+  box-sizing: border-box;
+}
+
+@media (min-width: 1024px) {
+  .levlox-filter-dropdown {
+    width: 160px;
+    flex-shrink: 0;
+  }
+}
+
+.levlox-filter-dropdown:focus {
+  border-color: var(--primary-color);
+  background-color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(108, 60, 240, 0.12);
+}
+
+.levlox-filter-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+@media (min-width: 1024px) {
+  .levlox-filter-actions {
+    margin-left: auto;
+  }
+}
+
+.levlox-filter-reset-btn {
+  background-color: #ffffff;
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-full);
+  height: 44px;
+  padding: 0 18px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  box-sizing: border-box;
+}
+
+.levlox-filter-reset-btn:hover {
+  background-color: var(--surface-alt);
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
+}
+
+.levlox-filter-export-container {
+  position: relative;
+}
+
+.levlox-filter-export-btn {
+  background: linear-gradient(135deg, var(--primary-color), var(--primary-hover));
+  color: white;
+  border: none;
+  border-radius: var(--radius-full);
+  height: 44px;
+  padding: 0 20px;
+  font-size: 13.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  box-shadow: 0 4px 12px rgba(108, 60, 240, 0.15);
+  box-sizing: border-box;
+}
+
+.levlox-filter-export-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(108, 60, 240, 0.25);
+}
+
+.levlox-filter-export-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background-color: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 100;
+  min-width: 150px;
+  padding: 6px 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.levlox-filter-export-item {
+  background: none;
+  border: none;
+  padding: 10px 16px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--transition-hover);
+  width: 100%;
+}
+
+.levlox-filter-export-item:hover {
+  background-color: var(--surface-alt);
+  color: var(--text-primary);
+}
+
+.levlox-filter-row-2 {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--border-light);
+  padding-top: 16px;
+  width: 100%;
+}
+
+.levlox-filter-pill-container {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.levlox-filter-pill {
+  background-color: #ffffff;
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-full);
+  padding: 8px 18px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  box-sizing: border-box;
+}
+
+.levlox-filter-pill:hover {
+  border-color: var(--primary-border);
+  color: var(--primary-color);
+}
+
+.levlox-filter-pill.active {
+  background: linear-gradient(135deg, var(--primary-color), var(--primary-hover));
+  border-color: transparent;
+  color: white;
+  box-shadow: 0 4px 12px rgba(108, 60, 240, 0.2);
+}
+
+.levlox-filter-date-container {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  animation: fadeIn 0.25s ease-out;
+}
+
+.levlox-filter-date-input {
+  background-color: var(--surface-alt);
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--text-primary);
+  outline: none;
+  transition: all var(--transition-normal);
+  height: 36px;
+  box-sizing: border-box;
+}
+
+.levlox-filter-date-input:focus {
+  border-color: var(--primary-color);
+  background-color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(108, 60, 240, 0.12);
+}
+
 
