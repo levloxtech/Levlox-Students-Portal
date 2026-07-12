@@ -1143,7 +1143,7 @@ def get_recorded_courses():
                 }
             ])
 
-        recorded_classes = list(db.recorded_classes.find({"batch_id": str(batch_id) if batch_id else None}))
+        recorded_classes = list(db.recorded_classes.find({"batch_id": str(batch_id) if batch_id else None}).sort("sort_order", 1))
         
         # Calculate modules count and lessons count
         modules_set = set()
@@ -1186,7 +1186,7 @@ def get_course_player(course_id):
         fees_are_paid = (student_db.get('feesStatus') == 'Paid') if student_db else False
         batch_id = student_db.get('batch_id') if student_db else None
 
-        recorded_classes = list(db.recorded_classes.find({"batch_id": str(batch_id) if batch_id else None}))
+        recorded_classes = list(db.recorded_classes.find({"batch_id": str(batch_id) if batch_id else None}).sort("sort_order", 1))
         submissions = list(db.submissions.find({"student_id": ObjectId(student['id'])}))
         completed_list = list(db.lesson_progress.find({"student_id": student['id']}))
         completed_ids = set(str(lp.get('lesson_id')) for lp in completed_list)
@@ -1221,7 +1221,7 @@ def get_course_player(course_id):
             else:
                 is_premium_restricted = True
 
-            is_locked = True if (visibility == 'paid' and not fees_are_paid and is_premium_restricted) else False
+            is_locked = True if (visibility == 'paid' and not fees_are_paid) else False
             rc_id = str(rc['_id'])
 
             modules_dict[mod_title]["lessons"].append({
@@ -1233,8 +1233,8 @@ def get_course_player(course_id):
                 "completed": rc_id in completed_ids,
                 "url": rc.get('video_url', ''),
                 "notes_url": rc.get('notes_url') if not is_locked else None,
+                "study_materials": rc.get('study_materials', []) if not is_locked else [],
                 "assignment": rc.get('assignment') if not is_locked else None,
-                "quiz": rc.get('quiz') if not is_locked else None,
                 "visibility": visibility,
                 "locked": is_locked,
                 "thumbnail": rc.get('thumbnail', ''),

@@ -847,13 +847,22 @@ const RecordedClassesPage = ({ initialCourseId = null, initialLessonId = null })
           {/* Video Player & Premium Access Lock */}
           <div className="lms-video-frame">
             {isPlaying && isPaid && !activeLesson.locked ? (
-              <iframe
-                src={activeLesson.url?.replace('watch?v=', 'embed/')}
-                title={activeLesson.title}
-                style={{ width: '100%', height: '100%', border: 'none' }}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
+              (activeLesson.url?.includes('/uploads/') || activeLesson.url?.endsWith('.mp4') || activeLesson.url?.endsWith('.webm')) ? (
+                <video
+                  src={activeLesson.url}
+                  controls
+                  autoPlay
+                  style={{ width: '100%', height: '100%' }}
+                />
+              ) : (
+                <iframe
+                  src={activeLesson.url?.replace('watch?v=', 'embed/')}
+                  title={activeLesson.title}
+                  style={{ width: '100%', height: '100%', border: 'none' }}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              )
             ) : (
               <div style={{
                 position: 'absolute',
@@ -991,9 +1000,22 @@ const RecordedClassesPage = ({ initialCourseId = null, initialLessonId = null })
           </div>
 
           {/* ── Resources (Notes + Assignment only) ── */}
-          {(activeLesson.notes_url || activeLesson.assignment) && !activeLesson.locked && (
+          {((activeLesson.study_materials && activeLesson.study_materials.length > 0) || activeLesson.notes_url || activeLesson.assignment) && !activeLesson.locked && (
             <div className="lms-resources">
-              {activeLesson.notes_url && (
+              {activeLesson.study_materials && activeLesson.study_materials.length > 0 ? (
+                activeLesson.study_materials.map((mat, mIdx) => (
+                  <a
+                    key={mIdx}
+                    href={mat.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="lms-resource-btn"
+                  >
+                    <Download size={14} color="#6C3CF0" />
+                    Download {mat.name} ({mat.type?.toUpperCase()})
+                  </a>
+                ))
+              ) : activeLesson.notes_url ? (
                 <a
                   href={activeLesson.notes_url}
                   target="_blank"
@@ -1003,7 +1025,7 @@ const RecordedClassesPage = ({ initialCourseId = null, initialLessonId = null })
                   <Download size={14} color="#6C3CF0" />
                   Download PDF Notes
                 </a>
-              )}
+              ) : null}
               {activeLesson.assignment && (
                 <button
                   className="lms-resource-btn"

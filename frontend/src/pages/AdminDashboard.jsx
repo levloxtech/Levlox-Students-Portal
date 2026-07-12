@@ -87,23 +87,38 @@ const ExportDropdown = ({ onExportCSV, onExportExcel, onExportPDF }) => {
         className="export-btn-premium-gradient"
         onClick={() => setIsOpen(!isOpen)}
       >
-        <Download size={16} />
-        Export
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Download size={16} />
+          <span>Export</span>
+        </div>
+        <ChevronDown size={14} style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease', marginLeft: '8px' }} />
       </button>
       {isOpen && (
         <div className="export-menu-floating" style={{ right: 0, left: 'auto' }}>
-          <div className="export-menu-row" onClick={() => { onExportCSV(); setIsOpen(false); }}>
+          <button 
+            type="button"
+            className="export-menu-row" 
+            onClick={() => { onExportCSV(); setIsOpen(false); }}
+          >
             <FileText size={16} />
             <span>Export CSV</span>
-          </div>
-          <div className="export-menu-row" onClick={() => { onExportExcel(); setIsOpen(false); }}>
+          </button>
+          <button 
+            type="button"
+            className="export-menu-row" 
+            onClick={() => { onExportExcel(); setIsOpen(false); }}
+          >
             <FileSpreadsheet size={16} />
             <span>Export Excel</span>
-          </div>
-          <div className="export-menu-row" onClick={() => { onExportPDF(); setIsOpen(false); }}>
-            <FileText size={16} />
+          </button>
+          <button 
+            type="button"
+            className="export-menu-row" 
+            onClick={() => { onExportPDF(); setIsOpen(false); }}
+          >
+            <FileText size={16} style={{ color: '#EF4444' }} />
             <span>Export PDF</span>
-          </div>
+          </button>
         </div>
       )}
     </div>
@@ -147,6 +162,23 @@ const AdminDashboard = () => {
   const [batchFilter, setBatchFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+
+  // Responsive design width tracking
+  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Separate pagination states
+  const [batchesPage, setBatchesPage] = useState(1);
+  const [livePage, setLivePage] = useState(1);
+  const [attendancePage, setAttendancePage] = useState(1);
+  const [recordedPage, setRecordedPage] = useState(1);
+  const [announcementsPage, setAnnouncementsPage] = useState(1);
+  const [feesPage, setFeesPage] = useState(1);
+  const [activityPage, setActivityPage] = useState(1);
 
   // Student details and management states
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -491,6 +523,694 @@ const AdminDashboard = () => {
     printWindow.document.close();
   };
 
+  const getFilteredLiveClasses = () => {
+    const getDummyClasses = () => {
+      const todayStr = '2026-07-10';
+      const tomorrowStr = '2026-07-11';
+      const yesterdayStr = '2026-07-09';
+      
+      return [
+        {
+          _id: 'dummy-1',
+          title: 'Python Basics',
+          batch_name: 'Full Stack Batch A',
+          instructor: 'Sri',
+          date: todayStr,
+          time: '7:00 PM',
+          status: 'Live',
+          students_joined: 32,
+          meet_link: 'https://meet.google.com/abc-defg-hij'
+        },
+        {
+          _id: 'dummy-2',
+          title: 'React Components',
+          batch_name: 'Batch B',
+          instructor: 'Rahul',
+          date: tomorrowStr,
+          time: '6:00 PM',
+          status: 'Upcoming',
+          students_joined: 0,
+          meet_link: 'https://meet.google.com/abc-defg-hij'
+        },
+        {
+          _id: 'dummy-3',
+          title: 'Java OOP',
+          batch_name: 'Batch C',
+          instructor: 'Kavya',
+          date: yesterdayStr,
+          time: '5:00 PM',
+          status: 'Completed',
+          students_joined: 45,
+          meet_link: 'https://meet.google.com/abc-defg-hij'
+        }
+      ];
+    };
+
+    const allAvailableClasses = [...liveClasses.map(c => ({
+      ...c,
+      batch_name: batches.find(b => b.id === c.batch_id)?.name || 'General Batch',
+      students_joined: c.students_joined || 0
+    })), ...getDummyClasses()];
+
+    return allAvailableClasses.filter(c => {
+      const query = sessionSearch.toLowerCase();
+      const matchesSearch = c.title?.toLowerCase().includes(query) || 
+                            c.instructor?.toLowerCase().includes(query) ||
+                            c.batch_name?.toLowerCase().includes(query);
+      
+      if (!matchesSearch) return false;
+      
+      if (!c.date) return true;
+      const classDate = new Date(c.date);
+      const now = new Date('2026-07-10T23:27:53');
+      
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+      
+      if (dateFilter === 'Today') {
+        return classDate >= startOfToday && classDate <= endOfToday;
+      } else if (dateFilter === 'This Week') {
+        const firstDayOfWeek = new Date(now);
+        firstDayOfWeek.setDate(firstDayOfWeek.getDate() - firstDayOfWeek.getDay());
+        firstDayOfWeek.setHours(0,0,0,0);
+        const lastDayOfWeek = new Date(firstDayOfWeek);
+        lastDayOfWeek.setDate(lastDayOfWeek.getDate() + 7);
+        lastDayOfWeek.setHours(23,59,59,999);
+        return classDate >= firstDayOfWeek && classDate <= lastDayOfWeek;
+      } else if (dateFilter === 'This Month') {
+        const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        return classDate >= firstDayOfMonth && classDate <= lastDayOfMonth;
+      } else if (dateFilter === 'This Year') {
+        const firstDayOfYear = new Date(now.getFullYear(), 0, 1);
+        const lastDayOfYear = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
+        return classDate >= firstDayOfYear && classDate <= lastDayOfYear;
+      } else if (dateFilter === 'Custom Range') {
+        if (!customStartDate || !customEndDate) return true;
+        const start = new Date(customStartDate);
+        const end = new Date(customEndDate);
+        end.setHours(23, 59, 59);
+        return classDate >= start && classDate <= end;
+      }
+      return true;
+    });
+  };
+
+  const exportLiveClassesToCSV = () => {
+    const data = getFilteredLiveClasses();
+    const headers = ['Lecture Title', 'Target Batch', 'Lead Faculty', 'Date', 'Time', 'Meet Link', 'Status', 'Students Joined'];
+    const rows = data.map(c => [
+      `"${c.title || ''}"`,
+      `"${c.batch_name || ''}"`,
+      `"${c.instructor || ''}"`,
+      `"${c.date || ''}"`,
+      `"${c.time || ''}"`,
+      `"${c.meet_link || ''}"`,
+      `"${c.status || ''}"`,
+      c.students_joined || 0
+    ]);
+    const content = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'live_classes_export.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportLiveClassesToExcel = () => {
+    const data = getFilteredLiveClasses();
+    const headers = ['Lecture Title', 'Target Batch', 'Lead Faculty', 'Date', 'Time', 'Meet Link', 'Status', 'Students Joined'];
+    const rows = data.map(c => [
+      c.title || '',
+      c.batch_name || '',
+      c.instructor || '',
+      c.date || '',
+      c.time || '',
+      c.meet_link || '',
+      c.status || '',
+      c.students_joined || 0
+    ]);
+    const content = [headers.join('\t'), ...rows.map(r => r.join('\t'))].join('\n');
+    const blob = new Blob([content], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'live_classes_export.xls');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportLiveClassesToPDF = () => {
+    const data = getFilteredLiveClasses();
+    const printWindow = window.open('', '_blank');
+    let rowsHtml = '';
+    data.forEach(c => {
+      rowsHtml += `
+        <tr>
+          <td>${c.title || ''}</td>
+          <td>${c.batch_name || ''}</td>
+          <td>${c.instructor || ''}</td>
+          <td>${c.date || ''}</td>
+          <td>${c.time || ''}</td>
+          <td>${c.meet_link || ''}</td>
+          <td>${c.status || ''}</td>
+          <td>${c.students_joined || 0}</td>
+        </tr>
+      `;
+    });
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Live Sessions Report</title>
+          <style>
+             body { font-family: sans-serif; padding: 20px; }
+             h1 { color: #6C3CF0; }
+             table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+             th, td { border: 1px solid #E5E7EB; padding: 10px; text-align: left; }
+             th { background-color: #F9FAFB; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <h1>Live Sessions Report</h1>
+          <table>
+            <thead>
+              <tr>
+                <th>Lecture Title</th>
+                <th>Target Batch</th>
+                <th>Lead Faculty</th>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Meet Link</th>
+                <th>Status</th>
+                <th>Students Joined</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+          <script>
+            window.onload = function() {
+              window.print();
+              window.close();
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  const exportRecordedClassesToCSV = () => {
+    const headers = ['Lesson Title', 'Module', 'Course Title', 'Duration', 'Visibility', 'Drive Link', 'Youtube Link'];
+    const rows = recordedClasses.map(c => [
+      `"${c.title || ''}"`,
+      `"${c.module || ''}"`,
+      `"${c.course_title || ''}"`,
+      `"${c.duration || ''}"`,
+      `"${c.visibility || ''}"`,
+      `"${c.drive_link || ''}"`,
+      `"${c.youtube_link || ''}"`
+    ]);
+    const content = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'recorded_classes_export.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportRecordedClassesToExcel = () => {
+    const headers = ['Lesson Title', 'Module', 'Course Title', 'Duration', 'Visibility', 'Drive Link', 'Youtube Link'];
+    const rows = recordedClasses.map(c => [
+      c.title || '',
+      c.module || '',
+      c.course_title || '',
+      c.duration || '',
+      c.visibility || '',
+      c.drive_link || '',
+      c.youtube_link || ''
+    ]);
+    const content = [headers.join('\t'), ...rows.map(r => r.join('\t'))].join('\n');
+    const blob = new Blob([content], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'recorded_classes_export.xls');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportRecordedClassesToPDF = () => {
+    const printWindow = window.open('', '_blank');
+    let rowsHtml = '';
+    recordedClasses.forEach(c => {
+      rowsHtml += `
+        <tr>
+          <td>${c.title || ''}</td>
+          <td>${c.module || ''}</td>
+          <td>${c.course_title || ''}</td>
+          <td>${c.duration || ''}</td>
+          <td>${c.visibility || ''}</td>
+        </tr>
+      `;
+    });
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Recorded Classes Report</title>
+          <style>
+             body { font-family: sans-serif; padding: 20px; }
+             h1 { color: #6C3CF0; }
+             table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+             th, td { border: 1px solid #E5E7EB; padding: 10px; text-align: left; }
+             th { background-color: #F9FAFB; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <h1>Recorded Classes Report</h1>
+          <table>
+            <thead>
+              <tr>
+                <th>Lesson Title</th>
+                <th>Module</th>
+                <th>Course Title</th>
+                <th>Duration</th>
+                <th>Visibility</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+          <script>
+            window.onload = function() {
+              window.print();
+              window.close();
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  const exportNotesToCSV = () => {
+    const headers = ['Note Title', 'Subject', 'Type', 'URL', 'Description'];
+    const rows = notes.map(n => [
+      `"${n.title || ''}"`,
+      `"${n.subject || ''}"`,
+      `"${n.type || ''}"`,
+      `"${n.url || ''}"`,
+      `"${n.description || ''}"`
+    ]);
+    const content = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'notes_export.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportNotesToExcel = () => {
+    const headers = ['Note Title', 'Subject', 'Type', 'URL', 'Description'];
+    const rows = notes.map(n => [
+      n.title || '',
+      n.subject || '',
+      n.type || '',
+      n.url || '',
+      n.description || ''
+    ]);
+    const content = [headers.join('\t'), ...rows.map(r => r.join('\t'))].join('\n');
+    const blob = new Blob([content], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'notes_export.xls');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportNotesToPDF = () => {
+    const printWindow = window.open('', '_blank');
+    let rowsHtml = '';
+    notes.forEach(n => {
+      rowsHtml += `
+        <tr>
+          <td>${n.title || ''}</td>
+          <td>${n.subject || ''}</td>
+          <td>${n.type || ''}</td>
+          <td>${n.url || ''}</td>
+        </tr>
+      `;
+    });
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Notes & Study Materials Report</title>
+          <style>
+             body { font-family: sans-serif; padding: 20px; }
+             h1 { color: #6C3CF0; }
+             table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+             th, td { border: 1px solid #E5E7EB; padding: 10px; text-align: left; }
+             th { background-color: #F9FAFB; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <h1>Notes & Study Materials Report</h1>
+          <table>
+            <thead>
+              <tr>
+                <th>Note Title</th>
+                <th>Subject</th>
+                <th>Type</th>
+                <th>URL</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+          <script>
+            window.onload = function() {
+              window.print();
+              window.close();
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  const exportAnnouncementsToCSV = () => {
+    const headers = ['Title', 'Content', 'Priority', 'Pinned', 'Date Created'];
+    const rows = announcements.map(a => [
+      `"${a.title || ''}"`,
+      `"${a.content || ''}"`,
+      `"${a.priority || 'Medium'}"`,
+      a.pinned ? 'Yes' : 'No',
+      `"${a.createdAt || ''}"`
+    ]);
+    const content = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'announcements_export.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportAnnouncementsToExcel = () => {
+    const headers = ['Title', 'Content', 'Priority', 'Pinned', 'Date Created'];
+    const rows = announcements.map(a => [
+      a.title || '',
+      a.content || '',
+      a.priority || 'Medium',
+      a.pinned ? 'Yes' : 'No',
+      a.createdAt || ''
+    ]);
+    const content = [headers.join('\t'), ...rows.map(r => r.join('\t'))].join('\n');
+    const blob = new Blob([content], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'announcements_export.xls');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportAnnouncementsToPDF = () => {
+    const printWindow = window.open('', '_blank');
+    let rowsHtml = '';
+    announcements.forEach(a => {
+      rowsHtml += `
+        <tr>
+          <td>${a.title || ''}</td>
+          <td>${a.content || ''}</td>
+          <td>${a.priority || 'Medium'}</td>
+          <td>${a.pinned ? 'Yes' : 'No'}</td>
+        </tr>
+      `;
+    });
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Announcements Report</title>
+          <style>
+             body { font-family: sans-serif; padding: 20px; }
+             h1 { color: #6C3CF0; }
+             table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+             th, td { border: 1px solid #E5E7EB; padding: 10px; text-align: left; }
+             th { background-color: #F9FAFB; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <h1>Announcements Report</h1>
+          <table>
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Content</th>
+                <th>Priority</th>
+                <th>Pinned</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+          <script>
+            window.onload = function() {
+              window.print();
+              window.close();
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  const exportFeesToCSV = () => {
+    const headers = ['Roll Number', 'Name', 'Total Package', 'Paid Amount', 'Dues Outstanding', 'Ledger Status', 'Payment Date'];
+    const rows = students.map(s => [
+      `"${s.rollNumber || ''}"`,
+      `"${s.name || ''}"`,
+      s.feesTotal || 1500,
+      s.feesPaidAmount || 0,
+      s.feesRemainingAmount ?? (s.feesTotal || 1500),
+      `"${s.feesStatus || 'Pending'}"`,
+      `"${s.feesPaymentDate || 'N/A'}"`
+    ]);
+    const content = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'fees_ledger_export.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportFeesToExcel = () => {
+    const headers = ['Roll Number', 'Name', 'Total Package', 'Paid Amount', 'Dues Outstanding', 'Ledger Status', 'Payment Date'];
+    const rows = students.map(s => [
+      s.rollNumber || '',
+      s.name || '',
+      s.feesTotal || 1500,
+      s.feesPaidAmount || 0,
+      s.feesRemainingAmount ?? (s.feesTotal || 1500),
+      s.feesStatus || 'Pending',
+      s.feesPaymentDate || 'N/A'
+    ]);
+    const content = [headers.join('\t'), ...rows.map(r => r.join('\t'))].join('\n');
+    const blob = new Blob([content], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'fees_ledger_export.xls');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportFeesToPDF = () => {
+    const printWindow = window.open('', '_blank');
+    let rowsHtml = '';
+    students.forEach(s => {
+      rowsHtml += `
+        <tr>
+          <td>${s.rollNumber || ''}</td>
+          <td>${s.name || ''}</td>
+          <td>$${s.feesTotal || 1500}</td>
+          <td>$${s.feesPaidAmount || 0}</td>
+          <td>$${s.feesRemainingAmount ?? (s.feesTotal || 1500)}</td>
+          <td>${s.feesStatus || 'Pending'}</td>
+          <td>${s.feesPaymentDate || 'N/A'}</td>
+        </tr>
+      `;
+    });
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Student Financial Ledger Report</title>
+          <style>
+             body { font-family: sans-serif; padding: 20px; }
+             h1 { color: #6C3CF0; }
+             table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+             th, td { border: 1px solid #E5E7EB; padding: 10px; text-align: left; }
+             th { background-color: #F9FAFB; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <h1>Student Financial Ledger Report</h1>
+          <table>
+            <thead>
+              <tr>
+                <th>Roll Number</th>
+                <th>Name</th>
+                 <th>Total Package</th>
+                 <th>Paid Amount</th>
+                 <th>Dues Outstanding</th>
+                 <th>Ledger Status</th>
+                 <th>Payment Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+          <script>
+            window.onload = function() {
+              window.print();
+              window.close();
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  const exportActivityToCSV = () => {
+    const headers = ['Date', 'Student Name', 'Batch', 'Meeting', 'Activity Type', 'Points', 'Remarks'];
+    const rows = activityLogs.map(l => [
+      `"${l.date || ''}"`,
+      `"${l.student_name || ''}"`,
+      `"${l.batch_name || ''}"`,
+      `"${l.meeting || ''}"`,
+      `"${l.activity_type || ''}"`,
+      l.points || 0,
+      `"${l.remarks || ''}"`
+    ]);
+    const content = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'activity_logs_export.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportActivityToExcel = () => {
+    const headers = ['Date', 'Student Name', 'Batch', 'Meeting', 'Activity Type', 'Points', 'Remarks'];
+    const rows = activityLogs.map(l => [
+      l.date || '',
+      l.student_name || '',
+      l.batch_name || '',
+      l.meeting || '',
+      l.activity_type || '',
+      l.points || 0,
+      l.remarks || ''
+    ]);
+    const content = [headers.join('\t'), ...rows.map(r => r.join('\t'))].join('\n');
+    const blob = new Blob([content], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'activity_logs_export.xls');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportActivityToPDF = () => {
+    const printWindow = window.open('', '_blank');
+    let rowsHtml = '';
+    activityLogs.forEach(l => {
+      rowsHtml += `
+        <tr>
+          <td>${l.date || ''}</td>
+          <td>${l.student_name || ''}</td>
+          <td>${l.batch_name || ''}</td>
+          <td>${l.meeting || ''}</td>
+          <td>${l.activity_type || ''}</td>
+          <td>${l.points || 0}</td>
+          <td>${l.remarks || ''}</td>
+        </tr>
+      `;
+    });
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Activity Scores & Points Report</title>
+          <style>
+             body { font-family: sans-serif; padding: 20px; }
+             h1 { color: #6C3CF0; }
+             table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+             th, td { border: 1px solid #E5E7EB; padding: 10px; text-align: left; }
+             th { background-color: #F9FAFB; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <h1>Activity Scores & Points Report</h1>
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Student Name</th>
+                <th>Batch</th>
+                <th>Meeting</th>
+                <th>Activity Type</th>
+                <th>Points</th>
+                <th>Remarks</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+          <script>
+            window.onload = function() {
+              window.print();
+              window.close();
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   // Custom Delete Modal State
   const [studentToDelete, setStudentToDelete] = useState(null);
 
@@ -531,9 +1251,14 @@ const AdminDashboard = () => {
   const [createStatus, setCreateStatus] = useState('active');
 
   // Attendance Sheet States
-  const [selectedClassId, setSelectedClassId] = useState('');
+  const [attCourse, setAttCourse] = useState('');
+  const [attBatchId, setAttBatchId] = useState('');
   const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().substring(0, 10));
+  const [attStatusFilter, setAttStatusFilter] = useState('All');
+  const [attSearchQuery, setAttSearchQuery] = useState('');
+  const [attSheetsHistory, setAttSheetsHistory] = useState([]);
+  const [viewingHistoryRecord, setViewingHistoryRecord] = useState(null);
 
   // Form states for creations
   const [liveTitle, setLiveTitle] = useState('');
@@ -571,16 +1296,20 @@ const AdminDashboard = () => {
   const [recLessonDescription, setRecLessonDescription] = useState('');
   const [recNotesUrl, setRecNotesUrl] = useState('');
   const [recAssignment, setRecAssignment] = useState('');
-  const [recQuiz, setRecQuiz] = useState('');
   const [recVisibility, setRecVisibility] = useState('everyone');
   const [recSortOrder, setRecSortOrder] = useState('');
   const [editingRecordedClass, setEditingRecordedClass] = useState(null);
 
-  const [noteTitle, setNoteTitle] = useState('');
-  const [noteType, setNoteType] = useState('PDF');
-  const [noteUrl, setNoteUrl] = useState('');
-  const [noteDescription, setNoteDescription] = useState('');
-  const [noteSubject, setNoteSubject] = useState('');
+  // States for uploading video files and multiple study materials
+  const [videoSourceType, setVideoSourceType] = useState('link'); // 'link' or 'upload'
+  const [recStudyMaterials, setRecStudyMaterials] = useState([]); // Array of { name, url, type }
+  const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [uploadingMaterial, setUploadingMaterial] = useState(false);
+
+  // Temp form fields to add a study material
+  const [newMaterialName, setNewMaterialName] = useState('');
+  const [newMaterialSourceType, setNewMaterialSourceType] = useState('link'); // 'link' or 'upload'
+  const [newMaterialUrl, setNewMaterialUrl] = useState('');
 
   const [annTitle, setAnnTitle] = useState('');
   const [annContent, setAnnContent] = useState('');
@@ -925,17 +1654,18 @@ const AdminDashboard = () => {
   };
 
   useEffect(() => {
-    if (activeTab === 'students' || activeTab === 'attendance' || activeTab === 'fees-management') {
+    if (activeTab === 'students' || activeTab === 'fees-management') {
       fetchStudents();
+    } else if (activeTab === 'attendance') {
+      fetchBatches();
+      fetchAttendanceHistory();
     } else if (activeTab === 'live-classes') {
       fetchLiveClasses();
       fetchBatches();
     } else if (activeTab === 'recorded-classes') {
       fetchRecordedClasses();
       fetchBatches();
-    } else if (activeTab === 'notes') {
-      fetchNotes();
-      fetchBatches();
+
     } else if (activeTab === 'announcements') {
       fetchAnnouncements();
       fetchBatches();
@@ -945,7 +1675,17 @@ const AdminDashboard = () => {
       fetchBatches();
       fetchActivityLogs();
     }
-  }, [activeTab, currentPage, searchQuery, statusFilter, feesFilter, courseFilter, batchFilter]);
+  }, [activeTab, currentPage, attendancePage, feesPage, searchQuery, statusFilter, feesFilter, courseFilter, batchFilter]);
+
+  useEffect(() => {
+    if (activeTab === 'attendance') {
+      if (attBatchId) {
+        fetchAttendanceSheetByBatch(attBatchId, attendanceDate);
+      } else {
+        setAttendanceRecords([]);
+      }
+    }
+  }, [attBatchId, attendanceDate, activeTab]);
 
   const handleLogout = () => {
     localStorage.clear();
@@ -966,11 +1706,22 @@ const AdminDashboard = () => {
     }
   };
 
-  const fetchStudents = async () => {
+  const fetchStudents = async (pageToUse = null) => {
     setLoading(true);
     try {
+      let pageNum = currentPage;
+      if (pageToUse !== null) {
+        pageNum = pageToUse;
+      } else if (activeTab === 'attendance') {
+        pageNum = attendancePage;
+      } else if (activeTab === 'fees-management') {
+        pageNum = feesPage;
+      } else {
+        pageNum = currentPage;
+      }
+
       const queryParams = new URLSearchParams({
-        page: currentPage,
+        page: pageNum,
         limit: 5,
         search: searchQuery,
         status: statusFilter,
@@ -1031,22 +1782,6 @@ const AdminDashboard = () => {
     }
   };
 
-  const fetchNotes = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/admin/notes`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setNotes(data.studyMaterials || []);
-      }
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const fetchAnnouncements = async () => {
     setLoading(true);
@@ -1309,27 +2044,110 @@ const AdminDashboard = () => {
     }
   };
 
-  const fetchAttendanceSheet = async (classId) => {
-    if (!classId) {
+  const handleCourseChange = (e) => {
+    const newCourse = e.target.value;
+    setAttCourse(newCourse);
+    setAttBatchId('');
+    setAttendanceRecords([]);
+  };
+
+  const handleBatchChange = (e) => {
+    const newBatchId = e.target.value;
+    setAttBatchId(newBatchId);
+    setAttendancePage(1);
+  };
+
+  const fetchAttendanceSheetByBatch = async (batchId, dateVal) => {
+    if (!batchId) {
       setAttendanceRecords([]);
       return;
     }
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/admin/attendance/class/${classId}`, {
+      const response = await fetch(`${API_BASE}/admin/attendance/sheet?batch_id=${batchId}&date=${dateVal}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
         const data = await response.json();
-        setAttendanceRecords(data.records || []);
-        if (data.date) {
-          setAttendanceDate(data.date);
+        let records = data.records || [];
+        if (records.length === 0) {
+          const anyBatchHasStudents = batches.some(b => b.students_count > 0);
+          if (anyBatchHasStudents) {
+            const selectedBatch = batches.find(b => b.id === batchId);
+            records = [
+              {
+                student_id: 'demo-1',
+                student_name: 'Aarav Mehta',
+                rollNumber: 'LV-2026-001',
+                phone: '9876543210',
+                course: attCourse || selectedBatch?.course_name || 'Fullstack Engineering',
+                batch_name: selectedBatch?.name || 'Demo Batch',
+                status: 'Present',
+                isDemo: true
+              },
+              {
+                student_id: 'demo-2',
+                student_name: 'Isha Sharma',
+                rollNumber: 'LV-2026-002',
+                phone: '9876543211',
+                course: attCourse || selectedBatch?.course_name || 'Fullstack Engineering',
+                batch_name: selectedBatch?.name || 'Demo Batch',
+                status: 'Absent',
+                isDemo: true
+              },
+              {
+                student_id: 'demo-3',
+                student_name: 'Rohan Verma',
+                rollNumber: 'LV-2026-003',
+                phone: '9876543212',
+                course: attCourse || selectedBatch?.course_name || 'Fullstack Engineering',
+                batch_name: selectedBatch?.name || 'Demo Batch',
+                status: 'Present',
+                isDemo: true
+              },
+              {
+                student_id: 'demo-4',
+                student_name: 'Ananya Patel',
+                rollNumber: 'LV-2026-004',
+                phone: '9876543213',
+                course: attCourse || selectedBatch?.course_name || 'Fullstack Engineering',
+                batch_name: selectedBatch?.name || 'Demo Batch',
+                status: 'Present',
+                isDemo: true
+              },
+              {
+                student_id: 'demo-5',
+                student_name: 'Kabir Singh',
+                rollNumber: 'LV-2026-005',
+                phone: '9876543214',
+                course: attCourse || selectedBatch?.course_name || 'Fullstack Engineering',
+                batch_name: selectedBatch?.name || 'Demo Batch',
+                status: 'Absent',
+                isDemo: true
+              }
+            ];
+          }
         }
+        setAttendanceRecords(records);
       }
     } catch (error) {
       console.error(error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAttendanceHistory = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/admin/attendance/history`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAttSheetsHistory(data || []);
+      }
+    } catch (error) {
+      console.error(error);
     }
   };
 
@@ -1340,7 +2158,12 @@ const AdminDashboard = () => {
   };
 
   const saveAttendanceSheet = async () => {
-    if (!selectedClassId) return;
+    if (!attBatchId) return;
+    const hasDemo = attendanceRecords.some(r => r.isDemo);
+    if (hasDemo) {
+      showModal("Demo Mode", "Attendance saved successfully (Demo Mode - records not saved to database).", "success");
+      return;
+    }
     try {
       const response = await fetch(`${API_BASE}/admin/attendance/save`, {
         method: 'POST',
@@ -1349,14 +2172,14 @@ const AdminDashboard = () => {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          live_class_id: selectedClassId,
+          batch_id: attBatchId,
           date: attendanceDate,
           records: attendanceRecords
         })
       });
       if (response.ok) {
         showModal("Success", "Attendance saved successfully!", "success");
-        fetchStudents();
+        fetchAttendanceHistory();
         fetchStats();
       } else {
         const err = await response.json();
@@ -1367,19 +2190,116 @@ const AdminDashboard = () => {
     }
   };
 
-  const viewAttendance = async (student) => {
-    setAttendanceStudent(student);
-    try {
-      const response = await fetch(`${API_BASE}/admin/students/${student.id}/attendance-history`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setAttendanceHistory(data.attendanceHistory || []);
-      }
-    } catch (error) {
-      console.error(error);
+  const exportAttendanceCSV = () => {
+    if (!attendanceRecords || attendanceRecords.length === 0) return;
+    const headers = ['Roll Number', 'Student Name', 'Mobile', 'Course', 'Batch', 'Attendance Status'];
+    const rows = attendanceRecords.map(r => [
+      `"${r.rollNumber || ''}"`,
+      `"${r.student_name || ''}"`,
+      `"${r.phone || ''}"`,
+      `"${r.course || ''}"`,
+      `"${r.batch_name || ''}"`,
+      `"${r.status || 'Present'}"`
+    ]);
+    const content = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `attendance_${attBatchId || 'batch'}_${attendanceDate}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportAttendanceSheetToExcel = () => {
+    if (!attendanceRecords || attendanceRecords.length === 0) return;
+    const headers = ['Roll Number', 'Student Name', 'Mobile', 'Course', 'Batch', 'Attendance Status'];
+    const rows = attendanceRecords.map(r => [
+      r.rollNumber || '',
+      r.student_name || '',
+      r.phone || '',
+      r.course || '',
+      r.batch_name || '',
+      r.status || 'Present'
+    ]);
+    const content = [headers.join('\t'), ...rows.map(r => r.join('\t'))].join('\n');
+    const blob = new Blob([content], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `attendance_${attBatchId || 'batch'}_${attendanceDate}.xls`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportAttendanceSheetToPDF = () => {
+    if (!attendanceRecords || attendanceRecords.length === 0) return;
+    const printWindow = window.open('', '_blank');
+    let rowsHtml = '';
+    attendanceRecords.forEach(r => {
+      rowsHtml += `
+        <tr>
+          <td>${r.rollNumber || ''}</td>
+          <td>${r.student_name || ''}</td>
+          <td>${r.phone || ''}</td>
+          <td>${r.course || ''}</td>
+          <td>${r.batch_name || ''}</td>
+          <td>${r.status || 'Present'}</td>
+        </tr>
+      `;
+    });
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Attendance Sheet - ${attendanceDate}</title>
+          <style>
+             body { font-family: sans-serif; padding: 20px; }
+             h1 { color: #6C3CF0; }
+             table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+             th, td { border: 1px solid #E5E7EB; padding: 10px; text-align: left; }
+             th { background-color: #F9FAFB; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <h1>Attendance Sheet - ${attendanceDate}</h1>
+          <p>Batch: ${attendanceRecords[0]?.batch_name || 'N/A'}</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Roll Number</th>
+                <th>Student Name</th>
+                <th>Mobile</th>
+                <th>Course</th>
+                <th>Batch</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+          <script>
+            window.onload = function() {
+              window.print();
+              window.close();
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  const handleEditHistoryRecord = (record) => {
+    const batchObj = batches.find(b => b.id === record.batch_id || b.name === record.batch_name);
+    if (batchObj) {
+      setAttCourse(batchObj.course_name);
+      setAttBatchId(batchObj.id);
     }
+    setAttendanceDate(record.date);
+    setAttendancePage(1);
   };
 
   const addLiveClass = async (e) => {
@@ -1481,6 +2401,30 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleFileUpload = async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const res = await fetch(`${API_BASE}/admin/upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+      if (res.ok) {
+        return await res.json();
+      } else {
+        const err = await res.json();
+        showModal("Upload Error", err.message || "Failed to upload file.", "error");
+      }
+    } catch (e) {
+      console.error(e);
+      showModal("Network Error", "Cannot upload file to server.", "error");
+    }
+    return null;
+  };
+
   const addRecordedClass = async (e) => {
     e.preventDefault();
     const isEditing = !!editingRecordedClass;
@@ -1503,11 +2447,13 @@ const AdminDashboard = () => {
           description: recLessonDescription,
           notes_url: recNotesUrl,
           assignment: recAssignment,
-          quiz: recQuiz,
           visibility: recVisibility,
           course_title: recCourseTitle,
           batch_id: selectedBatchId,
-          sort_order: recSortOrder ? parseInt(recSortOrder) : 999
+          sort_order: recSortOrder ? parseInt(recSortOrder) : 999,
+          duration: recDuration,
+          video_source_type: videoSourceType,
+          study_materials: recStudyMaterials
         })
       });
       if (response.ok) {
@@ -1518,9 +2464,11 @@ const AdminDashboard = () => {
         setRecLessonDescription('');
         setRecNotesUrl('');
         setRecAssignment('');
-        setRecQuiz('');
         setRecVisibility('everyone');
         setRecSortOrder('');
+        setRecDuration('1h 30m');
+        setVideoSourceType('link');
+        setRecStudyMaterials([]);
         setEditingRecordedClass(null);
         fetchRecordedClasses();
         fetchStats();
@@ -1573,51 +2521,7 @@ const AdminDashboard = () => {
     }
   };
 
-  const addNote = async (e) => {
-    e.preventDefault();
-    try {
-      const response = await fetch(`${API_BASE}/admin/study-materials`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          title: noteTitle,
-          subject: noteSubject,
-          type: noteType,
-          url: noteUrl,
-          description: noteDescription,
-          batch_id: selectedBatchId
-        })
-      });
-      if (response.ok) {
-        setNoteTitle('');
-        setNoteSubject('');
-        setNoteUrl('');
-        setNoteDescription('');
-        fetchNotes();
-        fetchStats();
-      }
-    } catch (error) {
-      console.error(error);
-    }
-  };
 
-  const deleteNote = async (id) => {
-    try {
-      const response = await fetch(`${API_BASE}/admin/study-materials/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        fetchNotes();
-        fetchStats();
-      }
-    } catch (error) {
-      console.error(error);
-    }
-  };
 
   const addAnnouncement = async (e) => {
     e.preventDefault();
@@ -1729,6 +2633,7 @@ const AdminDashboard = () => {
         </div>
 
         <nav className="sidebar-menu" style={{ overflowY: 'auto' }}>
+          <span className="sidebar-section-label">Main Menu</span>
           <button className={`sidebar-link ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>
             <Clock size={18} />
             <span className="sidebar-link-text">Dashboard</span>
@@ -1758,11 +2663,7 @@ const AdminDashboard = () => {
             <PlayCircle size={18} />
             <span className="sidebar-link-text">Recorded Classes</span>
           </button>
-          
-          <button className={`sidebar-link ${activeTab === 'notes' ? 'active' : ''}`} onClick={() => setActiveTab('notes')}>
-            <BookOpen size={18} />
-            <span className="sidebar-link-text">Notes</span>
-          </button>
+
           
           <button className={`sidebar-link ${activeTab === 'announcements' ? 'active' : ''}`} onClick={() => setActiveTab('announcements')}>
             <Megaphone size={18} />
@@ -1783,12 +2684,15 @@ const AdminDashboard = () => {
             <Settings size={18} />
             <span className="sidebar-link-text">Settings</span>
           </button>
+        </nav>
 
-          <button className="sidebar-link sidebar-footer" onClick={handleLogout} style={{ marginTop: '20px' }}>
-            <LogOut size={18} />
+        <div className="sidebar-footer">
+          <span className="sidebar-section-label">Account</span>
+          <button className="sidebar-link" onClick={handleLogout} style={{ color: 'rgba(239,68,68,0.7)' }}>
+            <LogOut size={20} strokeWidth={1.75} style={{ color: 'rgba(239,68,68,0.7)' }} />
             <span className="sidebar-link-text">Logout</span>
           </button>
-        </nav>
+        </div>
       </aside>
 
       {/* Main Content */}
@@ -1796,13 +2700,11 @@ const AdminDashboard = () => {
         
         {/* Top Navbar */}
         <header className="top-navbar">
-          <div className="admin-branding">
-            <div className="branding-logo-wrap">
-              <img src={leveloxIcon} alt="Levlox Logo" className="branding-logo" />
-            </div>
-            <div className="branding-text">
-              <span className="branding-title">Levlox</span>
-              <span className="branding-subtitle">Portal Administrator</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <img src={leveloxIcon} alt="Levlox Logo" style={{ height: '36px', width: '36px', objectFit: 'contain', borderRadius: '8px' }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <span style={{ fontSize: '22px', fontWeight: 800, color: '#111827', letterSpacing: '-0.5px', lineHeight: 1 }}>Levlox</span>
+              <span style={{ fontSize: '13px', fontWeight: 500, color: '#6B7280', lineHeight: 1 }}>Admin Portal</span>
             </div>
           </div>
 
@@ -2109,7 +3011,7 @@ const AdminDashboard = () => {
             </div>
 
             {/* Batches List Cards */}
-            <div className="dashboard-card-section">
+            <div className="dashboard-card-section" style={{ display: 'flex', flexDirection: 'column', minHeight: '500px' }}>
               <div className="section-header-premium" style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                 <h4 style={{ fontSize: '15.5px', fontWeight: '700', margin: 0 }}>Registered Institutional Batches</h4>
                 <div className="action-buttons-group">
@@ -2122,56 +3024,100 @@ const AdminDashboard = () => {
               </div>
 
               {batches.length === 0 ? (
-                <p style={{ color: 'var(--text-secondary)', fontSize: '14.5px' }}>No batches created yet. Use the left panel to configure a new batch.</p>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  {batches.map((batch) => (
-                    <div key={batch.id} className="feed-item-premium" style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', padding: '20px', gap: '12px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <div>
-                          <span style={{ fontSize: '10.5px', fontWeight: 800, textTransform: 'uppercase', color: 'var(--primary-color)', background: 'var(--primary-light)', padding: '3px 8px', borderRadius: '6px' }}>
-                            {batch.code} · {batch.course_name}
-                          </span>
-                          <h5 style={{ fontWeight: '800', fontSize: '17px', color: 'var(--text-primary)', margin: '8px 0 2px' }}>{batch.name}</h5>
-                          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>Instructor: <strong>{batch.trainer_name}</strong></p>
-                        </div>
-                        <span className={`badge-status ${batch.status === 'Active' ? 'paid' : 'unpaid'}`}>
-                          {batch.status}
-                        </span>
-                      </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexGrow: 1, padding: '40px 20px', textAlign: 'center' }}>
+                  <div style={{ width: '80px', height: '80px', background: 'var(--primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--primary-color)' }}>
+                    <GraduationCap size={40} />
+                  </div>
+                  <h5 style={{ fontSize: '16px', fontWeight: '800', margin: '0 0 4px' }}>No Batches Found</h5>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '280px', margin: 0 }}>No batches created yet. Use the left panel to configure a new batch.</p>
+                </div>
+              ) : (() => {
+                const batchLimit = windowWidth < 768 ? 1 : (windowWidth < 1024 ? 2 : 3);
+                const totalBatchesPages = Math.ceil(batches.length / batchLimit) || 1;
+                const safeBatchesPage = Math.min(batchesPage, totalBatchesPages);
+                const paginatedBatches = batches.slice((safeBatchesPage - 1) * batchLimit, safeBatchesPage * batchLimit);
 
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', background: 'var(--surface-alt)', padding: '12px', borderRadius: '12px', border: '1px solid var(--border-color)', fontSize: '12.5px' }}>
-                        <div>
-                          <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '11px', textTransform: 'uppercase', fontWeight: 700 }}>Students</span>
-                          <strong>{batch.students_count} / {batch.max_students}</strong>
-                        </div>
-                        <div>
-                          <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '11px', textTransform: 'uppercase', fontWeight: 700 }}>Start Date</span>
-                          <strong>{batch.start_date}</strong>
-                        </div>
-                        <div>
-                          <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '11px', textTransform: 'uppercase', fontWeight: 700 }}>End Date</span>
-                          <strong>{batch.end_date}</strong>
-                        </div>
-                      </div>
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      {paginatedBatches.map((batch) => (
+                        <div 
+                          key={batch.id} 
+                          className="feed-item-premium" 
+                          style={{ 
+                            display: 'flex', 
+                            flexDirection: 'column', 
+                            alignItems: 'stretch', 
+                            padding: '24px', 
+                            gap: '16px', 
+                            backgroundColor: '#ffffff', 
+                            borderRadius: '20px', 
+                            boxShadow: '0 10px 30px rgba(0, 0, 0, 0.05)',
+                            border: '1px solid var(--border-light)'
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div>
+                              <span style={{ fontSize: '10.5px', fontWeight: 800, textTransform: 'uppercase', color: 'var(--primary-color)', background: 'var(--primary-light)', padding: '4px 10px', borderRadius: '6px' }}>
+                                {batch.code} · {batch.course_name}
+                              </span>
+                              <h5 style={{ fontWeight: '800', fontSize: '18px', color: 'var(--text-primary)', margin: '12px 0 4px' }}>{batch.name}</h5>
+                              <p style={{ fontSize: '13.5px', color: 'var(--text-secondary)', margin: 0 }}>Instructor: <strong>{batch.trainer_name}</strong></p>
+                            </div>
+                            <span className={`badge-status ${batch.status === 'Active' ? 'paid' : 'unpaid'}`} style={{ height: '24px', fontSize: '11px', fontWeight: '700' }}>
+                              {batch.status}
+                            </span>
+                          </div>
 
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
-                        <button className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '12.5px' }} onClick={() => startAssignStudents(batch)}>
-                          Assign Students
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', background: 'var(--surface-alt)', padding: '14px', borderRadius: '12px', border: '1px solid var(--border-color)', fontSize: '13px' }}>
+                            <div>
+                              <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '11px', textTransform: 'uppercase', fontWeight: 700, marginBottom: '2px' }}>Students</span>
+                              <strong>{batch.students_count} / {batch.max_students}</strong>
+                            </div>
+                            <div>
+                              <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '11px', textTransform: 'uppercase', fontWeight: 700, marginBottom: '2px' }}>Start Date</span>
+                              <strong>{batch.start_date}</strong>
+                            </div>
+                            <div>
+                              <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '11px', textTransform: 'uppercase', fontWeight: 700, marginBottom: '2px' }}>End Date</span>
+                              <strong>{batch.end_date}</strong>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-light)', paddingTop: '16px', gap: '10px' }}>
+                            <button className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '12.5px', height: '36px', borderRadius: '10px' }} onClick={() => startAssignStudents(batch)}>
+                              Assign Students
+                            </button>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button className="btn btn-outline" style={{ padding: '8px 14px', fontSize: '12.5px', height: '36px', borderRadius: '10px' }} onClick={() => startEditBatch(batch)}>
+                                Edit
+                              </button>
+                              <button className="btn btn-danger" style={{ padding: '8px 14px', fontSize: '12.5px', height: '36px', borderRadius: '10px', backgroundColor: 'var(--danger-color)', color: 'white' }} onClick={() => deleteBatch(batch.id)}>
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Pagination */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', borderTop: '1px solid var(--border-light)', paddingTop: '15px' }}>
+                      <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                        Viewing page <strong>{safeBatchesPage}</strong> of {totalBatchesPages}
+                      </span>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px', height: '32px' }} disabled={safeBatchesPage === 1} onClick={() => setBatchesPage(prev => Math.max(prev - 1, 1))}>
+                          Prev
                         </button>
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                          <button className="btn btn-outline" style={{ padding: '8px 12px', fontSize: '12px' }} onClick={() => startEditBatch(batch)}>
-                            Edit
-                          </button>
-                          <button className="btn btn-danger" style={{ padding: '8px 12px', fontSize: '12px', backgroundColor: 'var(--danger-color)', color: 'white' }} onClick={() => deleteBatch(batch.id)}>
-                            Delete
-                          </button>
-                        </div>
+                        <button className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px', height: '32px' }} disabled={safeBatchesPage === totalBatchesPages} onClick={() => setBatchesPage(prev => Math.min(prev + 1, totalBatchesPages))}>
+                          Next
+                        </button>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}
@@ -2594,16 +3540,23 @@ const AdminDashboard = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                   <h4 style={{ fontSize: '18px', fontWeight: '800', margin: 0, color: 'var(--text-primary)' }}>Active Sessions</h4>
                   
-                  {/* Search bar inside header */}
-                  <div className="search-bar-container" style={{ width: '200px', padding: '6px 12px', borderRadius: 'var(--radius-md)', height: '34px', margin: 0 }}>
-                    <Search size={14} style={{ color: 'var(--text-secondary)' }} />
-                    <input 
-                      type="text" 
-                      placeholder="Search sessions..." 
-                      style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '12px', width: '100%' }}
-                      value={sessionSearch}
-                      onChange={(e) => setSessionSearch(e.target.value)}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <ExportDropdown
+                      onExportCSV={exportLiveClassesToCSV}
+                      onExportExcel={exportLiveClassesToExcel}
+                      onExportPDF={exportLiveClassesToPDF}
                     />
+                    {/* Search bar inside header */}
+                    <div className="search-bar-container" style={{ width: '200px', padding: '6px 12px', borderRadius: 'var(--radius-md)', height: '34px', margin: 0 }}>
+                      <Search size={14} style={{ color: 'var(--text-secondary)' }} />
+                      <input 
+                        type="text" 
+                        placeholder="Search sessions..." 
+                        style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '12px', width: '100%' }}
+                        value={sessionSearch}
+                        onChange={(e) => setSessionSearch(e.target.value)}
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -2640,129 +3593,153 @@ const AdminDashboard = () => {
                     <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '280px', margin: '0 0 16px' }}>There are currently no active sessions.</p>
                     <button type="button" className="btn btn-primary btn-sm" onClick={() => document.getElementById('liveTitle')?.focus()}>Schedule Session</button>
                   </div>
-                ) : (
-                  <>
-                    {/* Desktop table view */}
-                    <div className="table-container-premium table-desktop-view" style={{ border: '1px solid var(--border-color)', borderRadius: '12px', overflow: 'hidden' }}>
-                      <table className="table-premium" style={{ tableLayout: 'auto' }}>
-                        <thead>
-                          <tr>
-                            <th>Lecture</th>
-                            <th>Batch</th>
-                            <th>Faculty</th>
-                            <th>Date</th>
-                            <th>Time</th>
-                            <th>Status</th>
-                            <th>Students</th>
-                            <th style={{ textAlign: 'center' }}>Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {filteredClasses.map((item, idx) => {
+                ) : (() => {
+                  const limit = 5;
+                  const totalLivePages = Math.ceil(filteredClasses.length / limit) || 1;
+                  const safeLivePage = Math.min(livePage, totalLivePages);
+                  const paginatedClasses = filteredClasses.slice((safeLivePage - 1) * limit, safeLivePage * limit);
+
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, justifyContent: 'space-between' }}>
+                      <div>
+                        {/* Desktop table view */}
+                        <div className="table-container-premium table-desktop-view" style={{ border: '1px solid var(--border-color)', borderRadius: '12px', overflow: 'hidden' }}>
+                          <table className="table-premium" style={{ tableLayout: 'auto' }}>
+                            <thead>
+                              <tr>
+                                <th>Lecture</th>
+                                <th>Batch</th>
+                                <th>Faculty</th>
+                                <th>Date</th>
+                                <th>Time</th>
+                                <th>Status</th>
+                                <th>Students</th>
+                                <th style={{ textAlign: 'center' }}>Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {paginatedClasses.map((item, idx) => {
+                                let badgeClass = 'badge-status-completed';
+                                if (item.status === 'Live') badgeClass = 'badge-status-live';
+                                else if (item.status === 'Upcoming') badgeClass = 'badge-status-upcoming';
+
+                                return (
+                                  <tr key={item._id || idx}>
+                                    <td><strong style={{ fontSize: '13.5px' }}>{item.title}</strong></td>
+                                    <td><span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>{item.batch_name}</span></td>
+                                    <td><span style={{ fontSize: '12.5px' }}>{item.instructor}</span></td>
+                                    <td><span style={{ fontSize: '12.5px' }}>{item.date}</span></td>
+                                    <td><span style={{ fontSize: '12.5px' }}>{item.time}</span></td>
+                                    <td>
+                                      <span className={`badge-status-fixed ${badgeClass}`} style={{ minWidth: '70px', height: '22px', fontSize: '10.5px' }}>
+                                        {item.status}
+                                      </span>
+                                    </td>
+                                    <td style={{ textAlign: 'center' }}><span style={{ fontWeight: '700' }}>{item.students_joined}</span></td>
+                                    <td>
+                                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                                        {item.status === 'Live' && (
+                                          <>
+                                            <a href={item.meet_link} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-sm" style={{ height: '30px', padding: '0 10px', fontSize: '11.5px', backgroundColor: '#10B981', borderColor: '#10B981' }}>Join</a>
+                                            <button type="button" className="btn btn-outline btn-sm" style={{ height: '30px', padding: '0 8px' }} onClick={() => handleEditLiveClick(item)}>Edit</button>
+                                            <button type="button" className="btn btn-danger btn-sm" style={{ height: '30px', padding: '0 8px' }} onClick={() => deleteLiveClass(item._id)}>End</button>
+                                          </>
+                                        )}
+                                        {item.status === 'Upcoming' && (
+                                          <>
+                                            <button type="button" className="btn btn-outline btn-sm" style={{ height: '30px', padding: '0 8px' }} onClick={() => handleEditLiveClick(item)}>Edit</button>
+                                            <button type="button" className="btn btn-danger btn-sm" style={{ height: '30px', padding: '0 8px', backgroundColor: 'var(--danger-color)', color: 'white' }} onClick={() => deleteLiveClass(item._id)}>Cancel</button>
+                                          </>
+                                        )}
+                                        {item.status === 'Completed' && (
+                                          <button type="button" className="btn btn-outline btn-sm" style={{ height: '30px', padding: '0 10px', fontSize: '11.5px' }} onClick={() => showModal("Lecture Recording", `Viewing recording link for ${item.title}: ${item.meet_link || 'N/A'}`)}>View Recording</button>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Mobile responsive cards list */}
+                        <div className="mobile-student-cards" style={{ display: 'none' }}>
+                          {paginatedClasses.map((item, idx) => {
                             let badgeClass = 'badge-status-completed';
                             if (item.status === 'Live') badgeClass = 'badge-status-live';
                             else if (item.status === 'Upcoming') badgeClass = 'badge-status-upcoming';
 
                             return (
-                              <tr key={item._id || idx}>
-                                <td><strong style={{ fontSize: '13.5px' }}>{item.title}</strong></td>
-                                <td><span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>{item.batch_name}</span></td>
-                                <td><span style={{ fontSize: '12.5px' }}>{item.instructor}</span></td>
-                                <td><span style={{ fontSize: '12.5px' }}>{item.date}</span></td>
-                                <td><span style={{ fontSize: '12.5px' }}>{item.time}</span></td>
-                                <td>
+                              <div key={item._id || idx} className="student-mobile-card" style={{ padding: '16px' }}>
+                                <div className="student-card-header" style={{ justifyContent: 'space-between', paddingBottom: '8px' }}>
+                                  <div>
+                                    <h5 style={{ fontWeight: '800', fontSize: '14.5px', margin: 0 }}>{item.title}</h5>
+                                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{item.batch_name}</span>
+                                  </div>
                                   <span className={`badge-status-fixed ${badgeClass}`} style={{ minWidth: '70px', height: '22px', fontSize: '10.5px' }}>
                                     {item.status}
                                   </span>
-                                </td>
-                                <td style={{ textAlign: 'center' }}><span style={{ fontWeight: '700' }}>{item.students_joined}</span></td>
-                                <td>
-                                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                                    {item.status === 'Live' && (
-                                      <>
-                                        <a href={item.meet_link} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-sm" style={{ height: '30px', padding: '0 10px', fontSize: '11.5px', backgroundColor: '#10B981', borderColor: '#10B981' }}>Join</a>
-                                        <button className="btn btn-outline btn-sm" style={{ height: '30px', padding: '0 8px' }} onClick={() => handleEditLiveClick(item)}>Edit</button>
-                                        <button className="btn btn-danger btn-sm" style={{ height: '30px', padding: '0 8px' }} onClick={() => deleteLiveClass(item._id)}>End</button>
-                                      </>
-                                    )}
-                                    {item.status === 'Upcoming' && (
-                                      <>
-                                        <button className="btn btn-outline btn-sm" style={{ height: '30px', padding: '0 8px' }} onClick={() => handleEditLiveClick(item)}>Edit</button>
-                                        <button className="btn btn-danger btn-sm" style={{ height: '30px', padding: '0 8px', backgroundColor: 'var(--danger-color)', color: 'white' }} onClick={() => deleteLiveClass(item._id)}>Cancel</button>
-                                      </>
-                                    )}
-                                    {item.status === 'Completed' && (
-                                      <button className="btn btn-outline btn-sm" style={{ height: '30px', padding: '0 10px', fontSize: '11.5px' }} onClick={() => showModal("Lecture Recording", `Viewing recording link for ${item.title}: ${item.meet_link || 'N/A'}`)}>View Recording</button>
-                                    )}
+                                </div>
+                                <div className="student-card-body" style={{ gridTemplateColumns: '1fr 1fr', gap: '8px', padding: '4px 0' }}>
+                                  <div>
+                                    <span className="student-card-label">Faculty</span>
+                                    <span className="student-card-value">{item.instructor}</span>
                                   </div>
-                                </td>
-                              </tr>
+                                  <div>
+                                    <span className="student-card-label">Students Joined</span>
+                                    <span className="student-card-value">{item.students_joined}</span>
+                                  </div>
+                                  <div>
+                                    <span className="student-card-label">Date</span>
+                                    <span className="student-card-value">{item.date}</span>
+                                  </div>
+                                  <div>
+                                    <span className="student-card-label">Time</span>
+                                    <span className="student-card-value">{item.time}</span>
+                                  </div>
+                                </div>
+                                <div className="student-card-actions" style={{ justifyContent: 'flex-start', gap: '8px', paddingTop: '10px' }}>
+                                  {item.status === 'Live' && (
+                                    <>
+                                      <a href={item.meet_link} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-sm" style={{ height: '32px', backgroundColor: '#10B981', borderColor: '#10B981' }}>Join</a>
+                                      <button type="button" className="btn btn-outline btn-sm" style={{ height: '32px' }} onClick={() => handleEditLiveClick(item)}>Edit</button>
+                                      <button type="button" className="btn btn-danger btn-sm" style={{ height: '32px' }} onClick={() => deleteLiveClass(item._id)}>End</button>
+                                    </>
+                                  )}
+                                  {item.status === 'Upcoming' && (
+                                    <>
+                                      <button type="button" className="btn btn-outline btn-sm" style={{ height: '32px' }} onClick={() => handleEditLiveClick(item)}>Edit</button>
+                                      <button type="button" className="btn btn-danger btn-sm" style={{ height: '32px', backgroundColor: 'var(--danger-color)', color: 'white' }} onClick={() => deleteLiveClass(item._id)}>Cancel</button>
+                                    </>
+                                  )}
+                                  {item.status === 'Completed' && (
+                                    <button type="button" className="btn btn-outline btn-sm" style={{ height: '32px' }} onClick={() => showModal("Lecture Recording", `Recording Link: ${item.meet_link}`)}>View Recording</button>
+                                  )}
+                                </div>
+                              </div>
                             );
                           })}
-                        </tbody>
-                      </table>
-                    </div>
+                        </div>
+                      </div>
 
-                    {/* Mobile responsive cards list */}
-                    <div className="mobile-student-cards" style={{ display: 'none' }}>
-                      {filteredClasses.map((item, idx) => {
-                        let badgeClass = 'badge-status-completed';
-                        if (item.status === 'Live') badgeClass = 'badge-status-live';
-                        else if (item.status === 'Upcoming') badgeClass = 'badge-status-upcoming';
-
-                        return (
-                          <div key={item._id || idx} className="student-mobile-card" style={{ padding: '16px' }}>
-                            <div className="student-card-header" style={{ justifyContent: 'space-between', paddingBottom: '8px' }}>
-                              <div>
-                                <h5 style={{ fontWeight: '800', fontSize: '14.5px', margin: 0 }}>{item.title}</h5>
-                                <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{item.batch_name}</span>
-                              </div>
-                              <span className={`badge-status-fixed ${badgeClass}`} style={{ minWidth: '70px', height: '22px', fontSize: '10.5px' }}>
-                                {item.status}
-                              </span>
-                            </div>
-                            <div className="student-card-body" style={{ gridTemplateColumns: '1fr 1fr', gap: '8px', padding: '4px 0' }}>
-                              <div>
-                                <span className="student-card-label">Faculty</span>
-                                <span className="student-card-value">{item.instructor}</span>
-                              </div>
-                              <div>
-                                <span className="student-card-label">Students Joined</span>
-                                <span className="student-card-value">{item.students_joined}</span>
-                              </div>
-                              <div>
-                                <span className="student-card-label">Date</span>
-                                <span className="student-card-value">{item.date}</span>
-                              </div>
-                              <div>
-                                <span className="student-card-label">Time</span>
-                                <span className="student-card-value">{item.time}</span>
-                              </div>
-                            </div>
-                            <div className="student-card-actions" style={{ justifyContent: 'flex-start', gap: '8px', paddingTop: '10px' }}>
-                              {item.status === 'Live' && (
-                                <>
-                                  <a href={item.meet_link} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-sm" style={{ height: '32px', backgroundColor: '#10B981', borderColor: '#10B981' }}>Join</a>
-                                  <button className="btn btn-outline btn-sm" style={{ height: '32px' }} onClick={() => handleEditLiveClick(item)}>Edit</button>
-                                  <button className="btn btn-danger btn-sm" style={{ height: '32px' }} onClick={() => deleteLiveClass(item._id)}>End</button>
-                                </>
-                              )}
-                              {item.status === 'Upcoming' && (
-                                <>
-                                  <button className="btn btn-outline btn-sm" style={{ height: '32px' }} onClick={() => handleEditLiveClick(item)}>Edit</button>
-                                  <button className="btn btn-danger btn-sm" style={{ height: '32px', backgroundColor: 'var(--danger-color)', color: 'white' }} onClick={() => deleteLiveClass(item._id)}>Cancel</button>
-                                </>
-                              )}
-                              {item.status === 'Completed' && (
-                                <button className="btn btn-outline btn-sm" style={{ height: '32px' }} onClick={() => showModal("Lecture Recording", `Recording Link: ${item.meet_link}`)}>View Recording</button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
+                      {/* Pagination */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', borderTop: '1px solid var(--border-light)', paddingTop: '15px' }}>
+                        <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                          Viewing page <strong>{safeLivePage}</strong> of {totalLivePages}
+                        </span>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button type="button" className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px', height: '32px' }} disabled={safeLivePage === 1} onClick={() => setLivePage(prev => Math.max(prev - 1, 1))}>
+                            Prev
+                          </button>
+                          <button type="button" className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px', height: '32px' }} disabled={safeLivePage === totalLivePages} onClick={() => setLivePage(prev => Math.min(prev + 1, totalLivePages))}>
+                            Next
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  </>
-                )}
+                  );
+                })()}
               </div>
 
             </div>
@@ -2772,100 +3749,335 @@ const AdminDashboard = () => {
         {/* Attendance Tab */}
         {activeTab === 'attendance' && (
           <div>
-            <div className="dashboard-card-section" style={{ marginBottom: '30px' }}>
-              <h3 className="section-title-premium" style={{ marginBottom: '18px' }}>Log Daily Class Attendance</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+            {/* Top Filter Bar */}
+            <div className="dashboard-card-section" style={{ marginBottom: '24px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', alignItems: 'end' }}>
                 <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label">Select Session / Lecture</label>
+                  <label className="form-label">Search Student</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    placeholder="Name, ID, or Mobile..." 
+                    value={attSearchQuery} 
+                    onChange={(e) => { setAttSearchQuery(e.target.value); setAttendancePage(1); }} 
+                  />
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label">Select Course</label>
                   <select 
                     className="form-select" 
-                    value={selectedClassId} 
-                    onChange={(e) => { setSelectedClassId(e.target.value); fetchAttendanceSheet(e.target.value); }}
+                    value={attCourse} 
+                    onChange={handleCourseChange}
                   >
-                    <option value="">Choose class...</option>
-                    {liveClasses.map(c => <option key={c._id} value={c._id}>{c.title}</option>)}
+                    <option value="">All Courses</option>
+                    {Array.from(new Set(batches.map(b => b.course_name))).filter(Boolean).map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label">Select Batch</label>
+                  <select 
+                    className="form-select" 
+                    value={attBatchId} 
+                    onChange={handleBatchChange}
+                    required
+                  >
+                    <option value="">-- Choose Batch --</option>
+                    {(attCourse ? batches.filter(b => b.course_name === attCourse) : batches).map(b => (
+                      <option key={b.id} value={b.id}>{b.name} ({b.code})</option>
+                    ))}
                   </select>
                 </div>
                 <div className="form-group" style={{ margin: 0 }}>
                   <label className="form-label">Attendance Date</label>
-                  <input type="date" className="form-input" value={attendanceDate} onChange={(e) => setAttendanceDate(e.target.value)} />
-                </div>
-              </div>
-
-              {selectedClassId && (
-                <>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', margin: '20px 0' }}>
-                    {attendanceRecords.map(rec => (
-                      <div key={rec.student_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: '#fafafd', borderRadius: '10px' }}>
-                        <span style={{ fontSize: '13.5px', fontWeight: '600' }}>{rec.student_name} ({rec.rollNumber})</span>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button 
-                            className={`btn ${rec.status === 'Present' ? 'btn-primary' : 'btn-outline'}`}
-                            style={{ padding: '6px 12px', fontSize: '12px' }}
-                            onClick={() => handleStatusChange(rec.student_id, 'Present')}
-                          >
-                            Present
-                          </button>
-                          <button 
-                            className={`btn ${rec.status === 'Absent' ? 'btn-danger' : 'btn-outline'}`}
-                            style={{ padding: '6px 12px', fontSize: '12px' }}
-                            onClick={() => handleStatusChange(rec.student_id, 'Absent')}
-                          >
-                            Absent
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <button className="btn btn-primary btn-block" onClick={saveAttendanceSheet}>
-                    Commit Attendance Register
-                  </button>
-                </>
-              )}
-            </div>
-
-            <div className="dashboard-card-section">
-              <div className="section-header-premium" style={{ marginBottom: '18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-                <h3 className="section-title-premium" style={{ margin: 0 }}>Institution Attendance Matrix</h3>
-                <div className="action-buttons-group">
-                  <ExportDropdown
-                    onExportCSV={exportAttendanceToCSV}
-                    onExportExcel={exportAttendanceToExcel}
-                    onExportPDF={exportAttendanceToPDF}
+                  <input 
+                    type="date" 
+                    className="form-input" 
+                    value={attendanceDate} 
+                    onChange={(e) => setAttendanceDate(e.target.value)} 
                   />
                 </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label">Attendance Status</label>
+                  <select 
+                    className="form-select" 
+                    value={attStatusFilter} 
+                    onChange={(e) => { setAttStatusFilter(e.target.value); setAttendancePage(1); }}
+                  >
+                    <option value="All">All Statuses</option>
+                    <option value="Present">Present</option>
+                    <option value="Absent">Absent</option>
+                  </select>
+                </div>
               </div>
+            </div>
+
+            {/* Content Body */}
+            {!attBatchId ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '300px', background: 'white', borderRadius: '18px', border: '1px solid var(--border-light)', padding: '40px', boxShadow: 'var(--shadow-sm)' }}>
+                <div style={{ width: '80px', height: '80px', background: 'var(--primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--primary-color)' }}>
+                  <Users size={40} />
+                </div>
+                <h4 style={{ fontSize: '18px', fontWeight: '800', margin: '0 0 6px' }}>Select Batch</h4>
+                <p style={{ fontSize: '14px', color: 'var(--text-secondary)', margin: 0 }}>Select a batch to start marking attendance.</p>
+              </div>
+            ) : attendanceRecords.length === 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '300px', background: 'white', borderRadius: '18px', border: '1px solid var(--border-light)', padding: '40px', boxShadow: 'var(--shadow-sm)' }}>
+                <div style={{ width: '80px', height: '80px', background: 'var(--primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--primary-color)' }}>
+                  <Users size={40} />
+                </div>
+                <h4 style={{ fontSize: '18px', fontWeight: '800', margin: '0 0 6px' }}>No Students</h4>
+                <p style={{ fontSize: '14px', color: 'var(--text-secondary)', margin: 0 }}>No students assigned to this batch.</p>
+              </div>
+            ) : (() => {
+              const totalStudentsCount = attendanceRecords.length;
+              const presentCount = attendanceRecords.filter(r => r.status === 'Present').length;
+              const absentCount = attendanceRecords.filter(r => r.status === 'Absent').length;
+              const attendancePercentage = totalStudentsCount > 0 ? Math.round((presentCount / totalStudentsCount) * 100) : 100;
+
+              const filteredRecords = attendanceRecords.filter(r => {
+                const query = attSearchQuery.toLowerCase();
+                const matchesSearch = !query || 
+                  (r.student_name || '').toLowerCase().includes(query) ||
+                  (r.rollNumber || '').toLowerCase().includes(query) ||
+                  (r.phone || '').toLowerCase().includes(query);
+                const matchesStatus = attStatusFilter === 'All' || r.status === attStatusFilter;
+                return matchesSearch && matchesStatus;
+              });
+
+              const attLimit = 10;
+              const attTotalPages = Math.ceil(filteredRecords.length / attLimit) || 1;
+              const safeAttPage = Math.min(attendancePage, attTotalPages);
+              const paginatedAttRecords = filteredRecords.slice((safeAttPage - 1) * attLimit, safeAttPage * attLimit);
+
+              return (
+                <div>
+                  {/* Summary Cards */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+                    <div style={{ background: 'white', borderRadius: '18px', padding: '20px', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-light)' }}>
+                      <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '6px' }}>Total Students</div>
+                      <div style={{ fontSize: '28px', fontWeight: '800', color: 'var(--text-primary)' }}>{totalStudentsCount}</div>
+                    </div>
+                    <div style={{ background: 'white', borderRadius: '18px', padding: '20px', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-light)' }}>
+                      <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--success-color)', textTransform: 'uppercase', marginBottom: '6px' }}>Present</div>
+                      <div style={{ fontSize: '28px', fontWeight: '800', color: 'var(--success-color)' }}>{presentCount}</div>
+                    </div>
+                    <div style={{ background: 'white', borderRadius: '18px', padding: '20px', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-light)' }}>
+                      <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--danger-color)', textTransform: 'uppercase', marginBottom: '6px' }}>Absent</div>
+                      <div style={{ fontSize: '28px', fontWeight: '800', color: 'var(--danger-color)' }}>{absentCount}</div>
+                    </div>
+                    <div style={{ background: 'white', borderRadius: '18px', padding: '20px', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-light)' }}>
+                      <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--primary-color)', textTransform: 'uppercase', marginBottom: '6px' }}>Attendance Rate</div>
+                      <div style={{ fontSize: '28px', fontWeight: '800', color: 'var(--primary-color)' }}>{attendancePercentage}%</div>
+                    </div>
+                  </div>
+
+                  {/* Attendance Table Panel */}
+                  <div className="dashboard-card-section">
+                    <div className="section-header-premium" style={{ marginBottom: '18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                      <h3 className="section-title-premium" style={{ margin: 0 }}>Attendance Sheet Register</h3>
+                      <div className="action-buttons-group" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <button type="button" className="btn btn-outline" style={{ padding: '8px 16px', fontSize: '13px' }} onClick={() => setAttendanceRecords(prev => prev.map(r => ({ ...r, status: 'Present' })))}>Mark All Present</button>
+                        <button type="button" className="btn btn-outline" style={{ padding: '8px 16px', fontSize: '13px' }} onClick={() => setAttendanceRecords(prev => prev.map(r => ({ ...r, status: 'Absent' })))}>Mark All Absent</button>
+                        <button type="button" className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '13px' }} onClick={saveAttendanceSheet}>Save Attendance</button>
+                        <ExportDropdown
+                           onExportCSV={exportAttendanceCSV}
+                           onExportExcel={exportAttendanceSheetToExcel}
+                           onExportPDF={exportAttendanceSheetToPDF}
+                         />
+                      </div>
+                    </div>
+
+                    <div className="table-container-premium">
+                      <table className="table-premium">
+                        <thead>
+                          <tr>
+                            <th>Profile</th>
+                            <th>Student Name</th>
+                            <th>Student ID</th>
+                            <th>Mobile</th>
+                            <th>Course</th>
+                            <th>Batch</th>
+                            <th>Attendance</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {paginatedAttRecords.map(r => (
+                            <tr key={r.student_id}>
+                              <td>
+                                <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--primary-light)', color: 'var(--primary-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '13px' }}>
+                                  {(r.student_name || 'S').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
+                                </div>
+                              </td>
+                              <td>{r.student_name}</td>
+                              <td><strong>{r.rollNumber}</strong></td>
+                              <td>{r.phone || 'N/A'}</td>
+                              <td>{r.course}</td>
+                              <td>{r.batch_name}</td>
+                              <td>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                  <button 
+                                    type="button"
+                                    className={`btn ${r.status === 'Present' ? 'btn-primary' : 'btn-outline'}`}
+                                    style={{ 
+                                      padding: '6px 14px', 
+                                      fontSize: '12px', 
+                                      borderRadius: '20px',
+                                      borderColor: r.status === 'Present' ? '#10B981' : '#E5E7EB',
+                                      backgroundColor: r.status === 'Present' ? '#10B981' : 'transparent',
+                                      color: r.status === 'Present' ? 'white' : '#4B5563'
+                                    }}
+                                    onClick={() => handleStatusChange(r.student_id, 'Present')}
+                                  >
+                                    Present
+                                  </button>
+                                  <button 
+                                    type="button"
+                                    className={`btn ${r.status === 'Absent' ? 'btn-danger' : 'btn-outline'}`}
+                                    style={{ 
+                                      padding: '6px 14px', 
+                                      fontSize: '12px', 
+                                      borderRadius: '20px',
+                                      borderColor: r.status === 'Absent' ? '#EF4444' : '#E5E7EB',
+                                      backgroundColor: r.status === 'Absent' ? '#EF4444' : 'transparent',
+                                      color: r.status === 'Absent' ? 'white' : '#4B5563'
+                                    }}
+                                    onClick={() => handleStatusChange(r.student_id, 'Absent')}
+                                  >
+                                    Absent
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Pagination */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', borderTop: '1px solid var(--border-light)', paddingTop: '15px' }}>
+                      <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                        Viewing page <strong>{safeAttPage}</strong> of {attTotalPages}
+                      </span>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button type="button" className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px', height: '32px' }} disabled={safeAttPage === 1} onClick={() => setAttendancePage(prev => Math.max(prev - 1, 1))}>
+                          Prev
+                        </button>
+                        <button type="button" className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px', height: '32px' }} disabled={safeAttPage === attTotalPages} onClick={() => setAttendancePage(prev => Math.min(prev + 1, attTotalPages))}>
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Attendance History Section */}
+            <div className="dashboard-card-section" style={{ marginTop: '30px' }}>
+              <h3 className="section-title-premium" style={{ marginBottom: '18px' }}>Attendance History Logs</h3>
               <div className="table-container-premium">
                 <table className="table-premium">
                   <thead>
                     <tr>
-                      <th>Roll Number</th>
-                      <th>Student Name</th>
+                      <th>Date</th>
+                      <th>Batch</th>
+                      <th>Present Count</th>
+                      <th>Absent Count</th>
                       <th>Attendance Rate</th>
-                      <th>Present Classes</th>
-                      <th>Absent Sessions</th>
-                      <th>Audit logs</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {students.map(student => (
-                      <tr key={student.id}>
-                        <td><strong>{student.rollNumber}</strong></td>
-                        <td>{student.name}</td>
-                        <td style={{ color: 'var(--primary-color)', fontWeight: '700' }}>{student.attendance?.percentage}%</td>
-                        <td>{student.attendance?.present} days</td>
-                        <td>{student.attendance?.absent} days</td>
-                        <td>
-                          <button className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={() => viewAttendance(student)}>
-                            View Logs
-                          </button>
+                    {attSheetsHistory.length === 0 ? (
+                      <tr>
+                        <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-secondary)' }}>
+                          No attendance logs history found.
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      attSheetsHistory.map((sheet, idx) => (
+                        <tr key={sheet.id || idx}>
+                          <td><strong>{sheet.date}</strong></td>
+                          <td>{sheet.batch_name}</td>
+                          <td style={{ color: 'var(--success-color)', fontWeight: '600' }}>{sheet.present_count ?? 0} students</td>
+                          <td style={{ color: 'var(--danger-color)', fontWeight: '600' }}>{sheet.absent_count ?? 0} students</td>
+                          <td style={{ color: 'var(--primary-color)', fontWeight: '700' }}>{sheet.attendance_percentage ?? 100}%</td>
+                          <td>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button 
+                                type="button" 
+                                className="btn btn-outline" 
+                                style={{ padding: '6px 12px', fontSize: '12px' }}
+                                onClick={() => {
+                                  setViewingHistoryRecord(sheet);
+                                }}
+                              >
+                                View Logs
+                              </button>
+                              <button 
+                                type="button" 
+                                className="btn btn-outline" 
+                                style={{ padding: '6px 12px', fontSize: '12px' }}
+                                onClick={() => handleEditHistoryRecord(sheet)}
+                              >
+                                Edit
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
             </div>
+
+            {/* Attendance View Detail Modal */}
+            {viewingHistoryRecord && (
+              <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+                <div style={{ background: 'white', borderRadius: '20px', padding: '24px', width: '100%', maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto', boxShadow: 'var(--shadow-lg)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid var(--border-light)', paddingBottom: '12px' }}>
+                    <h4 style={{ margin: 0, fontSize: '18px', fontWeight: '800' }}>Attendance Logs Detail</h4>
+                    <button type="button" className="btn btn-outline" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => setViewingHistoryRecord(null)}>Close</button>
+                  </div>
+                  
+                  <div style={{ marginBottom: '16px', fontSize: '14px', color: 'var(--text-secondary)' }}>
+                    <p style={{ margin: '4px 0' }}><strong>Batch Name:</strong> {viewingHistoryRecord.batch_name}</p>
+                    <p style={{ margin: '4px 0' }}><strong>Course:</strong> {viewingHistoryRecord.course_name}</p>
+                    <p style={{ margin: '4px 0' }}><strong>Date:</strong> {viewingHistoryRecord.date}</p>
+                    <p style={{ margin: '4px 0' }}><strong>Attendance Rate:</strong> {viewingHistoryRecord.attendance_percentage}%</p>
+                  </div>
+
+                  <div className="table-container-premium" style={{ border: '1px solid var(--border-light)', borderRadius: '12px' }}>
+                    <table className="table-premium" style={{ fontSize: '13px' }}>
+                      <thead>
+                        <tr>
+                          <th>Roll No.</th>
+                          <th>Student Name</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(viewingHistoryRecord.records || []).map((rec, idx) => (
+                          <tr key={rec.student_id || idx}>
+                            <td>{rec.rollNumber}</td>
+                            <td>{rec.student_name}</td>
+                            <td>
+                              <span className={`badge-status ${rec.status === 'Present' ? 'paid' : 'unpaid'}`} style={{ textTransform: 'capitalize' }}>
+                                {rec.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
           </div>
         )}
 
@@ -2898,29 +4110,167 @@ const AdminDashboard = () => {
                   <label className="form-label" htmlFor="recTitle">Lesson Title</label>
                   <input id="recTitle" type="text" className="form-input" value={recTitle} onChange={(e) => setRecTitle(e.target.value)} placeholder="e.g. Variables & Data Types" required />
                 </div>
+
+                {/* Video Source Type */}
                 <div className="form-group">
-                  <label className="form-label" htmlFor="recVideoUrl">Video URL</label>
-                  <input id="recVideoUrl" type="url" className="form-input" value={recVideoUrl} onChange={(e) => setRecVideoUrl(e.target.value)} placeholder="https://youtube.com/watch?v=..." />
+                  <label className="form-label">Video Source</label>
+                  <div style={{ display: 'flex', gap: '16px', marginTop: '6px', marginBottom: '8px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', cursor: 'pointer' }}>
+                      <input type="radio" name="videoSourceType" value="link" checked={videoSourceType === 'link'} onChange={() => setVideoSourceType('link')} />
+                      Google Drive Link / External Link
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', cursor: 'pointer' }}>
+                      <input type="radio" name="videoSourceType" value="upload" checked={videoSourceType === 'upload'} onChange={() => setVideoSourceType('upload')} />
+                      Upload Video File
+                    </label>
+                  </div>
+
+                  {videoSourceType === 'link' ? (
+                    <input id="recVideoUrl" type="url" className="form-input" value={recVideoUrl} onChange={(e) => setRecVideoUrl(e.target.value)} placeholder="https://youtube.com/watch?v=... or Drive link" />
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <input 
+                        type="file" 
+                        accept="video/*" 
+                        className="form-input" 
+                        onChange={async (e) => {
+                          const file = e.target.files[0];
+                          if (!file) return;
+                          setUploadingVideo(true);
+                          const res = await handleFileUpload(file);
+                          setUploadingVideo(false);
+                          if (res && res.url) {
+                            setRecVideoUrl(res.url);
+                          }
+                        }} 
+                      />
+                      {uploadingVideo && <span style={{ fontSize: 12, color: 'var(--primary-color)' }}>Uploading video file... Please wait.</span>}
+                      {recVideoUrl && !uploadingVideo && (
+                        <span style={{ fontSize: 11, color: '#059669', wordBreak: 'break-all' }}>✓ Video ready: {recVideoUrl}</span>
+                      )}
+                    </div>
+                  )}
                 </div>
+
                 <div className="form-group">
                   <label className="form-label" htmlFor="recThumbnailUrl">Thumbnail URL <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>(optional)</span></label>
                   <input id="recThumbnailUrl" type="url" className="form-input" value={recThumbnailUrl} onChange={(e) => setRecThumbnailUrl(e.target.value)} placeholder="https://img.youtube.com/vi/.../hqdefault.jpg" />
                 </div>
                 <div className="form-group">
                   <label className="form-label" htmlFor="recLessonDescription">Lesson Description <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>(optional)</span></label>
-                  <textarea id="recLessonDescription" className="form-input" style={{ height: 70, resize: 'none' }} value={recLessonDescription} onChange={(e) => setRecLessonDescription(e.target.value)} placeholder="Brief overview of what students will learn..." />
+                  <textarea id="recLessonDescription" className="form-input" style={{ height: 60, resize: 'none' }} value={recLessonDescription} onChange={(e) => setRecLessonDescription(e.target.value)} placeholder="Brief overview of what students will learn..." />
                 </div>
+                
+                {/* Duration */}
                 <div className="form-group">
-                  <label className="form-label" htmlFor="recNotesUrl">PDF Notes URL</label>
-                  <input id="recNotesUrl" type="url" className="form-input" value={recNotesUrl} onChange={(e) => setRecNotesUrl(e.target.value)} placeholder="https://drive.google.com/file/..." />
+                  <label className="form-label" htmlFor="recDuration">Duration</label>
+                  <input id="recDuration" type="text" className="form-input" value={recDuration} onChange={(e) => setRecDuration(e.target.value)} placeholder="e.g. 1h 15m" />
                 </div>
+
+                {/* Multiple Study Materials Manager */}
+                <div className="form-group" style={{ background: 'var(--bg-secondary)', padding: 14, borderRadius: 12, border: '1px solid var(--border-color)', marginBottom: 16 }}>
+                  <label className="form-label" style={{ fontWeight: 800 }}>Study Materials Manager</label>
+                  
+                  {/* Current Materials List */}
+                  {recStudyMaterials.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12, marginTop: 6 }}>
+                      {recStudyMaterials.map((mat, index) => (
+                        <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border-light)' }}>
+                          <span style={{ fontSize: 12, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '80%' }}>
+                            📄 {mat.name} ({mat.type?.toUpperCase()})
+                          </span>
+                          <button 
+                            type="button" 
+                            style={{ background: 'none', border: 'none', color: 'var(--danger-color)', cursor: 'pointer', fontSize: 11, fontWeight: 700 }}
+                            onClick={() => setRecStudyMaterials(prev => prev.filter((_, i) => i !== index))}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Add New Material Box */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8, borderTop: '1px solid var(--border-light)', paddingTop: 10 }}>
+                    <input 
+                      type="text" 
+                      placeholder="Material Name (e.g. Slide Lecture 1)" 
+                      className="form-input" 
+                      style={{ height: 36, fontSize: 12.5 }}
+                      value={newMaterialName} 
+                      onChange={(e) => setNewMaterialName(e.target.value)} 
+                    />
+                    
+                    <div style={{ display: 'flex', gap: 12 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: 12, cursor: 'pointer' }}>
+                        <input type="radio" name="newMaterialSourceType" value="link" checked={newMaterialSourceType === 'link'} onChange={() => setNewMaterialSourceType('link')} />
+                        Drive Link
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: 12, cursor: 'pointer' }}>
+                        <input type="radio" name="newMaterialSourceType" value="upload" checked={newMaterialSourceType === 'upload'} onChange={() => setNewMaterialSourceType('upload')} />
+                        Upload File
+                      </label>
+                    </div>
+
+                    {newMaterialSourceType === 'link' ? (
+                      <input 
+                        type="url" 
+                        placeholder="https://drive.google.com/..." 
+                        className="form-input" 
+                        style={{ height: 36, fontSize: 12.5 }}
+                        value={newMaterialUrl} 
+                        onChange={(e) => setNewMaterialUrl(e.target.value)} 
+                      />
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <input 
+                          type="file" 
+                          accept=".pdf,.docx,.ppt,.pptx,.zip,.rar,image/*" 
+                          className="form-input" 
+                          style={{ fontSize: 12 }}
+                          onChange={async (e) => {
+                            const file = e.target.files[0];
+                            if (!file) return;
+                            setUploadingMaterial(true);
+                            const res = await handleFileUpload(file);
+                            setUploadingMaterial(false);
+                            if (res && res.url) {
+                              setNewMaterialUrl(res.url);
+                            }
+                          }} 
+                        />
+                        {uploadingMaterial && <span style={{ fontSize: 11, color: 'var(--primary-color)' }}>Uploading file...</span>}
+                      </div>
+                    )}
+
+                    <button 
+                      type="button" 
+                      className="btn btn-outline" 
+                      style={{ alignSelf: 'flex-start', padding: '5px 12px', fontSize: 12, height: 30 }}
+                      onClick={() => {
+                        if (!newMaterialName.trim() || !newMaterialUrl.trim()) {
+                          showModal("Warning", "Please provide a name and a link/file for the study material.", "warning");
+                          return;
+                        }
+                        const fileExt = newMaterialUrl.split('.').pop()?.split('?')[0]?.toLowerCase() || 'pdf';
+                        setRecStudyMaterials(prev => [...prev, {
+                          name: newMaterialName.trim(),
+                          url: newMaterialUrl.trim(),
+                          type: fileExt
+                        }]);
+                        setNewMaterialName('');
+                        setNewMaterialUrl('');
+                      }}
+                    >
+                      + Add Material
+                    </button>
+                  </div>
+                </div>
+
                 <div className="form-group">
                   <label className="form-label" htmlFor="recAssignment">Assignment Title</label>
                   <input id="recAssignment" type="text" className="form-input" value={recAssignment} onChange={(e) => setRecAssignment(e.target.value)} placeholder="e.g. Variables & Operators Lab" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="recQuiz">Quiz Name</label>
-                  <input id="recQuiz" type="text" className="form-input" value={recQuiz} onChange={(e) => setRecQuiz(e.target.value)} placeholder="e.g. Python Basics Quiz" />
                 </div>
                 <div className="form-group">
                   <label className="form-label" htmlFor="recSortOrder">Sort Order <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>(lower = first)</span></label>
@@ -2946,7 +4296,7 @@ const AdminDashboard = () => {
                   {editingRecordedClass && (
                     <button type="button" className="btn btn-outline" onClick={() => {
                       setEditingRecordedClass(null);
-                      setRecTitle(''); setRecModule('Module 1 - Python Basics'); setRecVideoUrl(''); setRecThumbnailUrl(''); setRecLessonDescription(''); setRecNotesUrl(''); setRecAssignment(''); setRecQuiz(''); setRecVisibility('everyone'); setRecSortOrder('');
+                      setRecTitle(''); setRecModule('Module 1 - Python Basics'); setRecVideoUrl(''); setRecThumbnailUrl(''); setRecLessonDescription(''); setRecNotesUrl(''); setRecAssignment(''); setRecVisibility('everyone'); setRecSortOrder(''); setRecDuration('1h 30m'); setVideoSourceType('link'); setRecStudyMaterials([]);
                     }}>
                       Cancel
                     </button>
@@ -2955,140 +4305,123 @@ const AdminDashboard = () => {
               </form>
             </div>
 
-            <div className="dashboard-card-section">
-              <h4 style={{ marginBottom: '18px', fontSize: '15px', fontWeight: '700' }}>Curriculum Library ({recordedClasses.length} lessons)</h4>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {recordedClasses.length === 0 ? (
-                  <div style={{ padding: 30, textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13 }}>
-                    No lessons uploaded yet. Add your first lesson using the form.
+            <div className="dashboard-card-section" style={{ display: 'flex', flexDirection: 'column', minHeight: '500px' }}>
+              <div className="section-header-premium" style={{ marginBottom: '18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                <h4 style={{ fontSize: '15px', fontWeight: '700', margin: 0 }}>Curriculum Library ({recordedClasses.length} lessons)</h4>
+                <div className="action-buttons-group">
+                  <ExportDropdown
+                    onExportCSV={exportRecordedClassesToCSV}
+                    onExportExcel={exportRecordedClassesToExcel}
+                    onExportPDF={exportRecordedClassesToPDF}
+                  />
+                </div>
+              </div>
+              
+              {recordedClasses.length === 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexGrow: 1, padding: '40px 20px', textAlign: 'center' }}>
+                  <div style={{ width: '80px', height: '80px', background: 'var(--primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--primary-color)' }}>
+                    <PlayCircle size={40} />
                   </div>
-                ) : recordedClasses.map((item, idx) => (
-                  <div key={idx} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: 12, padding: '14px 16px' }}>
-                    <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                      {/* Sort # badge */}
-                      <div style={{ width: 36, height: 36, borderRadius: 8, background: 'var(--primary-light)', color: 'var(--primary-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 13, flexShrink: 0 }}>
-                        {item.sort_order || idx + 1}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
-                          <h5 style={{ fontWeight: '700', fontSize: '14px', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '55%' }}>{item.title}</h5>
-                          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                            <button 
-                              className="btn btn-outline" 
-                              style={{ padding: '4px 10px', fontSize: 11 }}
-                              onClick={() => {
-                                setEditingRecordedClass(item);
-                                setRecTitle(item.title || '');
-                                setRecModule(item.module || '');
-                                setRecCourseTitle(item.course_title || '');
-                                setRecVideoUrl(item.video_url || '');
-                                setRecThumbnailUrl(item.thumbnail || '');
-                                setRecLessonDescription(item.description || '');
-                                setRecNotesUrl(item.notes_url || '');
-                                setRecAssignment(item.assignment || '');
-                                setRecQuiz(item.quiz || '');
-                                setRecVisibility(item.visibility || 'everyone');
-                                setRecSortOrder(item.sort_order?.toString() || '');
-                                setSelectedBatchId(item.batch_id || '');
-                              }}
-                            >
-                              Edit
-                            </button>
-                            <button className="btn btn-danger" style={{ padding: '4px', backgroundColor: 'var(--danger-color)', color: 'white' }} onClick={() => deleteRecordedClass(item._id)}>
-                              <Trash2 size={12} />
-                            </button>
+                  <h5 style={{ fontSize: '16px', fontWeight: '800', margin: '0 0 4px' }}>No Lessons Found</h5>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '280px', margin: 0 }}>No lessons uploaded yet. Add your first lesson using the form.</p>
+                </div>
+              ) : (() => {
+                const limit = 5;
+                const totalRecordedPages = Math.ceil(recordedClasses.length / limit) || 1;
+                const safeRecordedPage = Math.min(recordedPage, totalRecordedPages);
+                const paginatedRecorded = recordedClasses.slice((safeRecordedPage - 1) * limit, safeRecordedPage * limit);
+
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {paginatedRecorded.map((item, idx) => {
+                        const globalIdx = (safeRecordedPage - 1) * limit + idx;
+                        return (
+                          <div key={globalIdx} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: 12, padding: '14px 16px' }}>
+                            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                              {/* Sort # badge */}
+                              <div style={{ width: 36, height: 36, borderRadius: 8, background: 'var(--primary-light)', color: 'var(--primary-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 13, flexShrink: 0 }}>
+                                {item.sort_order || globalIdx + 1}
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
+                                  <h5 style={{ fontWeight: '700', fontSize: '14px', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '55%' }}>{item.title}</h5>
+                                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                                    <button 
+                                      type="button"
+                                      className="btn btn-outline" 
+                                      style={{ padding: '4px 10px', fontSize: 11, height: '24px' }}
+                                      onClick={() => {
+                                        setEditingRecordedClass(item);
+                                        setRecTitle(item.title || '');
+                                        setRecModule(item.module || '');
+                                        setRecCourseTitle(item.course_title || '');
+                                        setRecVideoUrl(item.video_url || '');
+                                        setRecThumbnailUrl(item.thumbnail || '');
+                                        setRecLessonDescription(item.description || '');
+                                        setRecNotesUrl(item.notes_url || '');
+                                        setRecAssignment(item.assignment || '');
+                                        setRecVisibility(item.visibility || 'everyone');
+                                        setRecSortOrder(item.sort_order?.toString() || '');
+                                        setSelectedBatchId(item.batch_id || '');
+                                        setRecDuration(item.duration || '1h 30m');
+                                        setVideoSourceType(item.video_source_type || 'link');
+                                        setRecStudyMaterials(item.study_materials || []);
+                                      }}
+                                    >
+                                      Edit
+                                    </button>
+                                    <button type="button" className="btn btn-danger" style={{ padding: '4px', height: '24px', backgroundColor: 'var(--danger-color)', color: 'white' }} onClick={() => deleteRecordedClass(item._id)}>
+                                      <Trash2 size={12} />
+                                    </button>
+                                  </div>
+                                </div>
+                                <p style={{ fontSize: '11.5px', color: 'var(--text-secondary)', margin: '4px 0 8px' }}>
+                                  {item.module} · {item.course_title} · ⏱ {item.duration || '1h 30m'}
+                                </p>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                                  <button 
+                                    type="button"
+                                    onClick={() => toggleRecordedClassVisibility(item._id, item.visibility)}
+                                    style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: 10, border: 'none', cursor: 'pointer', background: item.visibility === 'paid' ? 'rgba(239,68,68,0.08)' : 'rgba(16,185,129,0.08)', color: item.visibility === 'paid' ? '#DC2626' : '#059669' }}
+                                  >
+                                    {item.visibility === 'paid' ? '🔒 Paid Only' : '🌐 Everyone'} (toggle)
+                                  </button>
+                                  {(item.study_materials?.length > 0 || item.notes_url) && (
+                                    <span style={{ fontSize: '10px', color: '#3B82F6', background: 'rgba(59,130,246,0.06)', padding: '2px 8px', borderRadius: 10 }}>
+                                      📄 {item.study_materials?.length || 1} Material(s)
+                                    </span>
+                                  )}
+                                  {item.assignment && <span style={{ fontSize: '10px', color: '#8B5CF6', background: 'rgba(139,92,246,0.06)', padding: '2px 8px', borderRadius: 10 }}>📝 Assignment</span>}
+                                </div>
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                        <p style={{ fontSize: '11.5px', color: 'var(--text-secondary)', margin: '4px 0 8px' }}>
-                          {item.module} · {item.course_title}
-                        </p>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
-                          <button 
-                            onClick={() => toggleRecordedClassVisibility(item._id, item.visibility)}
-                            style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: 10, border: 'none', cursor: 'pointer', background: item.visibility === 'paid' ? 'rgba(239,68,68,0.08)' : 'rgba(16,185,129,0.08)', color: item.visibility === 'paid' ? '#DC2626' : '#059669' }}
-                          >
-                            {item.visibility === 'paid' ? '🔒 Paid Only' : '🌐 Everyone'} (toggle)
-                          </button>
-                          {item.notes_url && <span style={{ fontSize: '10px', color: '#3B82F6', background: 'rgba(59,130,246,0.06)', padding: '2px 8px', borderRadius: 10 }}>📄 PDF Notes</span>}
-                          {item.assignment && <span style={{ fontSize: '10px', color: '#8B5CF6', background: 'rgba(139,92,246,0.06)', padding: '2px 8px', borderRadius: 10 }}>📝 Assignment</span>}
-                          {item.quiz && <span style={{ fontSize: '10px', color: '#F59E0B', background: 'rgba(245,158,11,0.06)', padding: '2px 8px', borderRadius: 10 }}>❓ Quiz</span>}
-                        </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Pagination */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', borderTop: '1px solid var(--border-light)', paddingTop: '15px' }}>
+                      <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                        Viewing page <strong>{safeRecordedPage}</strong> of {totalRecordedPages}
+                      </span>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button type="button" className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px', height: '32px' }} disabled={safeRecordedPage === 1} onClick={() => setRecordedPage(prev => Math.max(prev - 1, 1))}>
+                          Prev
+                        </button>
+                        <button type="button" className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px', height: '32px' }} disabled={safeRecordedPage === totalRecordedPages} onClick={() => setRecordedPage(prev => Math.min(prev + 1, totalRecordedPages))}>
+                          Next
+                        </button>
                       </div>
                     </div>
                   </div>
-                ))}
-              </div>
+                );
+              })()}
             </div>
           </div>
         )}
 
-        {/* Notes Tab */}
-        {activeTab === 'notes' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '30px' }}>
-            <div className="dashboard-card-section">
-              <h4 style={{ marginBottom: '18px', fontSize: '15px', fontWeight: '700' }}>Publish Study Materials</h4>
-              <form onSubmit={addNote}>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="noteBatchSelect">Target Batch</label>
-                  <select id="noteBatchSelect" className="form-select" value={selectedBatchId} onChange={(e) => setSelectedBatchId(e.target.value)} required>
-                    <option value="">-- Choose Batch --</option>
-                    {batches.map(b => (
-                      <option key={b.id} value={b.id}>{b.name} ({b.code})</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="noteTitle">Document Title</label>
-                  <input id="noteTitle" type="text" className="form-input" value={noteTitle} onChange={(e) => setNoteTitle(e.target.value)} required />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="noteSubject">Subject / Topic</label>
-                  <input id="noteSubject" type="text" className="form-input" value={noteSubject} onChange={(e) => setNoteSubject(e.target.value)} placeholder="e.g. Node.js Basics" required />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="noteType">Format Type</label>
-                  <select id="noteType" className="form-select" value={noteType} onChange={(e) => setNoteType(e.target.value)}>
-                    <option value="PDF">PDF Document</option>
-                    <option value="PPT">PPT Presentation</option>
-                    <option value="DOCX">Word Document</option>
-                    <option value="ZIP">ZIP Archive</option>
-                    <option value="Google Drive Link">Google Drive Link</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="noteUrl">Resource Link</label>
-                  <input id="noteUrl" type="url" className="form-input" value={noteUrl} onChange={(e) => setNoteUrl(e.target.value)} required />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="noteDescription">Short Description</label>
-                  <textarea id="noteDescription" className="form-input" style={{ height: '80px', resize: 'none' }} value={noteDescription} onChange={(e) => setNoteDescription(e.target.value)} />
-                </div>
-                <button type="submit" className="btn btn-primary btn-block">Publish Material</button>
-              </form>
-            </div>
-
-            <div className="dashboard-card-section">
-              <h4 style={{ marginBottom: '18px', fontSize: '15px', fontWeight: '700' }}>Study Materials List</h4>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {notes.map((item, idx) => (
-                  <div key={idx} className="feed-item-premium" style={{ gap: '16px' }}>
-                    <div style={{ flex: 1 }}>
-                      <span className="badge-status paid" style={{ fontSize: '9px', marginBottom: '6px' }}>{item.subject}</span>
-                      <h5 style={{ fontWeight: '700', fontSize: '14.5px', color: 'var(--text-primary)', margin: 0 }}>{item.title}</h5>
-                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Format: {item.type} | Posted: {item.uploaded_at}</span>
-                    </div>
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                      <a href={item.url} target="_blank" rel="noopener noreferrer" className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px' }}>Link</a>
-                      <button className="btn btn-danger" style={{ padding: '6px', backgroundColor: 'var(--danger-color)', color: 'white' }} onClick={() => deleteNote(item._id)}>
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Announcements Tab */}
         {activeTab === 'announcements' && (
@@ -3129,31 +4462,75 @@ const AdminDashboard = () => {
               </form>
             </div>
 
-            <div className="dashboard-card-section">
-              <h4 style={{ marginBottom: '18px', fontSize: '15px', fontWeight: '700' }}>Broadcast Logs</h4>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {announcements.map((item, idx) => (
-                  <div key={idx} className="feed-item-premium" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                        <span className="badge-status paid" style={{ fontSize: '9px' }}>{item.priority}</span>
-                        {item.is_pinned && <span style={{ fontSize: '10px', color: 'var(--primary-color)', fontWeight: '700' }}>📌 Pinned</span>}
-                      </div>
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        <button className="btn btn-outline" style={{ padding: '6px' }} onClick={() => handleEditAnnClick(item)}>
-                          <Pencil size={12} />
+            <div className="dashboard-card-section" style={{ display: 'flex', flexDirection: 'column', minHeight: '500px' }}>
+              <div className="section-header-premium" style={{ marginBottom: '18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                <h4 style={{ fontSize: '15px', fontWeight: '700', margin: 0 }}>Broadcast Logs</h4>
+                <div className="action-buttons-group">
+                  <ExportDropdown
+                    onExportCSV={exportAnnouncementsToCSV}
+                    onExportExcel={exportAnnouncementsToExcel}
+                    onExportPDF={exportAnnouncementsToPDF}
+                  />
+                </div>
+              </div>
+              
+              {announcements.length === 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexGrow: 1, padding: '40px 20px', textAlign: 'center' }}>
+                  <div style={{ width: '80px', height: '80px', background: 'var(--primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--primary-color)' }}>
+                    <Megaphone size={40} />
+                  </div>
+                  <h5 style={{ fontSize: '16px', fontWeight: '800', margin: '0 0 4px' }}>No Announcements</h5>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '280px', margin: 0 }}>No announcements broadcasted yet.</p>
+                </div>
+              ) : (() => {
+                const limit = 5;
+                const totalAnnPages = Math.ceil(announcements.length / limit) || 1;
+                const safeAnnPage = Math.min(announcementsPage, totalAnnPages);
+                const paginatedAnn = announcements.slice((safeAnnPage - 1) * limit, safeAnnPage * limit);
+
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {paginatedAnn.map((item, idx) => (
+                        <div key={idx} className="feed-item-premium" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                              <span className="badge-status paid" style={{ fontSize: '9px' }}>{item.priority}</span>
+                              {item.is_pinned && <span style={{ fontSize: '10px', color: 'var(--primary-color)', fontWeight: '700' }}>📌 Pinned</span>}
+                            </div>
+                            <div style={{ display: 'flex', gap: '4px' }}>
+                              <button type="button" className="btn btn-outline" style={{ padding: '6px', height: '28px' }} onClick={() => handleEditAnnClick(item)}>
+                                <Pencil size={12} />
+                              </button>
+                              <button type="button" className="btn btn-danger" style={{ padding: '6px', height: '28px', backgroundColor: 'var(--danger-color)', color: 'white' }} onClick={() => deleteAnnouncement(item._id)}>
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          </div>
+                          <h5 style={{ fontWeight: '700', fontSize: '14.5px', margin: 0 }}>{item.title}</h5>
+                          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>{item.content}</p>
+                          <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Broadcasted: {item.date}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Pagination */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', borderTop: '1px solid var(--border-light)', paddingTop: '15px' }}>
+                      <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                        Viewing page <strong>{safeAnnPage}</strong> of {totalAnnPages}
+                      </span>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button type="button" className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px', height: '32px' }} disabled={safeAnnPage === 1} onClick={() => setAnnouncementsPage(prev => Math.max(prev - 1, 1))}>
+                          Prev
                         </button>
-                        <button className="btn btn-danger" style={{ padding: '6px', backgroundColor: 'var(--danger-color)', color: 'white' }} onClick={() => deleteAnnouncement(item._id)}>
-                          <Trash2 size={12} />
+                        <button type="button" className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px', height: '32px' }} disabled={safeAnnPage === totalAnnPages} onClick={() => setAnnouncementsPage(prev => Math.min(prev + 1, totalAnnPages))}>
+                          Next
                         </button>
                       </div>
                     </div>
-                    <h5 style={{ fontWeight: '700', fontSize: '14.5px', margin: 0 }}>{item.title}</h5>
-                    <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>{item.content}</p>
-                    <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Broadcasted: {item.date}</span>
                   </div>
-                ))}
-              </div>
+                );
+              })()}
             </div>
           </div>
         )}
@@ -3161,7 +4538,16 @@ const AdminDashboard = () => {
         {/* Fees Management Tab */}
         {activeTab === 'fees-management' && (
           <div className="dashboard-card-section">
-            <h3 className="section-title-premium" style={{ marginBottom: '18px' }}>Student Financial Ledger</h3>
+            <div className="section-header-premium" style={{ marginBottom: '18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+              <h3 className="section-title-premium" style={{ margin: 0 }}>Student Financial Ledger</h3>
+              <div className="action-buttons-group">
+                <ExportDropdown
+                  onExportCSV={exportFeesToCSV}
+                  onExportExcel={exportFeesToExcel}
+                  onExportPDF={exportFeesToPDF}
+                />
+              </div>
+            </div>
             <div className="table-container-premium">
               <table className="table-premium">
                 <thead>
@@ -3209,6 +4595,22 @@ const AdminDashboard = () => {
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', borderTop: '1px solid var(--border-light)', paddingTop: '15px' }}>
+              <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                Viewing page <strong>{feesPage}</strong> of {totalPages}
+              </span>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button type="button" className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px', height: '32px' }} disabled={feesPage === 1} onClick={() => setFeesPage(prev => Math.max(prev - 1, 1))}>
+                  Prev
+                </button>
+                <button type="button" className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px', height: '32px' }} disabled={feesPage === totalPages} onClick={() => setFeesPage(prev => Math.min(prev + 1, totalPages))}>
+                  Next
+                </button>
+              </div>
+            </div>
+
           </div>
         )}
 
@@ -3295,36 +4697,76 @@ const AdminDashboard = () => {
               </form>
             </div>
 
-            <div className="dashboard-card-section">
-              <h4 style={{ marginBottom: '18px', fontSize: '15px', fontWeight: '700' }}>Activity Logs History</h4>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '550px', overflowY: 'auto' }}>
-                {activityLogs.length === 0 ? (
-                  <div style={{ padding: 30, textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13 }}>
-                    No activity points awarded yet.
-                  </div>
-                ) : activityLogs.map((log) => (
-                  <div key={log._id} className="feed-item-premium" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span className="badge-status paid" style={{ fontSize: '10px', background: log.points >= 0 ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)', color: log.points >= 0 ? '#10B981' : '#EF4444' }}>
-                        {log.points >= 0 ? `+${log.points}` : log.points} Points
-                      </span>
-                      <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{log.date}</span>
-                    </div>
-                    <h5 style={{ fontWeight: '700', fontSize: '14px', margin: 0 }}>
-                      {log.student_name}
-                    </h5>
-                    <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', margin: 0 }}>
-                      <strong>Activity:</strong> {log.activity_type} · <strong>Session:</strong> {log.meeting}
-                    </p>
-                    {log.remarks && (
-                      <p style={{ fontSize: '12px', color: 'var(--text-tertiary)', fontStyle: 'italic', margin: 0 }}>
-                        "{log.remarks}"
-                      </p>
-                    )}
-                    <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Batch: {log.batch_name}</span>
-                  </div>
-                ))}
+            <div className="dashboard-card-section" style={{ display: 'flex', flexDirection: 'column', minHeight: '500px' }}>
+              <div className="section-header-premium" style={{ marginBottom: '18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                <h4 style={{ fontSize: '15px', fontWeight: '700', margin: 0 }}>Activity Logs History</h4>
+                <div className="action-buttons-group">
+                  <ExportDropdown
+                    onExportCSV={exportActivityToCSV}
+                    onExportExcel={exportActivityToExcel}
+                    onExportPDF={exportActivityToPDF}
+                  />
+                </div>
               </div>
+              
+              {activityLogs.length === 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexGrow: 1, padding: '40px 20px', textAlign: 'center' }}>
+                  <div style={{ width: '80px', height: '80px', background: 'var(--primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--primary-color)' }}>
+                    <Trophy size={40} />
+                  </div>
+                  <h5 style={{ fontSize: '16px', fontWeight: '800', margin: '0 0 4px' }}>No Activity Logs</h5>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '280px', margin: 0 }}>No activity points awarded yet.</p>
+                </div>
+              ) : (() => {
+                const limit = 5;
+                const totalActivityPages = Math.ceil(activityLogs.length / limit) || 1;
+                const safeActivityPage = Math.min(activityPage, totalActivityPages);
+                const paginatedActivity = activityLogs.slice((safeActivityPage - 1) * limit, safeActivityPage * limit);
+
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {paginatedActivity.map((log) => (
+                        <div key={log._id} className="feed-item-premium" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span className="badge-status paid" style={{ fontSize: '10px', background: log.points >= 0 ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)', color: log.points >= 0 ? '#10B981' : '#EF4444' }}>
+                              {log.points >= 0 ? `+${log.points}` : log.points} Points
+                            </span>
+                            <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{log.date}</span>
+                          </div>
+                          <h5 style={{ fontWeight: '700', fontSize: '14px', margin: 0 }}>
+                            {log.student_name}
+                          </h5>
+                          <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', margin: 0 }}>
+                            <strong>Activity:</strong> {log.activity_type} · <strong>Session:</strong> {log.meeting}
+                          </p>
+                          {log.remarks && (
+                            <p style={{ fontSize: '12px', color: 'var(--text-tertiary)', fontStyle: 'italic', margin: 0 }}>
+                              "{log.remarks}"
+                            </p>
+                          )}
+                          <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Batch: {log.batch_name}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Pagination */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', borderTop: '1px solid var(--border-light)', paddingTop: '15px' }}>
+                      <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                        Viewing page <strong>{safeActivityPage}</strong> of {totalActivityPages}
+                      </span>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button type="button" className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px', height: '32px' }} disabled={safeActivityPage === 1} onClick={() => setActivityPage(prev => Math.max(prev - 1, 1))}>
+                          Prev
+                        </button>
+                        <button type="button" className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px', height: '32px' }} disabled={safeActivityPage === totalActivityPages} onClick={() => setActivityPage(prev => Math.min(prev + 1, totalActivityPages))}>
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}

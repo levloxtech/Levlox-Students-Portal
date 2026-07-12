@@ -963,6 +963,30 @@ def list_recorded_classes():
     except Exception as e:
         return jsonify({'message': 'Error fetching classes', 'error': str(e)}), 400
 
+@admin_bp.route('/upload', methods=['POST'])
+@token_required(allowed_roles=['admin'])
+def upload_file_api():
+    import os
+    import time
+    import werkzeug.utils
+    from flask import current_app
+    try:
+        if 'file' not in request.files:
+            return jsonify({'message': 'No file part in the request'}), 400
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'message': 'No selected file'}), 400
+        if file:
+            filename = werkzeug.utils.secure_filename(file.filename)
+            name, ext = os.path.splitext(filename)
+            filename = f"{name}_{int(time.time())}{ext}"
+            filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+            file_url = f"http://localhost:5000/uploads/{filename}"
+            return jsonify({'url': file_url, 'filename': filename}), 200
+    except Exception as e:
+        return jsonify({'message': 'Upload failed', 'error': str(e)}), 500
+
 @admin_bp.route('/recorded-classes', methods=['POST'])
 @token_required(allowed_roles=['admin'])
 def create_recorded_class():
@@ -974,11 +998,13 @@ def create_recorded_class():
     description = data.get('description', '')
     notes_url = data.get('notes_url', '')
     assignment = data.get('assignment', '')
-    quiz = data.get('quiz', '')
     visibility = data.get('visibility', 'everyone')
     course_title = data.get('course_title', 'Fullstack Engineering')
     batch_id = data.get('batch_id')
     sort_order = data.get('sort_order', 999)
+    duration = data.get('duration', '1h 15m')
+    video_source_type = data.get('video_source_type', 'link')
+    study_materials = data.get('study_materials', [])
 
     if not title:
         return jsonify({'message': 'Missing title'}), 400
@@ -991,13 +1017,15 @@ def create_recorded_class():
         "description": description.strip(),
         "notes_url": notes_url.strip(),
         "assignment": assignment.strip() if isinstance(assignment, str) else assignment,
-        "quiz": quiz if isinstance(quiz, dict) else quiz.strip() if quiz else "",
         "visibility": visibility.strip(),
         "course_title": course_title.strip(),
         "sort_order": int(sort_order),
         "created_by": ObjectId(g.current_user['id'] if 'id' in g.current_user else g.current_user['_id']),
         "created_at": datetime.datetime.utcnow().strftime("%B %d, %Y"),
-        "batch_id": batch_id
+        "batch_id": batch_id,
+        "duration": duration.strip(),
+        "video_source_type": video_source_type.strip(),
+        "study_materials": study_materials
     }
 
     result = db.recorded_classes.insert_one(doc)
@@ -1018,10 +1046,15 @@ def update_recorded_class(class_id):
     video_url = data.get('video_url')
     notes_url = data.get('notes_url')
     assignment = data.get('assignment')
-    quiz = data.get('quiz')
-    visibility = data.get('visibility', 'everyone')
+    visibility = data.get('visibility')
     course_title = data.get('course_title')
     batch_id = data.get('batch_id')
+    thumbnail = data.get('thumbnail')
+    description = data.get('description')
+    sort_order = data.get('sort_order')
+    duration = data.get('duration')
+    video_source_type = data.get('video_source_type')
+    study_materials = data.get('study_materials')
 
     try:
         update_fields = {}
@@ -1030,14 +1063,21 @@ def update_recorded_class(class_id):
         if video_url is not None: update_fields["video_url"] = video_url.strip()
         if notes_url is not None: update_fields["notes_url"] = notes_url.strip()
         if assignment is not None: update_fields["assignment"] = assignment.strip()
-        if quiz is not None: update_fields["quiz"] = quiz
         if visibility is not None: update_fields["visibility"] = visibility.strip()
         if course_title is not None: update_fields["course_title"] = course_title.strip()
         if batch_id is not None: update_fields["batch_id"] = batch_id
+        if thumbnail is not None: update_fields["thumbnail"] = thumbnail.strip()
+        if description is not None: update_fields["description"] = description.strip()
+        if sort_order is not None: update_fields["sort_order"] = int(sort_order)
+        if duration is not None: update_fields["duration"] = duration.strip()
+        if video_source_type is not None: update_fields["video_source_type"] = video_source_type.strip()
+        if study_materials is not None: update_fields["study_materials"] = study_materials
 
+        # Quiz is intentionally unset / removed by not saving it.
+        # We explicitly perform an unset to clear it from the record if it exists
         db.recorded_classes.update_one(
             {"_id": ObjectId(class_id)},
-            {"$set": update_fields}
+            {"$set": update_fields, "$unset": {"quiz": ""}}
         )
         return jsonify({'message': 'Recorded class updated successfully!'}), 200
     except Exception as e:
@@ -1053,62 +1093,6 @@ def delete_recorded_class(class_id):
         return jsonify({'message': 'Recorded class deleted successfully'}), 200
     except Exception as e:
         return jsonify({'message': 'Error deleting recorded class', 'error': str(e)}), 400
-
-# Notes (Study Materials) CRUD
-@admin_bp.route('/notes', methods=['GET'])
-@token_required(allowed_roles=['admin'])
-def get_notes():
-    try:
-        notes = list(db.study_materials.find({}))
-        for n in notes:
-            n['id'] = str(n['_id'])
-            n.pop('_id', None)
-        return jsonify({"studyMaterials": notes}), 200
-    except Exception as e:
-        return jsonify({'message': 'Error retrieving notes', 'error': str(e)}), 400
-
-@admin_bp.route('/notes', methods=['POST'])
-@token_required(allowed_roles=['admin'])
-def create_note():
-    data = request.get_json() or {}
-    title = data.get('title')
-    description = data.get('description', '')
-    subject = data.get('subject', 'General')
-    file_type = data.get('type')
-    url = data.get('url')
-    batch_id = data.get('batch_id')
-
-    if not title or not file_type or not url:
-        return jsonify({'message': 'Missing required fields'}), 400
-
-    doc = {
-        "title": title.strip(),
-        "description": description.strip(),
-        "subject": subject.strip(),
-        "type": file_type.strip(),
-        "url": url.strip(),
-        "uploaded_at": datetime.datetime.utcnow().strftime("%B %d, %Y"),
-        "batch_id": batch_id
-    }
-
-    result = db.study_materials.insert_one(doc)
-    doc['_id'] = str(result.inserted_id)
-
-    # Trigger global notification
-    create_notification('note', f"New Study Material: {title}", f"Format: {file_type}. Subject: {subject}.")
-
-    return jsonify(doc), 201
-
-@admin_bp.route('/notes/<note_id>', methods=['DELETE'])
-@token_required(allowed_roles=['admin'])
-def delete_note(note_id):
-    try:
-        result = db.study_materials.delete_one({"_id": ObjectId(note_id)})
-        if result.deleted_count == 0:
-            return jsonify({'message': 'Note not found'}), 404
-        return jsonify({'message': 'Note deleted successfully'}), 200
-    except Exception as e:
-        return jsonify({'message': 'Error deleting note', 'error': str(e)}), 400
 
 # Announcements CRUD
 @admin_bp.route('/announcements', methods=['GET'])
@@ -1195,6 +1179,7 @@ def delete_announcement(ann_id):
         return jsonify({'message': 'Error deleting announcement', 'error': str(e)}), 400
 
 # Attendance Sheet Handlers
+# Attendance Sheet Handlers
 @admin_bp.route('/attendance/class/<class_id>', methods=['GET'])
 @token_required(allowed_roles=['admin'])
 def get_class_attendance(class_id):
@@ -1225,94 +1210,269 @@ def get_class_attendance(class_id):
     except Exception as e:
         return jsonify({'message': 'Error loading attendance details', 'error': str(e)}), 400
 
+@admin_bp.route('/attendance/sheet', methods=['GET'])
+@token_required(allowed_roles=['admin'])
+def get_batch_attendance():
+    batch_id = request.args.get('batch_id')
+    date = request.args.get('date', datetime.date.today().isoformat())
+    if not batch_id:
+        return jsonify({'message': 'Missing batch_id'}), 400
+    try:
+        sheet = db.attendance_sheets.find_one({"batch_id": batch_id, "date": date})
+        if sheet:
+            sheet['_id'] = str(sheet['_id'])
+            for r in sheet.get('records', []):
+                r['student_id'] = str(r['student_id'])
+            return jsonify(sheet), 200
+        
+        batch = db.batches.find_one({"_id": ObjectId(batch_id)})
+        if not batch:
+            return jsonify({'message': 'Batch not found'}), 404
+        
+        student_ids = [ObjectId(sid) for sid in batch.get('student_ids', [])]
+        students = list(db.users.find({"_id": {"$in": student_ids}}))
+        records = []
+        for s in students:
+            records.append({
+                "student_id": str(s['_id']),
+                "student_name": s.get('name'),
+                "rollNumber": s.get('rollNumber'),
+                "phone": s.get('phone', ''),
+                "course": s.get('course', ''),
+                "batch_name": batch.get('name', ''),
+                "status": "Present"
+            })
+        
+        return jsonify({
+            "batch_id": batch_id,
+            "date": date,
+            "records": records
+        }), 200
+    except Exception as e:
+        return jsonify({'message': 'Error loading attendance details', 'error': str(e)}), 400
+
+@admin_bp.route('/attendance/history', methods=['GET'])
+@token_required(allowed_roles=['admin'])
+def get_attendance_sheets_history():
+    try:
+        sheets = list(db.attendance_sheets.find({}))
+        for s in sheets:
+            s['id'] = str(s['_id'])
+            s.pop('_id', None)
+            if 'saved_at' in s and isinstance(s['saved_at'], datetime.datetime):
+                s['saved_at'] = s['saved_at'].isoformat()
+        return jsonify(sheets), 200
+    except Exception as e:
+        return jsonify({'message': 'Error loading attendance history', 'error': str(e)}), 400
+
 @admin_bp.route('/attendance/save', methods=['POST'])
 @token_required(allowed_roles=['admin'])
 def save_class_attendance():
     data = request.get_json() or {}
     class_id = data.get('live_class_id')
+    batch_id = data.get('batch_id')
     date = data.get('date', datetime.date.today().isoformat())
     records = data.get('records', [])
 
-    if not class_id or not records:
-        return jsonify({'message': 'Missing live_class_id or records'}), 400
+    if not records:
+        return jsonify({'message': 'Missing records'}), 400
 
     try:
-        live_class = db.live_classes.find_one({"_id": ObjectId(class_id)})
-        class_title = live_class.get('title', 'Live Session') if live_class else 'Live Session'
-
-        sheet_records = []
-        for r in records:
-            sheet_records.append({
-                "student_id": ObjectId(r['student_id']),
-                "student_name": r.get('student_name'),
-                "rollNumber": r.get('rollNumber'),
-                "status": r.get('status', 'Present')
-            })
-
-        db.attendance_sheets.update_one(
-            {"live_class_id": ObjectId(class_id)},
-            {
-                "$set": {
-                    "live_class_id": ObjectId(class_id),
-                    "class_title": class_title,
-                    "date": date,
-                    "records": sheet_records,
-                    "saved_at": datetime.datetime.utcnow()
-                }
-            },
-            upsert=True
-        )
-
-        for r in records:
-            student_id = r['student_id']
-            status = r.get('status', 'Present')
-
-            student = db.users.find_one({"_id": ObjectId(student_id)})
-            if not student:
-                continue
-
-            history = student.get('attendance_history', [])
+        if batch_id:
+            batch = db.batches.find_one({"_id": ObjectId(batch_id)})
+            if not batch:
+                return jsonify({'message': 'Batch not found'}), 404
             
-            found = False
-            for h in history:
-                if h.get('class_id') == class_id:
-                    h['status'] = status
-                    h['date'] = date
-                    h['class_title'] = class_title
-                    found = True
-                    break
-            
-            if not found:
-                history.append({
-                    "class_id": class_id,
-                    "class_title": class_title,
-                    "date": date,
+            batch_name = batch.get('name', 'Batch')
+            course_name = batch.get('course_name', 'Course')
+
+            sheet_records = []
+            present_count = 0
+            absent_count = 0
+            for r in records:
+                status = r.get('status', 'Present')
+                if status == 'Present':
+                    present_count += 1
+                else:
+                    absent_count += 1
+                sheet_records.append({
+                    "student_id": ObjectId(r['student_id']),
+                    "student_name": r.get('student_name'),
+                    "rollNumber": r.get('rollNumber'),
+                    "phone": r.get('phone', ''),
+                    "course": r.get('course', course_name),
+                    "batch_name": r.get('batch_name', batch_name),
                     "status": status
                 })
 
-            present_count = sum(1 for h in history if h.get('status') == 'Present')
-            absent_count = sum(1 for h in history if h.get('status') == 'Absent')
-            total_logged = len(history)
+            total = len(records)
+            pct = round((present_count / total) * 100) if total > 0 else 100
 
-            percentage = 100
-            if total_logged > 0:
-                percentage = round((present_count / total_logged) * 100)
-
-            db.users.update_one(
-                {"_id": ObjectId(student_id)},
-                {"$set": {
-                    "attendance_history": history,
-                    "attendance": {
-                        "percentage": percentage,
-                        "present": present_count,
-                        "absent": absent_count
+            db.attendance_sheets.update_one(
+                {"batch_id": batch_id, "date": date},
+                {
+                    "$set": {
+                        "batch_id": batch_id,
+                        "batch_name": batch_name,
+                        "course_name": course_name,
+                        "date": date,
+                        "records": sheet_records,
+                        "present_count": present_count,
+                        "absent_count": absent_count,
+                        "attendance_percentage": pct,
+                        "saved_at": datetime.datetime.utcnow()
                     }
-                }}
+                },
+                upsert=True
             )
 
-        return jsonify({'message': 'Attendance saved and logs recalculated successfully!'}), 200
+            for r in records:
+                student_id = r['student_id']
+                status = r.get('status', 'Present')
+
+                student = db.users.find_one({"_id": ObjectId(student_id)})
+                if not student:
+                    continue
+
+                history = student.get('attendance_history', [])
+                found = False
+                for h in history:
+                    if h.get('batch_id') == batch_id and h.get('date') == date:
+                        h['status'] = status
+                        h['batch_name'] = batch_name
+                        found = True
+                        break
+                
+                if not found:
+                    history.append({
+                        "batch_id": batch_id,
+                        "batch_name": batch_name,
+                        "date": date,
+                        "status": status
+                    })
+
+                s_present = sum(1 for h in history if h.get('status') == 'Present')
+                s_absent = sum(1 for h in history if h.get('status') == 'Absent')
+                s_total = len(history)
+
+                s_percentage = 100
+                if s_total > 0:
+                    s_percentage = round((s_present / s_total) * 100)
+
+                db.users.update_one(
+                    {"_id": ObjectId(student_id)},
+                    {"$set": {
+                        "attendance_history": history,
+                        "attendance": {
+                            "percentage": s_percentage,
+                            "present": s_present,
+                            "absent": s_absent
+                        }
+                    }}
+                )
+
+        else:
+            # Fallback for old live class attendance flow
+            live_class = db.live_classes.find_one({"_id": ObjectId(class_id)})
+            class_title = live_class.get('title', 'Live Session') if live_class else 'Live Session'
+
+            sheet_records = []
+            for r in records:
+                sheet_records.append({
+                    "student_id": ObjectId(r['student_id']),
+                    "student_name": r.get('student_name'),
+                    "rollNumber": r.get('rollNumber'),
+                    "status": r.get('status', 'Present')
+                })
+
+            db.attendance_sheets.update_one(
+                {"live_class_id": ObjectId(class_id)},
+                {
+                    "$set": {
+                        "live_class_id": ObjectId(class_id),
+                        "class_title": class_title,
+                        "date": date,
+                        "records": sheet_records,
+                        "saved_at": datetime.datetime.utcnow()
+                    }
+                },
+                upsert=True
+            )
+
+            for r in records:
+                student_id = r['student_id']
+                status = r.get('status', 'Present')
+
+                student = db.users.find_one({"_id": ObjectId(student_id)})
+                if not student:
+                    continue
+
+                history = student.get('attendance_history', [])
+                found = False
+                for h in history:
+                    if h.get('class_id') == class_id:
+                        h['status'] = status
+                        h['date'] = date
+                        h['class_title'] = class_title
+                        found = True
+                        break
+                
+                if not found:
+                    history.append({
+                        "class_id": class_id,
+                        "class_title": class_title,
+                        "date": date,
+                        "status": status
+                    })
+
+                present_count = sum(1 for h in history if h.get('status') == 'Present')
+                absent_count = sum(1 for h in history if h.get('status') == 'Absent')
+                total_logged = len(history)
+
+                percentage = 100
+                if total_logged > 0:
+                    percentage = round((present_count / total_logged) * 100)
+
+                db.users.update_one(
+                    {"_id": ObjectId(student_id)},
+                    {"$set": {
+                        "attendance_history": history,
+                        "attendance": {
+                            "percentage": percentage,
+                            "present": present_count,
+                            "absent": absent_count
+                        }
+                    }}
+                )
+
+        return jsonify({'message': 'Attendance saved successfully!'}), 200
     except Exception as e:
-        return jsonify({'message': 'Error saving attendance sheet', 'error': str(e)}), 400
+        return jsonify({'message': 'Error saving attendance', 'error': str(e)}), 400
+
+@admin_bp.route('/course-titles', methods=['GET'])
+@token_required()
+def list_course_titles():
+    try:
+        # Fetch from course_titles
+        titles = [doc['title'] for doc in db.course_titles.find({}, {"title": 1, "_id": 0})]
+        
+        # Also, check existing batches just in case some batches were created before this update
+        batch_titles = db.batches.distinct("course_name")
+        
+        # Merge them and remove duplicates
+        all_titles = sorted(list(set(titles + batch_titles)))
+        
+        # Seed the course_titles collection with the batch titles so it's fully populated
+        for title in all_titles:
+            db.course_titles.update_one(
+                {"title": title},
+                {"$setOnInsert": {"title": title, "created_at": datetime.datetime.utcnow()}},
+                upsert=True
+            )
+            
+        return jsonify({"courses": all_titles}), 200
+    except Exception as e:
+        return jsonify({'message': 'Error retrieving course titles', 'error': str(e)}), 400
 
 # ══════════════════════════════════════════════════════
 # BATCH MANAGEMENT CRUD & ASSIGNMENT
@@ -1367,6 +1527,16 @@ def create_batch():
     doc['id'] = str(result.inserted_id)
     doc.pop('_id', None)
     doc['created_at'] = doc['created_at'].isoformat()
+
+    # Automatically save course title if it doesn't exist
+    course_title_norm = course_name.strip()
+    if course_title_norm:
+        db.course_titles.update_one(
+            {"title": course_title_norm},
+            {"$setOnInsert": {"title": course_title_norm, "created_at": datetime.datetime.utcnow()}},
+            upsert=True
+        )
+
     return jsonify(doc), 201
 
 @admin_bp.route('/batches/<batch_id>', methods=['PUT'])
@@ -1392,6 +1562,17 @@ def update_batch(batch_id):
 
     try:
         db.batches.update_one({"_id": ObjectId(batch_id)}, {"$set": update_fields})
+
+        # Automatically save course title if updating and it doesn't exist
+        if course_name:
+            course_title_norm = course_name.strip()
+            if course_title_norm:
+                db.course_titles.update_one(
+                    {"title": course_title_norm},
+                    {"$setOnInsert": {"title": course_title_norm, "created_at": datetime.datetime.utcnow()}},
+                    upsert=True
+                )
+
         return jsonify({'message': 'Batch details updated successfully!'}), 200
     except Exception as e:
         return jsonify({'message': 'Error updating batch', 'error': str(e)}), 400

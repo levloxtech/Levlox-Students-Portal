@@ -2723,32 +2723,106 @@ button, input, select, textarea {
 }
 
 /* Reusable Export Button Styles */
+.export-container-relative {
+  position: relative;
+  display: inline-block;
+}
+
 .export-btn-premium-gradient {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   gap: 8px;
-  background: linear-gradient(135deg, #6D28D9, #7C3AED) !important;
+  background: linear-gradient(135deg, #6D3EF5, #7C4DFF) !important;
   color: white !important;
-  font-weight: 700 !important;
-  font-size: 13.5px !important;
-  height: 46px !important;
-  padding: 0 20px !important;
+  font-weight: 600 !important;
+  font-size: 14px !important;
+  height: 48px !important;
+  padding: 18px 22px !important;
   border-radius: 14px !important;
   border: none !important;
   cursor: pointer !important;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
-  box-shadow: 0 4px 14px rgba(109, 40, 217, 0.2) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  box-shadow: 0 4px 14px rgba(109, 62, 245, 0.3) !important;
+  outline: none;
 }
 
 .export-btn-premium-gradient:hover {
   transform: translateY(-2px) !important;
-  box-shadow: 0 8px 20px rgba(109, 40, 217, 0.35) !important;
-  background: linear-gradient(135deg, #5b1eb7, #6d2fcf) !important;
+  box-shadow: 0 8px 20px rgba(109, 62, 245, 0.45) !important;
+  background: linear-gradient(135deg, #5b2ee0, #6d3ef5) !important;
+}
+
+.export-btn-premium-gradient:active {
+  transform: translateY(0) !important;
 }
 
 .export-btn-premium-gradient svg {
   color: white !important;
+  transition: transform 0.2s ease;
+}
+
+.export-menu-floating {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 1100;
+  width: 220px;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 10px 25px -5px rgba(109, 62, 245, 0.15), 0 8px 10px -6px rgba(109, 62, 245, 0.15);
+  border: 1px solid #EAE6FF;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transform-origin: top right;
+  animation: exportFadeSlide 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes exportFadeSlide {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.export-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 46px;
+  padding: 0 16px;
+  color: #374151;
+  font-size: 13.5px;
+  font-weight: 600;
+  border-radius: 10px;
+  cursor: pointer;
+  background: transparent;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border: none;
+  width: 100%;
+  text-align: left;
+}
+
+.export-menu-row:hover {
+  background-color: #F6F3FF !important;
+  color: #6D3EF5 !important;
+  transform: none;
+}
+
+.export-menu-row svg {
+  color: #6B7280;
+  transition: color 0.2s ease;
+  flex-shrink: 0;
+}
+
+.export-menu-row:hover svg {
+  color: #6D3EF5 !important;
 }
 
 .action-buttons-group {
@@ -2783,41 +2857,32 @@ button, input, select, textarea {
   gap: 16px;
 }
 
-.branding-logo-wrap {
+.branding-logo {
   width: 48px;
   height: 48px;
-  background-color: var(--primary-color, #6C3CF0);
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6px;
-  flex-shrink: 0;
-}
-
-.branding-logo {
-  width: 100%;
-  height: 100%;
   object-fit: contain;
+  border-radius: 8px;
+  flex-shrink: 0;
 }
 
 .branding-text {
   display: flex;
   flex-direction: column;
+  gap: 4px;
 }
 
 .branding-title {
-  font-size: 30px;
+  font-size: 32px;
   font-weight: 700;
   color: #111827;
-  line-height: 1.1;
+  line-height: 1;
 }
 
 .branding-subtitle {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 500;
   color: #6B7280;
-  line-height: 1.2;
+  line-height: 1;
 }
 
 /* Tablet view styling */
@@ -2828,10 +2893,9 @@ button, input, select, textarea {
   .branding-subtitle {
     font-size: 14px;
   }
-  .branding-logo-wrap {
+  .branding-logo {
     width: 40px;
     height: 40px;
-    border-radius: 10px;
   }
   .admin-branding {
     gap: 12px;
@@ -2846,11 +2910,9 @@ button, input, select, textarea {
   .branding-title {
     font-size: 20px;
   }
-  .branding-logo-wrap {
+  .branding-logo {
     width: 36px;
     height: 36px;
-    border-radius: 8px;
-    padding: 4px;
   }
   .admin-branding {
     gap: 10px;

@@ -877,7 +877,10 @@ const StudentDashboard = () => {
 
           <div className="top-navbar-left" style={{ paddingLeft: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <img src={leveloxIcon} alt="Levlox Logo" style={{ height: '36px', width: '36px', objectFit: 'contain', borderRadius: '8px' }} />
-            <span style={{ fontSize: '22px', fontWeight: 800, color: '#111827', letterSpacing: '-0.5px', lineHeight: 1 }}>Levlox</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <span style={{ fontSize: '22px', fontWeight: 800, color: '#111827', letterSpacing: '-0.5px', lineHeight: 1 }}>Levlox</span>
+              <span style={{ fontSize: '13px', fontWeight: 500, color: '#6B7280', lineHeight: 1 }}>Students Panel</span>
+            </div>
           </div>
 
           <div className="navbar-actions">

@@ -11,6 +11,16 @@ from routes.settings import settings_bp
 app = Flask(__name__)
 app.config.from_object(Config)
 
+import os
+from flask import send_from_directory
+UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+@app.route('/uploads/<path:filename>', methods=['GET'])
+def serve_uploads(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
 # Enable CORS for all routes (important for React Dev server)
 CORS(app, resources={r"/api/*": {
     "origins": [
