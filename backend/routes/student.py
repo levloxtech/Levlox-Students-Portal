@@ -1186,6 +1186,12 @@ def get_course_player(course_id):
         fees_are_paid = (student_db.get('feesStatus') == 'Paid') if student_db else False
         batch_id = student_db.get('batch_id') if student_db else None
 
+        trainer = "Sri"
+        if batch_id:
+            batch_doc = db.batches.find_one({"_id": ObjectId(batch_id)})
+            if batch_doc:
+                trainer = batch_doc.get('trainer_name', 'Sri')
+
         recorded_classes = list(db.recorded_classes.find({"batch_id": str(batch_id) if batch_id else None}).sort("sort_order", 1))
         submissions = list(db.submissions.find({"student_id": ObjectId(student['id'])}))
         completed_list = list(db.lesson_progress.find({"student_id": student['id']}))
