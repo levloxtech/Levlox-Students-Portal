@@ -18,7 +18,10 @@ const FilterBar = ({
   onReset,
   onExportCSV,
   onExportExcel,
-  onExportPDF
+  onExportPDF,
+  // Add Action Button
+  actionLabel,
+  onActionClick
 }) => {
   const [exportOpen, setExportOpen] = useState(false);
   const exportRef = useRef(null);
@@ -54,102 +57,100 @@ const FilterBar = ({
         )}
 
         {/* Dropdown Filters (center) */}
-        <div className="levlox-filter-dropdown-container">
-          {filters.map((filter, index) => (
-            <select
-              key={index}
-              className="levlox-filter-dropdown"
-              value={filter.value}
-              onChange={(e) => filter.onChange(e.target.value)}
-            >
-              <option value="">{filter.label}</option>
-              {filter.options.map((opt, oIdx) => (
-                <option key={oIdx} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          ))}
-        </div>
+        {filters.map((filter, index) => (
+          <select
+            key={index}
+            className="levlox-filter-dropdown"
+            value={filter.value}
+            onChange={(e) => filter.onChange(e.target.value)}
+          >
+            <option value="">{filter.label}</option>
+            {filter.options.map((opt, oIdx) => (
+              <option key={oIdx} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        ))}
 
-        {/* Action Buttons: Reset & Export (right) */}
-        <div className="levlox-filter-actions">
-          {onReset && (
-            <button
-              type="button"
-              className="levlox-filter-reset-btn"
-              onClick={onReset}
-              title="Reset all filters"
-            >
-              <RotateCcw size={14} />
-              <span>Reset</span>
-            </button>
-          )}
+        {(actionLabel || onExportCSV || onExportExcel || onExportPDF) && (
+          <div className="levlox-filter-actions">
+            {actionLabel && onActionClick && (
+              <button
+                type="button"
+                className="levlox-filter-action-btn"
+                onClick={onActionClick}
+              >
+                <span>{actionLabel}</span>
+              </button>
+            )}
 
-          {/* Export Menu Dropdown */}
-          <div className="levlox-filter-export-container" ref={exportRef}>
-            <button
-              type="button"
-              className="levlox-filter-export-btn"
-              onClick={() => setExportOpen(!exportOpen)}
-            >
-              <Download size={14} />
-              <span>Export</span>
-              <ChevronDown
-                size={12}
-                style={{
-                  transform: exportOpen ? 'rotate(180deg)' : 'none',
-                  transition: 'transform 0.2s',
-                  marginLeft: '4px'
-                }}
-              />
-            </button>
+            {(onExportCSV || onExportExcel || onExportPDF) && (
+              <div className="levlox-filter-export-container" ref={exportRef}>
+                <button
+                  type="button"
+                  className="levlox-filter-export-btn"
+                  onClick={() => setExportOpen(!exportOpen)}
+                >
+                  <Download size={14} />
+                  <span>Export</span>
+                  <ChevronDown
+                    size={12}
+                    style={{
+                      transform: exportOpen ? 'rotate(180deg)' : 'none',
+                      transition: 'transform 0.2s',
+                      marginLeft: '4px'
+                    }}
+                  />
+                </button>
 
-            {exportOpen && (
-              <div className="levlox-filter-export-menu">
-                {onExportCSV && (
-                  <button
-                    type="button"
-                    className="levlox-filter-export-item"
-                    onClick={() => {
-                      onExportCSV();
-                      setExportOpen(false);
-                    }}
-                  >
-                    <FileText size={14} />
-                    <span>Export CSV</span>
-                  </button>
-                )}
-                {onExportExcel && (
-                  <button
-                    type="button"
-                    className="levlox-filter-export-item"
-                    onClick={() => {
-                      onExportExcel();
-                      setExportOpen(false);
-                    }}
-                  >
-                    <FileSpreadsheet size={14} style={{ color: '#10B981' }} />
-                    <span>Export Excel</span>
-                  </button>
-                )}
-                {onExportPDF && (
-                  <button
-                    type="button"
-                    className="levlox-filter-export-item"
-                    onClick={() => {
-                      onExportPDF();
-                      setExportOpen(false);
-                    }}
-                  >
-                    <FileText size={14} style={{ color: '#EF4444' }} />
-                    <span>Export PDF</span>
-                  </button>
+                {exportOpen && (
+                  <div className="levlox-filter-export-menu">
+                    {onExportCSV && (
+                      <button
+                        type="button"
+                        className="levlox-filter-export-item"
+                        onClick={() => {
+                          onExportCSV();
+                          setExportOpen(false);
+                        }}
+                      >
+                        <FileText size={14} />
+                        <span>Export CSV</span>
+                      </button>
+                    )}
+                    {onExportExcel && (
+                      <button
+                        type="button"
+                        className="levlox-filter-export-item"
+                        onClick={() => {
+                          onExportExcel();
+                          setExportOpen(false);
+                        }}
+                      >
+                        <FileSpreadsheet size={14} style={{ color: '#10B981' }} />
+                        <span>Export Excel</span>
+                      </button>
+                    )}
+                    {onExportPDF && (
+                      <button
+                        type="button"
+                        className="levlox-filter-export-item"
+                        onClick={() => {
+                          onExportPDF();
+                          setExportOpen(false);
+                        }}
+                      >
+                        <FileText size={14} style={{ color: '#EF4444' }} />
+                        <span>Export PDF</span>
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             )}
           </div>
-        </div>
+        )}
       </div>
 
       {/* Row 2 (Quick Filter Chips, only shown if showDateFilter is true) */}

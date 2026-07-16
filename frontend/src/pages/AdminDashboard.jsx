@@ -184,6 +184,9 @@ const AdminDashboard = () => {
   const [recordedBatchFilter, setRecordedBatchFilter] = useState('');
   const [recordedVisibilityFilter, setRecordedVisibilityFilter] = useState('');
   const [recordedUploadTypeFilter, setRecordedUploadTypeFilter] = useState('');
+  const [recordedDateFilter, setRecordedDateFilter] = useState('This Month');
+  const [recordedStartDateFilter, setRecordedStartDateFilter] = useState('');
+  const [recordedEndDateFilter, setRecordedEndDateFilter] = useState('');
 
   // Fees page filters
   const [feesSearchQuery, setFeesSearchQuery] = useState('');
@@ -193,6 +196,15 @@ const AdminDashboard = () => {
   const [feesPaymentMethodFilter, setFeesPaymentMethodFilter] = useState('');
   const [feesStartDateFilter, setFeesStartDateFilter] = useState('');
   const [feesEndDateFilter, setFeesEndDateFilter] = useState('');
+  const [feesDateFilter, setFeesDateFilter] = useState('This Month');
+
+  // Student Date filters
+  const [studentDateFilter, setStudentDateFilter] = useState('This Month');
+  const [studentStartDateFilter, setStudentStartDateFilter] = useState('');
+  const [studentEndDateFilter, setStudentEndDateFilter] = useState('');
+
+  // Batch Date filter (quick selector)
+  const [batchDateFilter, setBatchDateFilter] = useState('This Month');
 
   // Activity score filters
   const [activitySearchQuery, setActivitySearchQuery] = useState('');
@@ -201,8 +213,9 @@ const AdminDashboard = () => {
   const [activityTypeFilter, setActivityTypeFilter] = useState('');
   const [activityScoreMin, setActivityScoreMin] = useState('');
   const [activityScoreMax, setActivityScoreMax] = useState('');
-  const [activityStartDate, setActivityStartDate] = useState('');
-  const [activityEndDate, setActivityEndDate] = useState('');
+  const [activityDateFilter, setActivityDateFilter] = useState('This Month');
+  const [activityStartDateFilter, setActivityStartDateFilter] = useState('');
+  const [activityEndDateFilter, setActivityEndDateFilter] = useState('');
 
   // Attendance filters
   const [attSearchQuery, setAttSearchQuery] = useState('');
@@ -218,6 +231,9 @@ const AdminDashboard = () => {
   const [annCourseFilter, setAnnCourseFilter] = useState('');
   const [annBatchFilter, setAnnBatchFilter] = useState('');
   const [annAudienceFilter, setAnnAudienceFilter] = useState('');
+  const [annDateFilter, setAnnDateFilter] = useState('This Month');
+  const [annStartDateFilter, setAnnStartDateFilter] = useState('');
+  const [annEndDateFilter, setAnnEndDateFilter] = useState('');
 
   // Responsive design width tracking
   const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
@@ -260,6 +276,13 @@ const AdminDashboard = () => {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
 
   const [resetCredentials, setResetCredentials] = useState(null);
+
+  // New modal visibility states
+  const [showBatchModal, setShowBatchModal] = useState(false);
+  const [showLiveClassModal, setShowLiveClassModal] = useState(false);
+  const [showRecordedClassModal, setShowRecordedClassModal] = useState(false);
+  const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
+  const [showActivityScoreModal, setShowActivityScoreModal] = useState(false);
 
   // Export State and Functions
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
@@ -691,7 +714,7 @@ const AdminDashboard = () => {
           batch_name: 'Full Stack Batch A',
           instructor: 'Sri',
           date: todayStr,
-          time: '7:00 PM',
+          time: '7:00 PM - 8:00 PM',
           status: 'Live',
           students_joined: 32,
           meet_link: 'https://meet.google.com/abc-defg-hij'
@@ -702,7 +725,7 @@ const AdminDashboard = () => {
           batch_name: 'Batch B',
           instructor: 'Rahul',
           date: tomorrowStr,
-          time: '6:00 PM',
+          time: '6:00 PM - 7:00 PM',
           status: 'Upcoming',
           students_joined: 0,
           meet_link: 'https://meet.google.com/abc-defg-hij'
@@ -713,7 +736,7 @@ const AdminDashboard = () => {
           batch_name: 'Batch C',
           instructor: 'Kavya',
           date: yesterdayStr,
-          time: '5:00 PM',
+          time: '5:00 PM - 6:30 PM',
           status: 'Completed',
           students_joined: 45,
           meet_link: 'https://meet.google.com/abc-defg-hij'
@@ -1548,6 +1571,85 @@ const AdminDashboard = () => {
     return matchesSearch && matchesCourse && matchesBatch && matchesStatus && matchesDate;
   });
 
+  const getDateRangeBounds = (filterType, customStart, customEnd) => {
+    const now = new Date();
+    let start = null;
+    let end = null;
+    
+    if (filterType === 'Today') {
+      start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+    } else if (filterType === 'This Week') {
+      start = new Date(now);
+      start.setDate(start.getDate() - start.getDay());
+      start.setHours(0,0,0,0);
+      end = new Date(start);
+      end.setDate(end.getDate() + 7);
+      end.setHours(23,59,59,999);
+    } else if (filterType === 'This Month') {
+      start = new Date(now.getFullYear(), now.getMonth(), 1);
+      end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+    } else if (filterType === 'This Year') {
+      start = new Date(now.getFullYear(), 0, 1);
+      end = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
+    } else if (filterType === 'Custom Range') {
+      if (customStart) {
+        start = new Date(customStart);
+      }
+      if (customEnd) {
+        end = new Date(customEnd);
+        end.setHours(23, 59, 59);
+      }
+    }
+    
+    return {
+      startDate: start ? start.toISOString() : '',
+      endDate: end ? end.toISOString() : ''
+    };
+  };
+
+  const filterByDateRange = (dateStr, dateFilterType, customStart, customEnd) => {
+    if (!dateStr) return true;
+    try {
+      const itemDate = new Date(dateStr);
+      if (isNaN(itemDate.getTime())) return true;
+      const now = new Date();
+      
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+      
+      if (dateFilterType === 'Today') {
+        return itemDate >= startOfToday && itemDate <= endOfToday;
+      } else if (dateFilterType === 'This Week') {
+        const firstDayOfWeek = new Date(now);
+        firstDayOfWeek.setDate(firstDayOfWeek.getDate() - firstDayOfWeek.getDay());
+        firstDayOfWeek.setHours(0,0,0,0);
+        const lastDayOfWeek = new Date(firstDayOfWeek);
+        lastDayOfWeek.setDate(lastDayOfWeek.getDate() + 7);
+        lastDayOfWeek.setHours(23,59,59,999);
+        return itemDate >= firstDayOfWeek && itemDate <= lastDayOfWeek;
+      } else if (dateFilterType === 'This Month') {
+        const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        return itemDate >= firstDayOfMonth && itemDate <= lastDayOfMonth;
+      } else if (dateFilterType === 'This Year') {
+        const firstDayOfYear = new Date(now.getFullYear(), 0, 1);
+        const lastDayOfYear = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
+        return itemDate >= firstDayOfYear && itemDate <= lastDayOfYear;
+      } else if (dateFilterType === 'Custom Range') {
+        if (!customStart || !customEnd) return true;
+        const start = new Date(customStart);
+        const end = new Date(customEnd);
+        end.setHours(23, 59, 59);
+        return itemDate >= start && itemDate <= end;
+      }
+      return true;
+    } catch (e) {
+      console.error(e);
+      return true;
+    }
+  };
+
   const filteredBatches = batches.filter(b => {
     const query = batchSearchQuery.toLowerCase();
     const matchesSearch = !query || 
@@ -1557,9 +1659,10 @@ const AdminDashboard = () => {
     const matchesCourse = !batchCourseFilter || b.course_name === batchCourseFilter;
     const matchesStatus = !batchStatusFilter || b.status === batchStatusFilter;
     const matchesTrainer = !batchTrainerFilter || b.trainer_name === batchTrainerFilter;
-    const matchesStartDate = !batchStartDateFilter || b.start_date >= batchStartDateFilter;
-    const matchesEndDate = !batchEndDateFilter || b.end_date <= batchEndDateFilter;
-    return matchesSearch && matchesCourse && matchesStatus && matchesTrainer && matchesStartDate && matchesEndDate;
+    
+    // Apply date filter
+    const matchesDate = filterByDateRange(b.start_date, batchDateFilter, batchStartDateFilter, batchEndDateFilter);
+    return matchesSearch && matchesCourse && matchesStatus && matchesTrainer && matchesDate;
   });
 
   const filteredAnnouncements = announcements.filter(item => {
@@ -1575,7 +1678,11 @@ const AdminDashboard = () => {
     else if (annAudienceFilter === 'high') matchesAudience = item.priority === 'High';
     else if (annAudienceFilter === 'medium') matchesAudience = item.priority === 'Medium';
     else if (annAudienceFilter === 'low') matchesAudience = item.priority === 'Low';
-    return matchesSearch && matchesBatch && matchesCourse && matchesAudience;
+    
+    // Apply date filter
+    const matchesDate = filterByDateRange(item.date || item.uploaded_at, annDateFilter, annStartDateFilter, annEndDateFilter);
+    
+    return matchesSearch && matchesBatch && matchesCourse && matchesAudience && matchesDate;
   });
 
   const filteredRecorded = recordedClasses.filter(c => {
@@ -1593,15 +1700,20 @@ const AdminDashboard = () => {
     }
     const matchesUploadType = !recordedUploadTypeFilter || uploadType === recordedUploadTypeFilter;
     
-    return matchesSearch && matchesCourse && matchesBatch && matchesVisibility && matchesUploadType;
+    // Apply date filter
+    const matchesDate = filterByDateRange(c.created_at || c.date, recordedDateFilter, recordedStartDateFilter, recordedEndDateFilter);
+    
+    return matchesSearch && matchesCourse && matchesBatch && matchesVisibility && matchesUploadType && matchesDate;
   });
 
   // Client-side sub-filtering for Fees (since Payment Method & Date Range are client-only)
   const filteredStudentsForFees = students.filter(s => {
-    const matchesStartDate = !feesStartDateFilter || (s.feesPaymentDate && s.feesPaymentDate >= feesStartDateFilter);
-    const matchesEndDate = !feesEndDateFilter || (s.feesPaymentDate && s.feesPaymentDate <= feesEndDateFilter);
     const matchesPaymentMethod = !feesPaymentMethodFilter || (s.paymentMethod || 'Credit Card').toLowerCase() === feesPaymentMethodFilter.toLowerCase();
-    return matchesStartDate && matchesEndDate && matchesPaymentMethod;
+    
+    // Apply date filter
+    const matchesDate = filterByDateRange(s.feesPaymentDate, feesDateFilter, feesStartDateFilter, feesEndDateFilter);
+    
+    return matchesPaymentMethod && matchesDate;
   });
 
   const filteredActivityLogs = activityLogs.filter(l => {
@@ -1623,10 +1735,10 @@ const AdminDashboard = () => {
     else if (activityScoreMin === 'negative') matchesScore = points < 0;
     else if (activityScoreMin === 'high') matchesScore = points > 5;
     
-    const matchesStartDate = !activityStartDate || l.date >= activityStartDate;
-    const matchesEndDate = !activityEndDate || l.date <= activityEndDate;
+    // Apply date filter
+    const matchesDate = filterByDateRange(l.date, activityDateFilter, activityStartDateFilter, activityEndDateFilter);
     
-    return matchesSearch && matchesBatch && matchesCourse && matchesType && matchesScore && matchesStartDate && matchesEndDate;
+    return matchesSearch && matchesBatch && matchesCourse && matchesType && matchesScore && matchesDate;
   });
 
   const handleActBatchChange = async (batchId) => {
@@ -1845,6 +1957,7 @@ const AdminDashboard = () => {
         setBatchEndDate('');
         setBatchStatus('Active');
         setBatchMaxStudents(30);
+        setShowBatchModal(false);
         showModal("Success", "New batch created successfully!", "success");
         fetchBatches();
         fetchCourses();
@@ -1866,6 +1979,7 @@ const AdminDashboard = () => {
     setBatchEndDate(batch.end_date || '');
     setBatchStatus(batch.status || 'Active');
     setBatchMaxStudents(batch.max_students || 30);
+    setShowBatchModal(true);
   };
 
   const saveBatchEdit = async (e) => {
@@ -1896,6 +2010,7 @@ const AdminDashboard = () => {
         setBatchEndDate('');
         setBatchStatus('Active');
         setBatchMaxStudents(30);
+        setShowBatchModal(false);
         showModal("Success", "Batch details updated successfully!", "success");
         fetchBatches();
         fetchCourses();
@@ -1985,7 +2100,7 @@ const AdminDashboard = () => {
       fetchBatches();
       fetchActivityLogs();
     }
-  }, [activeTab, currentPage, attendancePage, feesPage, searchQuery, statusFilter, feesFilter, courseFilter, batchFilter, feesSearchQuery, feesStatusFilter, feesCourseFilter, feesBatchFilter]);
+  }, [activeTab, currentPage, attendancePage, feesPage, searchQuery, statusFilter, feesFilter, courseFilter, batchFilter, feesSearchQuery, feesStatusFilter, feesCourseFilter, feesBatchFilter, studentDateFilter, studentStartDateFilter, studentEndDateFilter]);
 
   useEffect(() => {
     if (activeTab === 'attendance') {
@@ -2035,6 +2150,8 @@ const AdminDashboard = () => {
       let feesVal = feesFilter;
       let courseVal = courseFilter;
       let batchVal = batchFilter;
+      let startDateVal = '';
+      let endDateVal = '';
 
       if (activeTab === 'fees-management') {
         searchVal = feesSearchQuery;
@@ -2042,6 +2159,10 @@ const AdminDashboard = () => {
         feesVal = feesStatusFilter;
         courseVal = feesCourseFilter;
         batchVal = feesBatchFilter;
+      } else if (activeTab === 'students') {
+        const bounds = getDateRangeBounds(studentDateFilter, studentStartDateFilter, studentEndDateFilter);
+        startDateVal = bounds.startDate;
+        endDateVal = bounds.endDate;
       }
 
       const queryParams = new URLSearchParams({
@@ -2053,6 +2174,9 @@ const AdminDashboard = () => {
         course: courseVal,
         batch: batchVal
       });
+
+      if (startDateVal) queryParams.append('startDate', startDateVal);
+      if (endDateVal) queryParams.append('endDate', endDateVal);
       
       const response = await fetch(`${API_BASE}/admin/students?${queryParams}`, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -3276,7 +3400,7 @@ const AdminDashboard = () => {
         {activeTab === 'batches' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
             <FilterBar
-              searchPlaceholder="Search Batch Name or Trainer..."
+              searchPlaceholder="Search Batch"
               searchValue={batchSearchQuery}
               onSearchChange={(val) => { setBatchSearchQuery(val); setBatchesPage(1); }}
               filters={[
@@ -3302,100 +3426,49 @@ const AdminDashboard = () => {
                   ]
                 }
               ]}
-              showDateFilter={false}
-              onReset={() => {
-                setBatchSearchQuery('');
-                setBatchCourseFilter('');
-                setBatchStatusFilter('');
-                setBatchTrainerFilter('');
-                setBatchStartDateFilter('');
-                setBatchEndDateFilter('');
-                setBatchesPage(1);
-              }}
+              showDateFilter={true}
+              activeQuickFilter={batchDateFilter}
+              onQuickFilterChange={(pill) => { setBatchDateFilter(pill); setBatchesPage(1); }}
+              startDateValue={batchStartDateFilter}
+              endDateValue={batchEndDateFilter}
+              onStartDateChange={(val) => { setBatchStartDateFilter(val); setBatchesPage(1); }}
+              onEndDateChange={(val) => { setBatchEndDateFilter(val); setBatchesPage(1); }}
               onExportCSV={exportBatchesToCSV}
               onExportExcel={exportBatchesToExcel}
               onExportPDF={exportBatchesToPDF}
+              actionLabel="+ Create Batch"
+              onActionClick={() => {
+                setEditingBatch(null);
+                setBatchName('');
+                setBatchCourseName('');
+                setBatchTrainerName('');
+                setBatchStartDate('');
+                setBatchEndDate('');
+                setBatchStatus('Active');
+                setBatchMaxStudents(30);
+                setShowBatchModal(true);
+              }}
             />
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: '30px' }}>
-              {/* Create / Edit Batch Form */}
-              <div className="dashboard-card-section">
-                <h4 style={{ marginBottom: '18px', fontSize: '15px', fontWeight: '700' }}>
-                  {editingBatch ? 'Edit Batch Details' : 'Create New Batch'}
-                </h4>
-                <form onSubmit={editingBatch ? saveBatchEdit : createBatch}>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="batchName">Batch Name</label>
-                    <input id="batchName" type="text" className="form-input" value={batchName} onChange={(e) => setBatchName(e.target.value)} placeholder="e.g. Fullstack MERN Web Dev - Alpha" required />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="batchCourseName">Course Title</label>
-                    <input id="batchCourseName" type="text" className="form-input" value={batchCourseName} onChange={(e) => setBatchCourseName(e.target.value)} placeholder="e.g. Fullstack Engineering" required />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="batchTrainerName">Trainer / Instructor</label>
-                    <input id="batchTrainerName" type="text" className="form-input" value={batchTrainerName} onChange={(e) => setBatchTrainerName(e.target.value)} placeholder="e.g. Dr. Sarah Jenkins" required />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="batchStartDate">Start Date</label>
-                    <input id="batchStartDate" type="date" className="form-input" value={batchStartDate} onChange={(e) => setBatchStartDate(e.target.value)} required />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="batchEndDate">End Date</label>
-                    <input id="batchEndDate" type="date" className="form-input" value={batchEndDate} onChange={(e) => setBatchEndDate(e.target.value)} required />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="batchStatusSelect">Batch Status</label>
-                    <select id="batchStatusSelect" className="form-select" value={batchStatus} onChange={(e) => setBatchStatus(e.target.value)}>
-                      <option value="Active">Active</option>
-                      <option value="Completed">Completed</option>
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="batchMaxStudents">Maximum Seats</label>
-                    <input id="batchMaxStudents" type="number" className="form-input" value={batchMaxStudents} onChange={(e) => setBatchMaxStudents(e.target.value)} required />
-                  </div>
-                  <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                    {editingBatch && (
-                      <button type="button" className="btn btn-outline" style={{ flex: 1 }} onClick={() => {
-                        setEditingBatch(null);
-                        setBatchName('');
-                        setBatchCourseName('');
-                        setBatchTrainerName('');
-                        setBatchStartDate('');
-                        setBatchEndDate('');
-                        setBatchStatus('Active');
-                        setBatchMaxStudents(30);
-                      }}>
-                        Cancel
-                      </button>
-                    )}
-                    <button type="submit" className="btn btn-primary" style={{ flex: 2 }}>
-                      {editingBatch ? 'Save Batch Changes' : 'Confirm New Batch'}
-                    </button>
-                  </div>
-                </form>
+            {/* Batches List Cards - Full Width */}
+            <div className="dashboard-card-section" style={{ display: 'flex', flexDirection: 'column', minHeight: '500px', width: '100%' }}>
+              <div className="section-header-premium" style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                <h4 style={{ fontSize: '15.5px', fontWeight: '700', margin: 0 }}>Registered Institutional Batches</h4>
               </div>
 
-              {/* Batches List Cards */}
-              <div className="dashboard-card-section" style={{ display: 'flex', flexDirection: 'column', minHeight: '500px' }}>
-                <div className="section-header-premium" style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-                  <h4 style={{ fontSize: '15.5px', fontWeight: '700', margin: 0 }}>Registered Institutional Batches</h4>
-                </div>
-
-                {filteredBatches.length === 0 ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexGrow: 1, padding: '40px 20px', textAlign: 'center' }}>
-                    <div style={{ width: '80px', height: '80px', background: 'var(--primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--primary-color)' }}>
-                      <GraduationCap size={40} />
-                    </div>
-                    <h5 style={{ fontSize: '16px', fontWeight: '800', margin: '0 0 4px' }}>No Batches Found</h5>
-                    <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '280px', margin: 0 }}>No batches created yet or matching the filters.</p>
+              {filteredBatches.length === 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexGrow: 1, padding: '40px 20px', textAlign: 'center' }}>
+                  <div style={{ width: '80px', height: '80px', background: 'var(--primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--primary-color)' }}>
+                    <GraduationCap size={40} />
                   </div>
-                ) : (() => {
-                  const batchLimit = windowWidth < 768 ? 1 : (windowWidth < 1024 ? 2 : 3);
-                  const totalBatchesPages = Math.ceil(filteredBatches.length / batchLimit) || 1;
-                  const safeBatchesPage = Math.min(batchesPage, totalBatchesPages);
-                  const paginatedBatches = filteredBatches.slice((safeBatchesPage - 1) * batchLimit, safeBatchesPage * batchLimit);
+                  <h5 style={{ fontSize: '16px', fontWeight: '800', margin: '0 0 4px' }}>No Batches Found</h5>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '280px', margin: 0 }}>No batches created yet or matching the filters.</p>
+                </div>
+              ) : (() => {
+                const batchLimit = windowWidth < 768 ? 1 : (windowWidth < 1024 ? 2 : 3);
+                const totalBatchesPages = Math.ceil(filteredBatches.length / batchLimit) || 1;
+                const safeBatchesPage = Math.min(batchesPage, totalBatchesPages);
+                const paginatedBatches = filteredBatches.slice((safeBatchesPage - 1) * batchLimit, safeBatchesPage * batchLimit);
 
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, justifyContent: 'space-between' }}>
@@ -3480,21 +3553,13 @@ const AdminDashboard = () => {
               })()}
             </div>
           </div>
-        </div>
-      )}
+        )}
 
         {/* Students Registry Tab */}
         {activeTab === 'students' && (
-          <div className="dashboard-card-section" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <div className="section-header-premium" style={{ gap: '16px', flexWrap: 'wrap', width: '100%', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 className="section-title-premium" style={{ margin: 0 }}>Student Accounts Registry</h3>
-              <button className="btn btn-primary" style={{ padding: '0 16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', height: '44px', borderRadius: '14px' }} onClick={() => { setCreateName(''); setCreateEmail(''); setCreatePhone(''); setCreateCourse('Fullstack Engineering'); setCreateBatchId(''); setCreateTempPassword(generateRandomPassword()); setShowCreateModal(true); }}>
-                <Plus size={14} /> Create Student
-              </button>
-            </div>
-
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
             <FilterBar
-              searchPlaceholder="Search Student Name, ID, Email, Mobile..."
+              searchPlaceholder="Search Students"
               searchValue={searchQuery}
               onSearchChange={(val) => { setSearchQuery(val); setCurrentPage(1); }}
               filters={[
@@ -3515,8 +3580,8 @@ const AdminDashboard = () => {
                   value: feesFilter,
                   onChange: (val) => { setFeesFilter(val); setCurrentPage(1); },
                   options: [
-                    { value: 'Paid', label: 'Fully Paid' },
-                    { value: 'Pending', label: 'Pending Dues' }
+                    { value: 'Paid', label: 'Paid' },
+                    { value: 'Pending', label: 'Pending' }
                   ]
                 },
                 {
@@ -3529,21 +3594,24 @@ const AdminDashboard = () => {
                   ]
                 }
               ]}
-              showDateFilter={false}
-              onReset={() => {
-                setSearchQuery('');
-                setCourseFilter('');
-                setBatchFilter('');
-                setStatusFilter('');
-                setFeesFilter('');
-                setCurrentPage(1);
-              }}
+              showDateFilter={true}
+              activeQuickFilter={studentDateFilter}
+              onQuickFilterChange={(pill) => { setStudentDateFilter(pill); setCurrentPage(1); }}
+              startDateValue={studentStartDateFilter}
+              endDateValue={studentEndDateFilter}
+              onStartDateChange={(val) => { setStudentStartDateFilter(val); setCurrentPage(1); }}
+              onEndDateChange={(val) => { setStudentEndDateFilter(val); setCurrentPage(1); }}
               onExportCSV={exportToCSV}
               onExportExcel={exportToExcel}
               onExportPDF={exportToPDF}
+              actionLabel="+ Create Student"
+              onActionClick={() => { setCreateName(''); setCreateEmail(''); setCreatePhone(''); setCreateCourse('Fullstack Engineering'); setCreateBatchId(''); setCreateTempPassword(generateRandomPassword()); setShowCreateModal(true); }}
             />
 
-            {/* Desktop & Tablet: Fixed Header Table */}
+            <div className="dashboard-card-section" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div className="section-header-premium" style={{ gap: '16px', flexWrap: 'wrap', width: '100%', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h3 className="section-title-premium" style={{ margin: 0 }}>Student Accounts Registry</h3>
+              </div>
             <div className="table-container-scrollable table-desktop-view">
               <table className="table-premium compact-tablet">
                 <thead>
@@ -3705,6 +3773,7 @@ const AdminDashboard = () => {
               </div>
             </div>
           </div>
+          </div>
         )}
 
         {activeTab === 'live-classes' && (() => {
@@ -3843,114 +3912,32 @@ const AdminDashboard = () => {
                 endDateValue={customEndDate}
                 onStartDateChange={(val) => { setCustomStartDate(val); setLivePage(1); }}
                 onEndDateChange={(val) => { setCustomEndDate(val); setLivePage(1); }}
-                onReset={() => {
-                  setSessionSearch('');
-                  setLiveCourseFilter('');
-                  setLiveBatchFilter('');
-                  setLiveStatusFilter('');
-                  setDateFilter('This Week');
-                  setCustomStartDate('');
-                  setCustomEndDate('');
-                  setLivePage(1);
-                }}
                 onExportCSV={exportLiveClassesToCSV}
                 onExportExcel={exportLiveClassesToExcel}
                 onExportPDF={exportLiveClassesToPDF}
+                actionLabel="+ Schedule Live Class"
+                onActionClick={() => setShowLiveClassModal(true)}
               />
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '30px', alignItems: 'start' }} className="live-classes-container">
-                {/* Left Side: Schedule Form */}
-                <div className="dashboard-card-section" style={{ padding: '28px' }}>
-                  <h4 style={{ marginBottom: '24px', fontSize: '18px', fontWeight: '800', color: 'var(--text-primary)' }}>Schedule Live Lecture</h4>
-                  <form onSubmit={addLiveClass} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label className="form-label" htmlFor="liveBatchSelect" style={{ fontWeight: 700, fontSize: '12px' }}>Target Batch</label>
-                      <CustomDropdown
-                        label="Target Batch"
-                        value={selectedBatchId}
-                        onChange={(val) => setSelectedBatchId(val)}
-                        width="100%"
-                        placeholder="-- Choose Batch --"
-                        options={[
-                          { value: '', label: '-- Choose Batch --' },
-                          ...batches.map(b => ({ value: b.id, label: `${b.name} (${b.code})` }))
-                        ]}
-                      />
-                    </div>
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label className="form-label" htmlFor="liveTitle" style={{ fontWeight: 700, fontSize: '12px' }}>Lecture Title</label>
-                      <input id="liveTitle" type="text" className="form-input form-input-lg" placeholder="e.g. Intro to React" value={liveTitle} onChange={(e) => setLiveTitle(e.target.value)} required />
-                    </div>
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label className="form-label" htmlFor="liveInstructor" style={{ fontWeight: 700, fontSize: '12px' }}>Lead Faculty</label>
-                      <input id="liveInstructor" type="text" className="form-input form-input-lg" placeholder="e.g. Sri Aakash" value={liveInstructor} onChange={(e) => setLiveInstructor(e.target.value)} required />
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                      <div className="form-group" style={{ margin: 0 }}>
-                        <label className="form-label" htmlFor="liveDate" style={{ fontWeight: 700, fontSize: '12px' }}>Date</label>
-                        <input id="liveDate" type="date" className="form-input form-input-lg" value={liveDate} onChange={(e) => setLiveDate(e.target.value)} required />
-                      </div>
-                      <div className="form-group" style={{ margin: 0 }}>
-                        <label className="form-label" htmlFor="liveTime" style={{ fontWeight: 700, fontSize: '12px' }}>Time / Schedule</label>
-                        <input id="liveTime" type="text" className="form-input form-input-lg" value={liveTime} onChange={(e) => setLiveTime(e.target.value)} placeholder="e.g. 7:00 PM - 8:30 PM" required />
-                      </div>
-                    </div>
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label className="form-label" htmlFor="liveUrl" style={{ fontWeight: 700, fontSize: '12px' }}>Google Meet Link</label>
-                      <input id="liveUrl" type="url" className="form-input form-input-lg" placeholder="https://meet.google.com/..." value={liveUrl} onChange={(e) => setLiveUrl(e.target.value)} required />
-                    </div>
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label className="form-label" htmlFor="liveStatusSelect" style={{ fontWeight: 700, fontSize: '12px' }}>Class Status</label>
-                      <CustomDropdown
-                        label="Class Status"
-                        value={liveStatus}
-                        onChange={(val) => setLiveStatus(val)}
-                        width="100%"
-                        options={[
-                          { value: 'Upcoming', label: 'Upcoming' },
-                          { value: 'Live', label: 'Live' },
-                          { value: 'Completed', label: 'Completed' }
-                        ]}
-                      />
-                    </div>
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label className="form-label" htmlFor="liveDescription" style={{ fontWeight: 700, fontSize: '12px' }}>Description</label>
-                      <textarea id="liveDescription" className="form-input" style={{ height: '70px', resize: 'none', borderRadius: '10px' }} placeholder="Brief overview of lecture contents..." value={liveDescription} onChange={(e) => setLiveDescription(e.target.value)} />
-                    </div>
-                    <div style={{ display: 'flex', gap: '16px', margin: '4px 0' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <input id="liveToday" type="checkbox" checked={liveToday} onChange={(e) => setLiveToday(e.target.checked)} />
-                        <label htmlFor="liveToday" className="form-label" style={{ marginBottom: 0, fontSize: '12.5px', cursor: 'pointer' }}>Happening Today?</label>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <input id="livePublished" type="checkbox" checked={livePublished} onChange={(e) => setLivePublished(e.target.checked)} />
-                        <label htmlFor="livePublished" className="form-label" style={{ marginBottom: 0, fontSize: '12.5px', cursor: 'pointer' }}>Publish Stream</label>
-                      </div>
-                    </div>
-                    <button type="submit" className="btn btn-primary btn-block btn-purple-gradient" style={{ height: '48px', fontSize: '14.5px' }}>Confirm Live Lecture</button>
-                  </form>
+              {/* Active Sessions Management - Full Width */}
+              <div className="dashboard-card-section" style={{ display: 'flex', flexDirection: 'column', gap: '20px', minWidth: 0, width: '100%' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                  <h4 style={{ fontSize: '18px', fontWeight: '800', margin: 0, color: 'var(--text-primary)' }}>Active Sessions</h4>
                 </div>
-
-                {/* Right Side: Active Sessions Management */}
-                <div className="dashboard-card-section" style={{ display: 'flex', flexDirection: 'column', gap: '20px', minWidth: 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-                    <h4 style={{ fontSize: '18px', fontWeight: '800', margin: 0, color: 'var(--text-primary)' }}>Active Sessions</h4>
-                  </div>
-
-                  {filteredClasses.length === 0 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '40px 20px', background: 'var(--surface-alt)', borderRadius: '16px', border: '1.5px dashed var(--border-color)' }}>
-                      <div style={{ width: '80px', height: '80px', background: 'rgba(108,60,240,0.06)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--primary-color)' }}>
-                        <CalendarCheck size={40} />
-                      </div>
-                      <h5 style={{ fontSize: '16px', fontWeight: '800', margin: '0 0 4px' }}>No Live Sessions</h5>
-                      <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '280px', margin: '0 0 16px' }}>There are currently no sessions matching the active filters.</p>
-                      <button type="button" className="btn btn-primary btn-sm" onClick={() => document.getElementById('liveTitle')?.focus()}>Schedule Session</button>
+                {filteredClasses.length === 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '40px 20px', background: 'var(--surface-alt)', borderRadius: '16px', border: '1.5px dashed var(--border-color)' }}>
+                    <div style={{ width: '80px', height: '80px', background: 'rgba(108,60,240,0.06)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--primary-color)' }}>
+                      <CalendarCheck size={40} />
                     </div>
-                  ) : (() => {
-                    const limit = 5;
-                    const totalLivePages = Math.ceil(filteredClasses.length / limit) || 1;
-                    const safeLivePage = Math.min(livePage, totalLivePages);
-                    const paginatedClasses = filteredClasses.slice((safeLivePage - 1) * limit, safeLivePage * limit);
+                    <h5 style={{ fontSize: '16px', fontWeight: '800', margin: '0 0 4px' }}>No Live Sessions</h5>
+                    <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '280px', margin: '0 0 16px' }}>There are currently no sessions matching the active filters.</p>
+                    <button type="button" className="btn btn-primary btn-sm" onClick={() => setShowLiveClassModal(true)}>Schedule Session</button>
+                  </div>
+                ) : (() => {
+                  const limit = 5;
+                  const totalLivePages = Math.ceil(filteredClasses.length / limit) || 1;
+                  const safeLivePage = Math.min(livePage, totalLivePages);
+                  const paginatedClasses = filteredClasses.slice((safeLivePage - 1) * limit, safeLivePage * limit);
 
                   return (
                     <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, justifyContent: 'space-between' }}>
@@ -3959,13 +3946,13 @@ const AdminDashboard = () => {
                         <div className="table-container-premium table-desktop-view" style={{ border: '1px solid var(--border-color)', borderRadius: '12px', overflow: 'hidden' }}>
                           <table className="table-premium table-live-classes">
                             <colgroup>
-                              <col style={{ width: '22%' }} />
+                              <col style={{ width: '18%' }} />
                               <col style={{ width: '15%' }} />
-                              <col style={{ width: '13%' }} />
-                              <col style={{ width: '11%' }} />
-                              <col style={{ width: '13%' }} />
-                              <col style={{ width: '11%' }} />
-                              <col style={{ width: '5%' }} />
+                              <col style={{ width: '10%' }} />
+                              <col style={{ width: '12%' }} />
+                              <col style={{ width: '18%' }} />
+                              <col style={{ width: '10%' }} />
+                              <col style={{ width: '7%' }} />
                               <col style={{ width: '10%' }} />
                             </colgroup>
                             <thead>
@@ -4008,24 +3995,28 @@ const AdminDashboard = () => {
                                         {item.status}
                                       </span>
                                     </td>
-                                    <td style={{ textAlign: 'center' }}><span style={{ fontWeight: '700' }}>{item.students_joined}</span></td>
-                                    <td className="col-actions">
-                                      <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                                    <td>
+                                      <span style={{ fontSize: '12.5px', fontWeight: '700', color: 'var(--text-secondary)' }}>
+                                        {item.students_joined || 0}
+                                      </span>
+                                    </td>
+                                    <td className="col-actions" style={{ overflow: 'visible' }}>
+                                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
                                         {item.status === 'Live' && (
                                           <>
-                                            <a href={item.meet_link} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-sm" style={{ height: '26px', padding: '0 8px', fontSize: '11px', backgroundColor: '#10B981', borderColor: '#10B981', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>Join</a>
-                                            <button type="button" className="btn btn-outline btn-sm" style={{ height: '26px', padding: '0 6px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => handleEditLiveClick(item)}>Edit</button>
-                                            <button type="button" className="btn btn-danger btn-sm" style={{ height: '26px', padding: '0 6px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => deleteLiveClass(item._id)}>End</button>
+                                            <a href={item.meet_link} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-sm" style={{ width: '28px', height: '28px', padding: 0, borderRadius: '50%', backgroundColor: '#10B981', borderColor: '#10B981', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="Join Class"><Video size={14} /></a>
+                                            <button type="button" className="btn btn-outline btn-sm" style={{ width: '28px', height: '28px', padding: 0, borderRadius: '50%', border: '1px solid #CBD5E1', color: '#1E293B', backgroundColor: '#FFFFFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} onClick={() => handleEditLiveClick(item)} title="Edit Session"><Pencil size={14} /></button>
+                                            <button type="button" className="btn btn-danger btn-sm" style={{ width: '28px', height: '28px', padding: 0, borderRadius: '50%', backgroundColor: '#EF4444', borderColor: '#EF4444', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} onClick={() => deleteLiveClass(item._id)} title="Delete Session"><Trash2 size={14} /></button>
                                           </>
                                         )}
                                         {item.status === 'Upcoming' && (
                                           <>
-                                            <button type="button" className="btn btn-outline btn-sm" style={{ height: '26px', padding: '0 6px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => handleEditLiveClick(item)}>Edit</button>
-                                            <button type="button" className="btn btn-danger btn-sm" style={{ height: '26px', padding: '0 6px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--danger-color)', color: 'white' }} onClick={() => deleteLiveClass(item._id)}>Cancel</button>
+                                            <button type="button" className="btn btn-outline btn-sm" style={{ width: '28px', height: '28px', padding: 0, borderRadius: '50%', border: '1px solid #CBD5E1', color: '#1E293B', backgroundColor: '#FFFFFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} onClick={() => handleEditLiveClick(item)} title="Edit Session"><Pencil size={14} /></button>
+                                            <button type="button" className="btn btn-danger btn-sm" style={{ width: '28px', height: '28px', padding: 0, borderRadius: '50%', backgroundColor: '#EF4444', borderColor: '#EF4444', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} onClick={() => deleteLiveClass(item._id)} title="Delete Session"><X size={14} /></button>
                                           </>
                                         )}
                                         {item.status === 'Completed' && (
-                                          <button type="button" className="btn btn-outline btn-sm" style={{ height: '26px', padding: '0 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => showModal("Lecture Recording", `Viewing recording link for ${item.title}: ${item.meet_link || 'N/A'}`)}>View Recording</button>
+                                          <button type="button" className="btn btn-outline btn-sm" style={{ width: '28px', height: '28px', padding: 0, borderRadius: '50%', border: '1px solid #CBD5E1', color: '#1E293B', backgroundColor: '#FFFFFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} onClick={() => showModal("Lecture Recording", `Viewing recording link for ${item.title}: ${item.meet_link || 'N/A'}`)} title="View Recording"><PlayCircle size={14} /></button>
                                         )}
                                       </div>
                                     </td>
@@ -4075,19 +4066,19 @@ const AdminDashboard = () => {
                                 <div className="student-card-actions" style={{ justifyContent: 'flex-start', gap: '8px', paddingTop: '10px' }}>
                                   {item.status === 'Live' && (
                                     <>
-                                      <a href={item.meet_link} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-sm" style={{ height: '32px', backgroundColor: '#10B981', borderColor: '#10B981' }}>Join</a>
-                                      <button type="button" className="btn btn-outline btn-sm" style={{ height: '32px' }} onClick={() => handleEditLiveClick(item)}>Edit</button>
-                                      <button type="button" className="btn btn-danger btn-sm" style={{ height: '32px' }} onClick={() => deleteLiveClass(item._id)}>End</button>
+                                      <a href={item.meet_link} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-sm" style={{ height: '32px', backgroundColor: '#10B981', borderColor: '#10B981', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}><Video size={14} />Join</a>
+                                      <button type="button" className="btn btn-outline btn-sm" style={{ height: '32px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }} onClick={() => handleEditLiveClick(item)}><Pencil size={14} />Edit</button>
+                                      <button type="button" className="btn btn-danger btn-sm" style={{ height: '32px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }} onClick={() => deleteLiveClass(item._id)}><Trash2 size={14} />End</button>
                                     </>
                                   )}
                                   {item.status === 'Upcoming' && (
                                     <>
-                                      <button type="button" className="btn btn-outline btn-sm" style={{ height: '32px' }} onClick={() => handleEditLiveClick(item)}>Edit</button>
-                                      <button type="button" className="btn btn-danger btn-sm" style={{ height: '32px', backgroundColor: 'var(--danger-color)', color: 'white' }} onClick={() => deleteLiveClass(item._id)}>Cancel</button>
+                                      <button type="button" className="btn btn-outline btn-sm" style={{ height: '32px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }} onClick={() => handleEditLiveClick(item)}><Pencil size={14} />Edit</button>
+                                      <button type="button" className="btn btn-danger btn-sm" style={{ height: '32px', backgroundColor: 'var(--danger-color)', color: 'white', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }} onClick={() => deleteLiveClass(item._id)}><X size={14} />Cancel</button>
                                     </>
                                   )}
                                   {item.status === 'Completed' && (
-                                    <button type="button" className="btn btn-outline btn-sm" style={{ height: '32px' }} onClick={() => showModal("Lecture Recording", `Recording Link: ${item.meet_link}`)}>View Recording</button>
+                                    <button type="button" className="btn btn-outline btn-sm" style={{ height: '32px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }} onClick={() => showModal("Lecture Recording", `Recording Link: ${item.meet_link}`)}><PlayCircle size={14} />View Recording</button>
                                   )}
                                 </div>
                               </div>
@@ -4115,14 +4106,13 @@ const AdminDashboard = () => {
                 })()}
               </div>
             </div>
-          </div>
-        );
-      })()}
+          );
+        })()}
 
         {activeTab === 'attendance' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
             <FilterBar
-              searchPlaceholder="Search Student Name, ID..."
+              searchPlaceholder="Search Student"
               searchValue={attSearchQuery}
               onSearchChange={(val) => { setAttSearchQuery(val); setAttendancePage(1); }}
               filters={[
@@ -4155,16 +4145,6 @@ const AdminDashboard = () => {
               endDateValue={attEndDateFilter}
               onStartDateChange={(val) => { setAttStartDateFilter(val); setAttendancePage(1); }}
               onEndDateChange={(val) => { setAttEndDateFilter(val); setAttendancePage(1); }}
-              onReset={() => {
-                setAttSearchQuery('');
-                setAttCourseFilter('');
-                setAttBatchFilter('');
-                setAttStatusFilter('');
-                setAttDateFilter('This Month');
-                setAttStartDateFilter('');
-                setAttEndDateFilter('');
-                setAttendancePage(1);
-              }}
               onExportCSV={exportAttHistoryToCSV}
               onExportExcel={exportAttHistoryToExcel}
               onExportPDF={exportAttHistoryToPDF}
@@ -4274,14 +4254,14 @@ const AdminDashboard = () => {
                 </div>
               )}
 
-          </div>
-      )}
+            </div>
+        )}
 
         {/* Recorded Classes View */}
         {activeTab === 'recorded-classes' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
             <FilterBar
-              searchPlaceholder="Search Lesson or Module..."
+              searchPlaceholder="Search Recorded Class"
               searchValue={recordedSearchQuery}
               onSearchChange={(val) => { setRecordedSearchQuery(val); setRecordedPage(1); }}
               filters={[
@@ -4298,261 +4278,30 @@ const AdminDashboard = () => {
                   options: batches.map(b => ({ value: b.id, label: b.name }))
                 },
                 {
-                  label: 'Visibility',
+                  label: 'Status',
                   value: recordedVisibilityFilter,
                   onChange: (val) => { setRecordedVisibilityFilter(val); setRecordedPage(1); },
                   options: [
                     { value: 'everyone', label: 'Everyone' },
-                    { value: 'paid', label: 'Paid Students Only' }
-                  ]
-                },
-                {
-                  label: 'Upload Type',
-                  value: recordedUploadTypeFilter,
-                  onChange: (val) => { setRecordedUploadTypeFilter(val); setRecordedPage(1); },
-                  options: [
-                    { value: 'Google Drive', label: 'Google Drive' },
-                    { value: 'Uploaded', label: 'Uploaded File' }
+                    { value: 'paid', label: 'Paid Only' }
                   ]
                 }
               ]}
-              showDateFilter={false}
-              onReset={() => {
-                setRecordedSearchQuery('');
-                setRecordedCourseFilter('');
-                setRecordedBatchFilter('');
-                setRecordedVisibilityFilter('');
-                setRecordedUploadTypeFilter('');
-                setRecordedPage(1);
-              }}
+              showDateFilter={true}
+              activeQuickFilter={recordedDateFilter}
+              onQuickFilterChange={(pill) => { setRecordedDateFilter(pill); setRecordedPage(1); }}
+              startDateValue={recordedStartDateFilter}
+              endDateValue={recordedEndDateFilter}
+              onStartDateChange={(val) => { setRecordedStartDateFilter(val); setRecordedPage(1); }}
+              onEndDateChange={(val) => { setRecordedEndDateFilter(val); setRecordedPage(1); }}
               onExportCSV={exportRecordedClassesToCSV}
               onExportExcel={exportRecordedClassesToExcel}
               onExportPDF={exportRecordedClassesToPDF}
+              actionLabel="+ Add Recorded Class"
+              onActionClick={() => setShowRecordedClassModal(true)}
             />
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '30px' }}>
-            <div className="dashboard-card-section">
-              <h4 style={{ marginBottom: '18px', fontSize: '15px', fontWeight: '700' }}>
-                {editingRecordedClass ? '✏️ Edit Lesson' : '➕ Upload New Lesson'}
-              </h4>
-              <form onSubmit={addRecordedClass}>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="recBatchSelect">Target Batch</label>
-                  <select id="recBatchSelect" className="form-select" value={selectedBatchId} onChange={(e) => setSelectedBatchId(e.target.value)} required>
-                    <option value="">-- Choose Batch --</option>
-                    {batches.map(b => (
-                      <option key={b.id} value={b.id}>{b.name} ({b.code})</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="recCourseTitle">Course Name</label>
-                  <input id="recCourseTitle" type="text" className="form-input" value={recCourseTitle} onChange={(e) => setRecCourseTitle(e.target.value)} placeholder="e.g. Python Full Stack" required />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="recModule">Module Section</label>
-                  <input id="recModule" type="text" className="form-input" value={recModule} onChange={(e) => setRecModule(e.target.value)} placeholder="e.g. Module 1 - Python Basics" required />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="recTitle">Lesson Title</label>
-                  <input id="recTitle" type="text" className="form-input" value={recTitle} onChange={(e) => setRecTitle(e.target.value)} placeholder="e.g. Variables & Data Types" required />
-                </div>
-
-                {/* Video Source Type */}
-                <div className="form-group">
-                  <label className="form-label">Video Source</label>
-                  <div style={{ display: 'flex', gap: '16px', marginTop: '6px', marginBottom: '8px' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', cursor: 'pointer' }}>
-                      <input type="radio" name="videoSourceType" value="link" checked={videoSourceType === 'link'} onChange={() => setVideoSourceType('link')} />
-                      Google Drive Link / External Link
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', cursor: 'pointer' }}>
-                      <input type="radio" name="videoSourceType" value="upload" checked={videoSourceType === 'upload'} onChange={() => setVideoSourceType('upload')} />
-                      Upload Video File
-                    </label>
-                  </div>
-
-                  {videoSourceType === 'link' ? (
-                    <input id="recVideoUrl" type="url" className="form-input" value={recVideoUrl} onChange={(e) => setRecVideoUrl(e.target.value)} placeholder="https://youtube.com/watch?v=... or Drive link" />
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <input 
-                        type="file" 
-                        accept="video/*" 
-                        className="form-input" 
-                        onChange={async (e) => {
-                          const file = e.target.files[0];
-                          if (!file) return;
-                          setUploadingVideo(true);
-                          const res = await handleFileUpload(file);
-                          setUploadingVideo(false);
-                          if (res && res.url) {
-                            setRecVideoUrl(res.url);
-                          }
-                        }} 
-                      />
-                      {uploadingVideo && <span style={{ fontSize: 12, color: 'var(--primary-color)' }}>Uploading video file... Please wait.</span>}
-                      {recVideoUrl && !uploadingVideo && (
-                        <span style={{ fontSize: 11, color: '#059669', wordBreak: 'break-all' }}>✓ Video ready: {recVideoUrl}</span>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label" htmlFor="recThumbnailUrl">Thumbnail URL <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>(optional)</span></label>
-                  <input id="recThumbnailUrl" type="url" className="form-input" value={recThumbnailUrl} onChange={(e) => setRecThumbnailUrl(e.target.value)} placeholder="https://img.youtube.com/vi/.../hqdefault.jpg" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="recLessonDescription">Lesson Description <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>(optional)</span></label>
-                  <textarea id="recLessonDescription" className="form-input" style={{ height: 60, resize: 'none' }} value={recLessonDescription} onChange={(e) => setRecLessonDescription(e.target.value)} placeholder="Brief overview of what students will learn..." />
-                </div>
-                
-                {/* Duration */}
-                <div className="form-group">
-                  <label className="form-label" htmlFor="recDuration">Duration</label>
-                  <input id="recDuration" type="text" className="form-input" value={recDuration} onChange={(e) => setRecDuration(e.target.value)} placeholder="e.g. 1h 15m" />
-                </div>
-
-                {/* Multiple Study Materials Manager */}
-                <div className="form-group" style={{ background: 'var(--bg-secondary)', padding: 14, borderRadius: 12, border: '1px solid var(--border-color)', marginBottom: 16 }}>
-                  <label className="form-label" style={{ fontWeight: 800 }}>Study Materials Manager</label>
-                  
-                  {/* Current Materials List */}
-                  {recStudyMaterials.length > 0 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12, marginTop: 6 }}>
-                      {recStudyMaterials.map((mat, index) => (
-                        <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border-light)' }}>
-                          <span style={{ fontSize: 12, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '80%' }}>
-                            📄 {mat.name} ({mat.type?.toUpperCase()})
-                          </span>
-                          <button 
-                            type="button" 
-                            style={{ background: 'none', border: 'none', color: 'var(--danger-color)', cursor: 'pointer', fontSize: 11, fontWeight: 700 }}
-                            onClick={() => setRecStudyMaterials(prev => prev.filter((_, i) => i !== index))}
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Add New Material Box */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8, borderTop: '1px solid var(--border-light)', paddingTop: 10 }}>
-                    <input 
-                      type="text" 
-                      placeholder="Material Name (e.g. Slide Lecture 1)" 
-                      className="form-input" 
-                      style={{ height: 36, fontSize: 12.5 }}
-                      value={newMaterialName} 
-                      onChange={(e) => setNewMaterialName(e.target.value)} 
-                    />
-                    
-                    <div style={{ display: 'flex', gap: 12 }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: 12, cursor: 'pointer' }}>
-                        <input type="radio" name="newMaterialSourceType" value="link" checked={newMaterialSourceType === 'link'} onChange={() => setNewMaterialSourceType('link')} />
-                        Drive Link
-                      </label>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: 12, cursor: 'pointer' }}>
-                        <input type="radio" name="newMaterialSourceType" value="upload" checked={newMaterialSourceType === 'upload'} onChange={() => setNewMaterialSourceType('upload')} />
-                        Upload File
-                      </label>
-                    </div>
-
-                    {newMaterialSourceType === 'link' ? (
-                      <input 
-                        type="url" 
-                        placeholder="https://drive.google.com/..." 
-                        className="form-input" 
-                        style={{ height: 36, fontSize: 12.5 }}
-                        value={newMaterialUrl} 
-                        onChange={(e) => setNewMaterialUrl(e.target.value)} 
-                      />
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <input 
-                          type="file" 
-                          accept=".pdf,.docx,.ppt,.pptx,.zip,.rar,image/*" 
-                          className="form-input" 
-                          style={{ fontSize: 12 }}
-                          onChange={async (e) => {
-                            const file = e.target.files[0];
-                            if (!file) return;
-                            setUploadingMaterial(true);
-                            const res = await handleFileUpload(file);
-                            setUploadingMaterial(false);
-                            if (res && res.url) {
-                              setNewMaterialUrl(res.url);
-                            }
-                          }} 
-                        />
-                        {uploadingMaterial && <span style={{ fontSize: 11, color: 'var(--primary-color)' }}>Uploading file...</span>}
-                      </div>
-                    )}
-
-                    <button 
-                      type="button" 
-                      className="btn btn-outline" 
-                      style={{ alignSelf: 'flex-start', padding: '5px 12px', fontSize: 12, height: 30 }}
-                      onClick={() => {
-                        if (!newMaterialName.trim() || !newMaterialUrl.trim()) {
-                          showModal("Warning", "Please provide a name and a link/file for the study material.", "warning");
-                          return;
-                        }
-                        const fileExt = newMaterialUrl.split('.').pop()?.split('?')[0]?.toLowerCase() || 'pdf';
-                        setRecStudyMaterials(prev => [...prev, {
-                          name: newMaterialName.trim(),
-                          url: newMaterialUrl.trim(),
-                          type: fileExt
-                        }]);
-                        setNewMaterialName('');
-                        setNewMaterialUrl('');
-                      }}
-                    >
-                      + Add Material
-                    </button>
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label" htmlFor="recAssignment">Assignment Title</label>
-                  <input id="recAssignment" type="text" className="form-input" value={recAssignment} onChange={(e) => setRecAssignment(e.target.value)} placeholder="e.g. Variables & Operators Lab" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="recSortOrder">Sort Order <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>(lower = first)</span></label>
-                  <input id="recSortOrder" type="number" className="form-input" value={recSortOrder} onChange={(e) => setRecSortOrder(e.target.value)} placeholder="e.g. 1, 2, 3..." min="1" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Visibility Access</label>
-                  <div style={{ display: 'flex', gap: '16px', marginTop: '6px' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13.5px', cursor: 'pointer' }}>
-                      <input type="radio" name="recVisibility" value="everyone" checked={recVisibility === 'everyone'} onChange={() => setRecVisibility('everyone')} />
-                      🌐 Everyone
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13.5px', cursor: 'pointer' }}>
-                      <input type="radio" name="recVisibility" value="paid" checked={recVisibility === 'paid'} onChange={() => setRecVisibility('paid')} />
-                      🔒 Paid Students Only
-                    </label>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: 10, marginTop: '20px' }}>
-                  <button type="submit" className="btn btn-primary btn-block">
-                    {editingRecordedClass ? 'Update Lesson' : 'Save LMS Lesson'}
-                  </button>
-                  {editingRecordedClass && (
-                    <button type="button" className="btn btn-outline" onClick={() => {
-                      setEditingRecordedClass(null);
-                      setRecTitle(''); setRecModule('Module 1 - Python Basics'); setRecVideoUrl(''); setRecThumbnailUrl(''); setRecLessonDescription(''); setRecNotesUrl(''); setRecAssignment(''); setRecVisibility('everyone'); setRecSortOrder(''); setRecDuration('1h 30m'); setVideoSourceType('link'); setRecStudyMaterials([]);
-                    }}>
-                      Cancel
-                    </button>
-                  )}
-                </div>
-              </form>
-            </div>
-
-            <div className="dashboard-card-section" style={{ display: 'flex', flexDirection: 'column', minHeight: '500px' }}>
+            <div className="dashboard-card-section" style={{ display: 'flex', flexDirection: 'column', minHeight: '500px', width: '100%' }}>
               <div className="section-header-premium" style={{ marginBottom: '18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                 <h4 style={{ fontSize: '15px', fontWeight: '700', margin: 0 }}>Curriculum Library ({filteredRecorded.length} lessons)</h4>
               </div>
@@ -4590,7 +4339,7 @@ const AdminDashboard = () => {
                                     <button 
                                       type="button"
                                       className="btn btn-outline" 
-                                      style={{ padding: '4px 10px', fontSize: 11, height: '24px' }}
+                                      style={{ padding: '4px 14px', fontSize: 11, height: '28px', borderRadius: '20px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: '600', color: '#1E293B', borderColor: '#CBD5E1', backgroundColor: '#FFFFFF' }}
                                       onClick={() => {
                                         setEditingRecordedClass(item);
                                         setRecTitle(item.title || '');
@@ -4607,12 +4356,18 @@ const AdminDashboard = () => {
                                         setRecDuration(item.duration || '1h 30m');
                                         setVideoSourceType(item.video_source_type || 'link');
                                         setRecStudyMaterials(item.study_materials || []);
+                                        setShowRecordedClassModal(true);
                                       }}
                                     >
                                       Edit
                                     </button>
-                                    <button type="button" className="btn btn-danger" style={{ padding: '4px', height: '24px', backgroundColor: 'var(--danger-color)', color: 'white' }} onClick={() => deleteRecordedClass(item._id)}>
-                                      <Trash2 size={12} />
+                                    <button 
+                                      type="button" 
+                                      className="btn btn-danger" 
+                                      style={{ width: '28px', height: '28px', padding: 0, borderRadius: '50%', backgroundColor: '#EF4444', color: 'white', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: 'none' }} 
+                                      onClick={() => deleteRecordedClass(item._id)}
+                                    >
+                                      <Trash2 size={13} />
                                     </button>
                                   </div>
                                 </div>
@@ -4660,15 +4415,11 @@ const AdminDashboard = () => {
               })()}
             </div>
           </div>
-        </div>
-      )}
-
-
-        {/* Announcements Tab */}
+        )}
         {activeTab === 'announcements' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
             <FilterBar
-              searchPlaceholder="Search Title..."
+              searchPlaceholder="Search Announcement"
               searchValue={annSearchQuery}
               onSearchChange={(val) => { setAnnSearchQuery(val); setAnnouncementsPage(1); }}
               filters={[
@@ -4685,7 +4436,7 @@ const AdminDashboard = () => {
                   options: batches.map(b => ({ value: b.id, label: b.name }))
                 },
                 {
-                  label: 'Audience',
+                  label: 'Status',
                   value: annAudienceFilter,
                   onChange: (val) => { setAnnAudienceFilter(val); setAnnouncementsPage(1); },
                   options: [
@@ -4696,119 +4447,82 @@ const AdminDashboard = () => {
                   ]
                 }
               ]}
-              showDateFilter={false}
-              onReset={() => {
-                setAnnSearchQuery('');
-                setAnnCourseFilter('');
-                setAnnBatchFilter('');
-                setAnnAudienceFilter('');
-                setAnnouncementsPage(1);
-              }}
+              showDateFilter={true}
+              activeQuickFilter={annDateFilter}
+              onQuickFilterChange={(pill) => { setAnnDateFilter(pill); setAnnouncementsPage(1); }}
+              startDateValue={annStartDateFilter}
+              endDateValue={annEndDateFilter}
+              onStartDateChange={(val) => { setAnnStartDateFilter(val); setAnnouncementsPage(1); }}
+              onEndDateChange={(val) => { setAnnEndDateFilter(val); setAnnouncementsPage(1); }}
               onExportCSV={exportAnnouncementsToCSV}
               onExportExcel={exportAnnouncementsToExcel}
               onExportPDF={exportAnnouncementsToPDF}
+              actionLabel="+ Create Announcement"
+              onActionClick={() => setShowAnnouncementModal(true)}
             />
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '30px' }}>
-              <div className="dashboard-card-section">
-                <h4 style={{ marginBottom: '18px', fontSize: '15px', fontWeight: '700' }}>Publish Announcement</h4>
-                <form onSubmit={addAnnouncement}>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="annBatchSelect">Target Batch</label>
-                    <select id="annBatchSelect" className="form-select" value={selectedBatchId} onChange={(e) => setSelectedBatchId(e.target.value)} required>
-                      <option value="">-- Choose Batch --</option>
-                      {batches.map(b => (
-                        <option key={b.id} value={b.id}>{b.name} ({b.code})</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="annTitle">Notice Title</label>
-                    <input id="annTitle" type="text" className="form-input" value={annTitle} onChange={(e) => setAnnTitle(e.target.value)} required />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="annPriority">Priority Level</label>
-                    <select id="annPriority" className="form-select" value={annPriority} onChange={(e) => setAnnPriority(e.target.value)}>
-                      <option value="Low">Low Priority</option>
-                      <option value="Medium">Medium Priority</option>
-                      <option value="High">High Priority</option>
-                    </select>
-                  </div>
-                  <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
-                    <input id="annPinned" type="checkbox" checked={annPinned} onChange={(e) => setAnnPinned(e.target.checked)} />
-                    <label htmlFor="annPinned" className="form-label" style={{ marginBottom: 0 }}>Pin Announcement?</label>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="annContent">Message Content</label>
-                    <textarea id="annContent" className="form-input" style={{ height: '100px', resize: 'none' }} value={annContent} onChange={(e) => setAnnContent(e.target.value)} required />
-                  </div>
-                  <button type="submit" className="btn btn-primary btn-block">Broadcast Notice</button>
-                </form>
+            <div className="dashboard-card-section" style={{ display: 'flex', flexDirection: 'column', minHeight: '500px', width: '100%' }}>
+              <div className="section-header-premium" style={{ marginBottom: '18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                <h4 style={{ fontSize: '15px', fontWeight: '700', margin: 0 }}>Broadcast Logs</h4>
               </div>
-
-              <div className="dashboard-card-section" style={{ display: 'flex', flexDirection: 'column', minHeight: '500px' }}>
-                <div className="section-header-premium" style={{ marginBottom: '18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-                  <h4 style={{ fontSize: '15px', fontWeight: '700', margin: 0 }}>Broadcast Logs</h4>
+              
+              {filteredAnnouncements.length === 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexGrow: 1, padding: '40px 20px', textAlign: 'center' }}>
+                  <div style={{ width: '80px', height: '80px', background: 'var(--primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--primary-color)' }}>
+                    <Megaphone size={40} />
+                  </div>
+                  <h5 style={{ fontSize: '16px', fontWeight: '800', margin: '0 0 4px' }}>No Announcements</h5>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '280px', margin: 0 }}>No announcements broadcasted yet.</p>
                 </div>
-                
-                {filteredAnnouncements.length === 0 ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexGrow: 1, padding: '40px 20px', textAlign: 'center' }}>
-                    <div style={{ width: '80px', height: '80px', background: 'var(--primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--primary-color)' }}>
-                      <Megaphone size={40} />
-                    </div>
-                    <h5 style={{ fontSize: '16px', fontWeight: '800', margin: '0 0 4px' }}>No Announcements</h5>
-                    <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '280px', margin: 0 }}>No announcements broadcasted yet.</p>
-                  </div>
-                ) : (() => {
-                  const limit = 5;
-                  const totalAnnPages = Math.ceil(filteredAnnouncements.length / limit) || 1;
-                  const safeAnnPage = Math.min(announcementsPage, totalAnnPages);
-                  const paginatedAnn = filteredAnnouncements.slice((safeAnnPage - 1) * limit, safeAnnPage * limit);
+              ) : (() => {
+                const limit = 5;
+                const totalAnnPages = Math.ceil(filteredAnnouncements.length / limit) || 1;
+                const safeAnnPage = Math.min(announcementsPage, totalAnnPages);
+                const paginatedAnn = filteredAnnouncements.slice((safeAnnPage - 1) * limit, safeAnnPage * limit);
 
-                  return (
-                    <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, justifyContent: 'space-between' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        {paginatedAnn.map((item, idx) => (
-                          <div key={idx} className="feed-item-premium" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                                <span className="badge-status paid" style={{ fontSize: '9px' }}>{item.priority}</span>
-                                {item.is_pinned && <span style={{ fontSize: '10px', color: 'var(--primary-color)', fontWeight: '700' }}>📌 Pinned</span>}
-                              </div>
-                              <div style={{ display: 'flex', gap: '4px' }}>
-                                <button type="button" className="btn btn-outline" style={{ padding: '6px', height: '28px' }} onClick={() => handleEditAnnClick(item)}>
-                                  <Pencil size={12} />
-                                </button>
-                                <button type="button" className="btn btn-danger" style={{ padding: '6px', height: '28px', backgroundColor: 'var(--danger-color)', color: 'white' }} onClick={() => deleteAnnouncement(item._id)}>
-                                  <Trash2 size={12} />
-                                </button>
-                              </div>
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {paginatedAnn.map((item, idx) => (
+                        <div key={idx} className="feed-item-premium" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                              <span className="badge-status paid" style={{ fontSize: '9px' }}>{item.priority}</span>
+                              {item.is_pinned && <span style={{ fontSize: '10px', color: 'var(--primary-color)', fontWeight: '700' }}>📌 Pinned</span>}
                             </div>
-                            <h5 style={{ fontWeight: '700', fontSize: '14.5px', margin: 0 }}>{item.title}</h5>
-                            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>{item.content}</p>
-                            <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Broadcasted: {item.date}</span>
+                            <div style={{ display: 'flex', gap: '4px' }}>
+                              <button type="button" className="btn btn-outline" style={{ padding: '6px', height: '28px' }} onClick={() => handleEditAnnClick(item)}>
+                                <Pencil size={12} />
+                              </button>
+                              <button type="button" className="btn btn-danger" style={{ padding: '6px', height: '28px', backgroundColor: 'var(--danger-color)', color: 'white' }} onClick={() => deleteAnnouncement(item._id)}>
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
                           </div>
-                        ))}
-                      </div>
-
-                      {/* Pagination */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', borderTop: '1px solid var(--border-light)', paddingTop: '15px' }}>
-                        <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                          Viewing page <strong>{safeAnnPage}</strong> of {totalAnnPages}
-                        </span>
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                          <button type="button" className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px', height: '32px' }} disabled={safeAnnPage === 1} onClick={() => setAnnouncementsPage(prev => Math.max(prev - 1, 1))}>
-                            Prev
-                          </button>
-                          <button type="button" className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px', height: '32px' }} disabled={safeAnnPage === totalAnnPages} onClick={() => setAnnouncementsPage(prev => Math.min(prev + 1, totalAnnPages))}>
-                            Next
-                          </button>
+                          <h5 style={{ fontWeight: '700', fontSize: '14.5px', margin: 0 }}>{item.title}</h5>
+                          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>{item.content}</p>
+                          <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Broadcasted: {item.date}</span>
                         </div>
+                      ))}
+                    </div>
+
+                    {/* Pagination */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', borderTop: '1px solid var(--border-light)', paddingTop: '15px' }}>
+                      <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                        Viewing page <strong>{safeAnnPage}</strong> of {totalAnnPages}
+                      </span>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button type="button" className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px', height: '32px' }} disabled={safeAnnPage === 1} onClick={() => setAnnouncementsPage(prev => Math.max(prev - 1, 1))}>
+                          Prev
+                        </button>
+                        <button type="button" className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px', height: '32px' }} disabled={safeAnnPage === totalAnnPages} onClick={() => setAnnouncementsPage(prev => Math.min(prev + 1, totalAnnPages))}>
+                          Next
+                        </button>
                       </div>
                     </div>
-                  );
-                })()}
-              </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}
@@ -4817,7 +4531,7 @@ const AdminDashboard = () => {
         {activeTab === 'fees-management' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
             <FilterBar
-              searchPlaceholder="Search Student or Invoice..."
+              searchPlaceholder="Search Student"
               searchValue={feesSearchQuery}
               onSearchChange={(val) => { setFeesSearchQuery(val); setFeesPage(1); }}
               filters={[
@@ -4834,37 +4548,22 @@ const AdminDashboard = () => {
                   options: batches.map(b => ({ value: b.id, label: b.name }))
                 },
                 {
-                  label: 'Payment Status',
+                  label: 'Fee Status',
                   value: feesStatusFilter,
                   onChange: (val) => { setFeesStatusFilter(val); setFeesPage(1); },
                   options: [
-                    { value: 'Paid', label: 'Fully Paid' },
-                    { value: 'Pending', label: 'Pending Dues' }
-                  ]
-                },
-                {
-                  label: 'Payment Method',
-                  value: feesPaymentMethodFilter,
-                  onChange: (val) => { setFeesPaymentMethodFilter(val); setFeesPage(1); },
-                  options: [
-                    { value: 'Credit Card', label: 'Credit Card' },
-                    { value: 'Bank Transfer', label: 'Bank Transfer' },
-                    { value: 'UPI / NetBanking', label: 'UPI / NetBanking' },
-                    { value: 'Cash', label: 'Cash' }
+                    { value: 'Paid', label: 'Paid' },
+                    { value: 'Pending', label: 'Pending' }
                   ]
                 }
               ]}
-              showDateFilter={false}
-              onReset={() => {
-                setFeesSearchQuery('');
-                setFeesCourseFilter('');
-                setFeesBatchFilter('');
-                setFeesStatusFilter('');
-                setFeesPaymentMethodFilter('');
-                setFeesStartDateFilter('');
-                setFeesEndDateFilter('');
-                setFeesPage(1);
-              }}
+              showDateFilter={true}
+              activeQuickFilter={feesDateFilter}
+              onQuickFilterChange={(pill) => { setFeesDateFilter(pill); setFeesPage(1); }}
+              startDateValue={feesStartDateFilter}
+              endDateValue={feesEndDateFilter}
+              onStartDateChange={(val) => { setFeesStartDateFilter(val); setFeesPage(1); }}
+              onEndDateChange={(val) => { setFeesEndDateFilter(val); setFeesPage(1); }}
               onExportCSV={exportFeesToCSV}
               onExportExcel={exportFeesToExcel}
               onExportPDF={exportFeesToPDF}
@@ -4944,7 +4643,7 @@ const AdminDashboard = () => {
         {activeTab === 'activity-score' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
             <FilterBar
-              searchPlaceholder="Search Student or Activity..."
+              searchPlaceholder="Search Student"
               searchValue={activitySearchQuery}
               onSearchChange={(val) => { setActivitySearchQuery(val); setActivityPage(1); }}
               filters={[
@@ -4961,7 +4660,7 @@ const AdminDashboard = () => {
                   options: batches.map(b => ({ value: b.id, label: b.name }))
                 },
                 {
-                  label: 'Activity',
+                  label: 'Activity Type',
                   value: activityTypeFilter,
                   onChange: (val) => { setActivityTypeFilter(val); setActivityPage(1); },
                   options: [
@@ -4972,116 +4671,23 @@ const AdminDashboard = () => {
                     { value: 'Camera', label: 'Camera On' },
                     { value: 'Penalty', label: 'Deductions' }
                   ]
-                },
-                {
-                  label: 'Score',
-                  value: activityScoreMin,
-                  onChange: (val) => { setActivityScoreMin(val); setActivityPage(1); },
-                  options: [
-                    { value: 'positive', label: 'Positive Points' },
-                    { value: 'negative', label: 'Deductions Only' },
-                    { value: 'high', label: 'High Scores (> 5)' }
-                  ]
                 }
               ]}
-              showDateFilter={false}
-              onReset={() => {
-                setActivitySearchQuery('');
-                setActivityCourseFilter('');
-                setActivityBatchFilter('');
-                setActivityTypeFilter('');
-                setActivityScoreMin('');
-                setActivityStartDate('');
-                setActivityEndDate('');
-                setActivityPage(1);
-              }}
+              showDateFilter={true}
+              activeQuickFilter={activityDateFilter}
+              onQuickFilterChange={(pill) => { setActivityDateFilter(pill); setActivityPage(1); }}
+              startDateValue={activityStartDateFilter}
+              endDateValue={activityEndDateFilter}
+              onStartDateChange={(val) => { setActivityStartDateFilter(val); setActivityPage(1); }}
+              onEndDateChange={(val) => { setActivityEndDateFilter(val); setActivityPage(1); }}
               onExportCSV={exportActivityToCSV}
               onExportExcel={exportActivityToExcel}
               onExportPDF={exportActivityToPDF}
+              actionLabel="+ Add Activity Score"
+              onActionClick={() => setShowActivityScoreModal(true)}
             />
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '30px' }}>
-            <div className="dashboard-card-section">
-              <h4 style={{ marginBottom: '18px', fontSize: '15px', fontWeight: '700' }}>Award Activity Points</h4>
-              <form onSubmit={handleAwardActivity}>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="actBatchSelect">Target Batch</label>
-                  <select id="actBatchSelect" className="form-select" value={actBatchId} onChange={(e) => handleActBatchChange(e.target.value)} required>
-                    <option value="">-- Choose Batch --</option>
-                    {batches.map(b => (
-                      <option key={b.id} value={b.id}>{b.name} ({b.code})</option>
-                    ))}
-                  </select>
-                </div>
-                
-                <div className="form-group">
-                  <label className="form-label" htmlFor="actStudentSelect">Select Student</label>
-                  <select id="actStudentSelect" className="form-select" value={actStudentId} onChange={(e) => setActStudentId(e.target.value)} required>
-                    <option value="">-- Choose Student --</option>
-                    {batchStudents.map(s => (
-                      <option key={s.id} value={s.id}>{s.name} ({s.rollNumber})</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label" htmlFor="actDate">Date</label>
-                  <input id="actDate" type="date" className="form-input" value={actDate} onChange={(e) => setActDate(e.target.value)} required />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label" htmlFor="actMeeting">Google Meet Session / Lecture Name</label>
-                  <input id="actMeeting" type="text" className="form-input" value={actMeeting} onChange={(e) => setActMeeting(e.target.value)} placeholder="e.g. Python Variables Class" required />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label" htmlFor="actPreset">Activity Preset Type</label>
-                  <select 
-                    id="actPreset" 
-                    className="form-select" 
-                    value={actType} 
-                    onChange={(e) => {
-                      const type = e.target.value;
-                      setActType(type);
-                      if (type.includes("+10")) setActPoints(10);
-                      else if (type.includes("+5")) setActPoints(5);
-                      else if (type.includes("+3")) setActPoints(3);
-                      else if (type.includes("+2")) setActPoints(2);
-                      else if (type.includes("-5")) setActPoints(-5);
-                    }}
-                  >
-                    <option value="+10 Answered Questions">Answered Questions (+10 pts)</option>
-                    <option value="+5 Active Participation">Active Participation (+5 pts)</option>
-                    <option value="+3 Attendance on Time">Attendance on Time (+3 pts)</option>
-                    <option value="+5 Helped Others">Helped Others (+5 pts)</option>
-                    <option value="+2 Camera On">Camera On (+2 pts)</option>
-                    <option value="-5 Penalty/Deduction">Deduction (-5 pts)</option>
-                    <option value="Custom">Custom Activity Type</option>
-                  </select>
-                </div>
-
-                {actType === 'Custom' && (
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="customActType">Custom Activity Title</label>
-                    <input id="customActType" type="text" className="form-input" placeholder="e.g. Completed Extra Lab Task" onChange={(e) => setActType(e.target.value)} required />
-                  </div>
-                )}
-
-                <div className="form-group">
-                  <label className="form-label" htmlFor="actPoints">Points</label>
-                  <input id="actPoints" type="number" className="form-input" value={actPoints} onChange={(e) => setActPoints(parseInt(e.target.value) || 0)} required />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label" htmlFor="actRemarks">Remarks</label>
-                  <textarea id="actRemarks" className="form-input" style={{ height: '60px', resize: 'none' }} value={actRemarks} onChange={(e) => setActRemarks(e.target.value)} placeholder="Provide context..." />
-                </div>
-
-                <button type="submit" className="btn btn-primary btn-block">Award Activity Points</button>
-              </form>
-            </div>
-
-            <div className="dashboard-card-section" style={{ display: 'flex', flexDirection: 'column', minHeight: '500px' }}>
+            <div className="dashboard-card-section" style={{ display: 'flex', flexDirection: 'column', minHeight: '500px', width: '100%' }}>
               <div className="section-header-premium" style={{ marginBottom: '18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                 <h4 style={{ fontSize: '15px', fontWeight: '700', margin: 0 }}>Activity Logs History</h4>
               </div>
@@ -5146,8 +4752,7 @@ const AdminDashboard = () => {
               })()}
             </div>
           </div>
-        </div>
-      )}
+        )}
 
         {/* Settings Tab */}
         {activeTab === 'settings' && (
@@ -5193,9 +4798,11 @@ const AdminDashboard = () => {
           title={`Assign Students to ${assigningBatch.name}`}
           type="info"
           confirmText="Save Assignments"
+          cancelText="Cancel"
           onConfirm={saveStudentAssignments}
+          size="md"
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '400px', overflowY: 'auto', padding: '6px 2px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '450px', overflowY: 'auto', padding: '6px 2px' }}>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)' }}>
               Select students to enroll in this batch. Unchecked students will be removed from the batch.
             </p>
@@ -5222,36 +4829,41 @@ const AdminDashboard = () => {
       {/* Audit Modal */}
       {attendanceStudent && (
         <div className="modal-overlay">
-          <div className="modal-content">
+          <div className="modal-content modal-md">
             <div className="modal-header">
-              <h3 className="modal-title" style={{ fontSize: '16.5px', fontWeight: '800' }}>Attendance Audit Logs</h3>
+              <h3 className="modal-title">Attendance Audit Logs</h3>
               <button className="modal-close-red" onClick={() => setAttendanceStudent(null)} aria-label="Close modal"><X size={18} /></button>
             </div>
-            <p style={{ fontSize: '13.5px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-              Student: <strong>{attendanceStudent.name}</strong> | 
-              Roll Number: <strong>{attendanceStudent.rollNumber}</strong> | Attendance Rate: <strong>{attendanceStudent.attendance?.percentage}%</strong>
-            </p>
-            <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                <thead>
-                  <tr style={{ borderBottom: '2px solid var(--border-color)' }}>
-                    <th style={{ padding: '8px' }}>Date</th>
-                    <th style={{ padding: '8px' }}>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {attendanceHistory.map((log, index) => (
-                    <tr key={index} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '8px' }}>{new Date(log.date).toLocaleDateString('en-US', { dateStyle: 'medium' })}</td>
-                      <td style={{ padding: '8px' }}>
-                        <span className={`badge-status ${log.status === 'Present' ? 'paid' : 'unpaid'}`}>
-                          {log.status}
-                        </span>
-                      </td>
+            <div className="modal-body">
+              <p style={{ fontSize: '13.5px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+                Student: <strong>{attendanceStudent.name}</strong> | 
+                Roll Number: <strong>{attendanceStudent.rollNumber}</strong> | Attendance Rate: <strong>{attendanceStudent.attendance?.percentage}%</strong>
+              </p>
+              <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid var(--border-color)' }}>
+                      <th style={{ padding: '8px' }}>Date</th>
+                      <th style={{ padding: '8px' }}>Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {attendanceHistory.map((log, index) => (
+                      <tr key={index} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '8px' }}>{new Date(log.date).toLocaleDateString('en-US', { dateStyle: 'medium' })}</td>
+                        <td style={{ padding: '8px' }}>
+                          <span className={`badge-status ${log.status === 'Present' ? 'paid' : 'unpaid'}`}>
+                            {log.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-outline" onClick={() => setAttendanceStudent(null)}>Close</button>
             </div>
           </div>
         </div>
@@ -5259,107 +4871,95 @@ const AdminDashboard = () => {
 
       {/* Edit Student Modal */}
       {editingStudent && (
-        <div className="modal-overlay" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="modal-content" style={{ width: '800px', maxWidth: '90vw', maxHeight: '85vh', overflowY: 'auto', overflowX: 'hidden', padding: '24px 32px', borderRadius: '20px', boxSizing: 'border-box' }}>
+        <div className="modal-overlay">
+          <div className="modal-content modal-lg">
             <div className="modal-header">
-              <h3 className="modal-title" style={{ fontSize: '18px', fontWeight: '800' }}>Edit Student Account</h3>
+              <h3 className="modal-title">Edit Student Account</h3>
               <button className="modal-close-red" onClick={() => setEditingStudent(null)} aria-label="Close modal"><X size={18} /></button>
             </div>
             <form onSubmit={saveStudentEdit}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="editName">Full Name</label>
-                  <input id="editName" type="text" className="form-input" value={editName} onChange={(e) => setEditName(e.target.value)} required />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="editEmail">Email Address</label>
-                  <input id="editEmail" type="email" className="form-input" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} required />
-                </div>
-              </div>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="editPhone">Mobile Number (Login ID)</label>
-                  <input id="editPhone" type="text" className="form-input" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} required />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="editRollNumber">Roll Number / Student ID (Read Only)</label>
-                  <input id="editRollNumber" type="text" className="form-input" value={editRollNumber} readOnly style={{ cursor: 'default', background: 'var(--surface-alt)', opacity: 0.9 }} required />
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="editCourse">Course Name</label>
-                  <select id="editCourse" className="form-select" value={editCourse} onChange={(e) => setEditCourse(e.target.value)}>
-                    {courses.length === 0 ? (
-                      <option value="">No courses available</option>
-                    ) : (
-                      <>
-                        <option value="">-- Select Course --</option>
-                        {courses.map(c => (
-                          <option key={c} value={c}>{c}</option>
-                        ))}
-                      </>
-                    )}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="editBatch">Assign Batch</label>
-                  <select id="editBatch" className="form-select" value={editBatchId} onChange={(e) => setEditBatchId(e.target.value)}>
-                    <option value="">-- No Batch --</option>
-                    {batches.map(b => (
-                      <option key={b.id} value={b.id}>{b.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label" htmlFor="editProfilePic">Profile Photo URL (Optional)</label>
-                <input id="editProfilePic" type="text" className="form-input" placeholder="e.g. https://domain.com/photo.jpg" value={editProfilePic} onChange={(e) => setEditProfilePic(e.target.value)} />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="editCollege">College</label>
-                  <input id="editCollege" type="text" className="form-input" value={editCollege} onChange={(e) => setEditCollege(e.target.value)} required />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="editCompany">Company (Optional)</label>
-                  <input id="editCompany" type="text" className="form-input" placeholder="Current employer" value={editCompany} onChange={(e) => setEditCompany(e.target.value)} />
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="editLocation">Current Location</label>
-                  <input id="editLocation" type="text" className="form-input" placeholder="e.g. Bangalore, India" value={editLocation} onChange={(e) => setEditLocation(e.target.value)} required />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="editAddress">Permanent Address</label>
-                  <input id="editAddress" type="text" className="form-input" placeholder="Full residential address" value={editAddress} onChange={(e) => setEditAddress(e.target.value)} required />
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="editFeesStatus">Fee Ledger Status</label>
-                  <select id="editFeesStatus" className="form-select" value={editFeesStatus} onChange={(e) => setEditFeesStatus(e.target.value)}>
-                    <option value="Pending">Pending</option>
-                    <option value="Paid">Paid</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="editAccountStatus">Account Status</label>
-                  <select id="editAccountStatus" className="form-select" value={editAccountStatus} onChange={(e) => setEditAccountStatus(e.target.value)}>
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
+              <div className="modal-body">
+                <div className="modal-form-grid">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="editName">Full Name</label>
+                    <input id="editName" type="text" className="form-input" value={editName} onChange={(e) => setEditName(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="editEmail">Email Address</label>
+                    <input id="editEmail" type="email" className="form-input" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="editPhone">Mobile Number (Login ID)</label>
+                    <input id="editPhone" type="text" className="form-input" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="editRollNumber">Roll Number / Student ID (Read Only)</label>
+                    <input id="editRollNumber" type="text" className="form-input" value={editRollNumber} readOnly style={{ cursor: 'default', background: 'var(--surface-alt)', opacity: 0.9 }} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="editCourse">Course Name</label>
+                    <select id="editCourse" className="form-select" value={editCourse} onChange={(e) => setEditCourse(e.target.value)}>
+                      {courses.length === 0 ? (
+                        <option value="">No courses available</option>
+                      ) : (
+                        <>
+                          <option value="">-- Select Course --</option>
+                          {courses.map(c => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
+                        </>
+                      )}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="editBatch">Assign Batch</label>
+                    <select id="editBatch" className="form-select" value={editBatchId} onChange={(e) => setEditBatchId(e.target.value)}>
+                      <option value="">-- No Batch --</option>
+                      {batches.map(b => (
+                        <option key={b.id} value={b.id}>{b.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group grid-col-span-2">
+                    <label className="form-label" htmlFor="editProfilePic">Profile Photo URL (Optional)</label>
+                    <input id="editProfilePic" type="text" className="form-input" placeholder="e.g. https://domain.com/photo.jpg" value={editProfilePic} onChange={(e) => setEditProfilePic(e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="editCollege">College</label>
+                    <input id="editCollege" type="text" className="form-input" value={editCollege} onChange={(e) => setEditCollege(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="editCompany">Company (Optional)</label>
+                    <input id="editCompany" type="text" className="form-input" placeholder="Current employer" value={editCompany} onChange={(e) => setEditCompany(e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="editLocation">Current Location</label>
+                    <input id="editLocation" type="text" className="form-input" placeholder="e.g. Bangalore, India" value={editLocation} onChange={(e) => setEditLocation(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="editAddress">Permanent Address</label>
+                    <input id="editAddress" type="text" className="form-input" placeholder="Full residential address" value={editAddress} onChange={(e) => setEditAddress(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="editFeesStatus">Fee Ledger Status</label>
+                    <select id="editFeesStatus" className="form-select" value={editFeesStatus} onChange={(e) => setEditFeesStatus(e.target.value)}>
+                      <option value="Pending">Pending</option>
+                      <option value="Paid">Paid</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="editAccountStatus">Account Status</label>
+                    <select id="editAccountStatus" className="form-select" value={editAccountStatus} onChange={(e) => setEditAccountStatus(e.target.value)}>
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                    </select>
+                  </div>
                 </div>
               </div>
-
-              <button type="submit" className="btn btn-primary btn-block" style={{ height: '42px', marginTop: '10px' }}>Commit Changes</button>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-outline" onClick={() => setEditingStudent(null)}>Cancel</button>
+                <button type="submit" className="btn btn-primary">Commit Changes</button>
+              </div>
             </form>
           </div>
         </div>
@@ -5368,32 +4968,39 @@ const AdminDashboard = () => {
       {/* Edit Fees Modal */}
       {editingFeesStudent && (
         <div className="modal-overlay">
-          <div className="modal-content">
+          <div className="modal-content modal-md">
             <div className="modal-header">
-              <h3 className="modal-title" style={{ fontSize: '16.5px', fontWeight: '800' }}>Edit Fees Details</h3>
+              <h3 className="modal-title">Edit Fees Details</h3>
               <button className="modal-close-red" onClick={() => setEditingFeesStudent(null)} aria-label="Close modal"><X size={18} /></button>
             </div>
             <form onSubmit={saveFeesEdit}>
-              <div className="form-group">
-                <label className="form-label" htmlFor="editTotal">Total Fees ($)</label>
-                <input id="editTotal" type="number" className="form-input" value={editTotal} onChange={(e) => setEditTotal(e.target.value)} required />
+              <div className="modal-body">
+                <div className="modal-form-grid">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="editTotal">Total Fees ($)</label>
+                    <input id="editTotal" type="number" className="form-input" value={editTotal} onChange={(e) => setEditTotal(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="editPaid">Paid Amount ($)</label>
+                    <input id="editPaid" type="number" className="form-input" value={editPaid} onChange={(e) => setEditPaid(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="editStatus">Payment Status</label>
+                    <select id="editStatus" className="form-select" value={editStatus} onChange={(e) => setEditStatus(e.target.value)}>
+                      <option value="Pending">Pending</option>
+                      <option value="Paid">Paid</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="editPayDate">Payment Date</label>
+                    <input id="editPayDate" type="date" className="form-input" value={editPayDate} onChange={(e) => setEditPayDate(e.target.value)} />
+                  </div>
+                </div>
               </div>
-              <div className="form-group">
-                <label className="form-label" htmlFor="editPaid">Paid Amount ($)</label>
-                <input id="editPaid" type="number" className="form-input" value={editPaid} onChange={(e) => setEditPaid(e.target.value)} required />
+              <div className="modal-footer">
+                <button type="button" className="btn btn-outline" onClick={() => setEditingFeesStudent(null)}>Cancel</button>
+                <button type="submit" className="btn btn-primary">Confirm Ledger Changes</button>
               </div>
-              <div className="form-group">
-                <label className="form-label" htmlFor="editStatus">Payment Status</label>
-                <select id="editStatus" className="form-select" value={editStatus} onChange={(e) => setEditStatus(e.target.value)}>
-                  <option value="Pending">Pending</option>
-                  <option value="Paid">Paid</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label" htmlFor="editPayDate">Payment Date</label>
-                <input id="editPayDate" type="date" className="form-input" value={editPayDate} onChange={(e) => setEditPayDate(e.target.value)} />
-              </div>
-              <button type="submit" className="btn btn-primary btn-block">Confirm Ledger Changes</button>
             </form>
           </div>
         </div>
@@ -5402,55 +5009,62 @@ const AdminDashboard = () => {
       {/* Edit Live Class Modal */}
       {editingLiveClass && (
         <div className="modal-overlay">
-          <div className="modal-content">
+          <div className="modal-content modal-lg">
             <div className="modal-header">
-              <h3 className="modal-title" style={{ fontSize: '16.5px', fontWeight: '800' }}>Edit Live Lecture</h3>
+              <h3 className="modal-title">Edit Live Lecture</h3>
               <button className="modal-close-red" onClick={() => setEditingLiveClass(null)} aria-label="Close modal"><X size={18} /></button>
             </div>
             <form onSubmit={saveLiveClassEdit}>
-              <div className="form-group">
-                <label className="form-label" htmlFor="editLiveTitle">Session Title</label>
-                <input id="editLiveTitle" type="text" className="form-input" value={editLiveTitle} onChange={(e) => setEditLiveTitle(e.target.value)} required />
-              </div>
-              <div className="form-group">
-                <label className="form-label" htmlFor="editLiveInstructor">Trainer Name</label>
-                <input id="editLiveInstructor" type="text" className="form-input" value={editLiveInstructor} onChange={(e) => setEditLiveInstructor(e.target.value)} required />
-              </div>
-              <div className="form-group">
-                <label className="form-label" htmlFor="editLiveDate">Date</label>
-                <input id="editLiveDate" type="date" className="form-input" value={editLiveDate} onChange={(e) => setEditLiveDate(e.target.value)} required />
-              </div>
-              <div className="form-group">
-                <label className="form-label" htmlFor="editLiveTime">Time</label>
-                <input id="editLiveTime" type="text" className="form-input" value={editLiveTime} onChange={(e) => setEditLiveTime(e.target.value)} required />
-              </div>
-              <div className="form-group">
-                <label className="form-label" htmlFor="editLiveMeetLink">Google Meet Link</label>
-                <input id="editLiveMeetLink" type="url" className="form-input" value={editLiveMeetLink} onChange={(e) => setEditLiveMeetLink(e.target.value)} required />
-              </div>
-              <div className="form-group">
-                <label className="form-label" htmlFor="editLiveStatusSelect">Class Status</label>
-                <select id="editLiveStatusSelect" className="form-select" value={editLiveStatus} onChange={(e) => setEditLiveStatus(e.target.value)}>
-                  <option value="Upcoming">Upcoming</option>
-                  <option value="Live">Live</option>
-                  <option value="Completed">Completed</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label" htmlFor="editLiveDescription">Description</label>
-                <textarea id="editLiveDescription" className="form-input" style={{ height: '80px', resize: 'none' }} value={editLiveDescription} onChange={(e) => setEditLiveDescription(e.target.value)} />
-              </div>
-              <div style={{ display: 'flex', gap: '16px', marginBottom: '20px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <input id="editLiveToday" type="checkbox" checked={editLiveToday} onChange={(e) => setEditLiveToday(e.target.checked)} />
-                  <label htmlFor="editLiveToday" className="form-label" style={{ marginBottom: 0 }}>Happening Today?</label>
+              <div className="modal-body">
+                <div className="modal-form-grid">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="editLiveTitle">Session Title</label>
+                    <input id="editLiveTitle" type="text" className="form-input" value={editLiveTitle} onChange={(e) => setEditLiveTitle(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="editLiveInstructor">Trainer Name</label>
+                    <input id="editLiveInstructor" type="text" className="form-input" value={editLiveInstructor} onChange={(e) => setEditLiveInstructor(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="editLiveDate">Date</label>
+                    <input id="editLiveDate" type="date" className="form-input" value={editLiveDate} onChange={(e) => setEditLiveDate(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="editLiveTime">Time</label>
+                    <input id="editLiveTime" type="text" className="form-input" value={editLiveTime} onChange={(e) => setEditLiveTime(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="editLiveMeetLink">Google Meet Link</label>
+                    <input id="editLiveMeetLink" type="url" className="form-input" value={editLiveMeetLink} onChange={(e) => setEditLiveMeetLink(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="editLiveStatusSelect">Class Status</label>
+                    <select id="editLiveStatusSelect" className="form-select" value={editLiveStatus} onChange={(e) => setEditLiveStatus(e.target.value)}>
+                      <option value="Upcoming">Upcoming</option>
+                      <option value="Live">Live</option>
+                      <option value="Completed">Completed</option>
+                    </select>
+                  </div>
+                  <div className="form-group grid-col-span-2">
+                    <label className="form-label" htmlFor="editLiveDescription">Description</label>
+                    <textarea id="editLiveDescription" className="form-input" style={{ height: '100px', resize: 'none' }} value={editLiveDescription} onChange={(e) => setEditLiveDescription(e.target.value)} />
+                  </div>
+                  <div className="form-group grid-col-span-2" style={{ flexDirection: 'row', gap: '24px', alignItems: 'center', marginTop: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                      <input id="editLiveToday" type="checkbox" checked={editLiveToday} onChange={(e) => setEditLiveToday(e.target.checked)} style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
+                      <label htmlFor="editLiveToday" className="form-label" style={{ marginBottom: 0, cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}>Happening Today?</label>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                      <input id="editLivePublished" type="checkbox" checked={editLivePublished} onChange={(e) => setEditLivePublished(e.target.checked)} style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
+                      <label htmlFor="editLivePublished" className="form-label" style={{ marginBottom: 0, cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}>Published?</label>
+                    </div>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <input id="editLivePublished" type="checkbox" checked={editLivePublished} onChange={(e) => setEditLivePublished(e.target.checked)} />
-                  <label htmlFor="editLivePublished" className="form-label" style={{ marginBottom: 0 }}>Published?</label>
-                </div>
               </div>
-              <button type="submit" className="btn btn-primary btn-block">Save Live Lecture</button>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-outline" onClick={() => setEditingLiveClass(null)}>Cancel</button>
+                <button type="submit" className="btn btn-primary">Save Live Lecture</button>
+              </div>
             </form>
           </div>
         </div>
@@ -5459,101 +5073,106 @@ const AdminDashboard = () => {
       {/* Edit Announcement Modal */}
       {editingAnnouncement && (
         <div className="modal-overlay">
-          <div className="modal-content">
+          <div className="modal-content modal-md">
             <div className="modal-header">
-              <h3 className="modal-title" style={{ fontSize: '16.5px', fontWeight: '800' }}>Edit Announcement Notice</h3>
+              <h3 className="modal-title">Edit Announcement Notice</h3>
               <button className="modal-close-red" onClick={() => setEditingAnnouncement(null)} aria-label="Close modal"><X size={18} /></button>
             </div>
             <form onSubmit={saveAnnouncementEdit}>
-              <div className="form-group">
-                <label className="form-label" htmlFor="editAnnTitle">Notice Title</label>
-                <input id="editAnnTitle" type="text" className="form-input" value={editAnnTitle} onChange={(e) => setEditAnnTitle(e.target.value)} required />
+              <div className="modal-body">
+                <div className="modal-form-grid">
+                  <div className="form-group grid-col-span-2">
+                    <label className="form-label" htmlFor="editAnnTitle">Notice Title</label>
+                    <input id="editAnnTitle" type="text" className="form-input" value={editAnnTitle} onChange={(e) => setEditAnnTitle(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="editAnnPriority">Priority Level</label>
+                    <select id="editAnnPriority" className="form-select" value={editAnnPriority} onChange={(e) => setEditAnnPriority(e.target.value)}>
+                      <option value="Low">Low Priority</option>
+                      <option value="Medium">Medium Priority</option>
+                      <option value="High">High Priority</option>
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ flexDirection: 'row', gap: '8px', alignItems: 'center', marginTop: '30px' }}>
+                    <input id="editAnnPinned" type="checkbox" checked={editAnnPinned} onChange={(e) => setEditAnnPinned(e.target.checked)} style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
+                    <label htmlFor="editAnnPinned" className="form-label" style={{ marginBottom: 0, cursor: 'pointer', fontWeight: 600 }}>Pin Announcement?</label>
+                  </div>
+                  <div className="form-group grid-col-span-2">
+                    <label className="form-label" htmlFor="editAnnContent">Message Content</label>
+                    <textarea id="editAnnContent" className="form-input" style={{ height: '100px', resize: 'none' }} value={editAnnContent} onChange={(e) => setEditAnnContent(e.target.value)} required />
+                  </div>
+                </div>
               </div>
-              <div className="form-group">
-                <label className="form-label" htmlFor="editAnnPriority">Priority Level</label>
-                <select id="editAnnPriority" className="form-select" value={editAnnPriority} onChange={(e) => setEditAnnPriority(e.target.value)}>
-                  <option value="Low">Low Priority</option>
-                  <option value="Medium">Medium Priority</option>
-                  <option value="High">High Priority</option>
-                </select>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-outline" onClick={() => setEditingAnnouncement(null)}>Cancel</button>
+                <button type="submit" className="btn btn-primary">Save Announcement</button>
               </div>
-              <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
-                <input id="editAnnPinned" type="checkbox" checked={editAnnPinned} onChange={(e) => setEditAnnPinned(e.target.checked)} />
-                <label htmlFor="editAnnPinned" className="form-label" style={{ marginBottom: 0 }}>Pin Announcement?</label>
-              </div>
-              <div className="form-group">
-                <label className="form-label" htmlFor="editAnnContent">Message Content</label>
-                <textarea id="editAnnContent" className="form-input" style={{ height: '100px', resize: 'none' }} value={editAnnContent} onChange={(e) => setEditAnnContent(e.target.value)} required />
-              </div>
-              <button type="submit" className="btn btn-primary btn-block">Save Announcement</button>
             </form>
           </div>
         </div>
       )}
       {/* Create Student Modal */}
       {showCreateModal && (
-        <div className="modal-overlay" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="modal-content" style={{ maxWidth: '700px', height: 'fit-content', maxHeight: '85vh', overflowY: 'auto', padding: '24px', borderRadius: '20px' }}>
+        <div className="modal-overlay">
+          <div className="modal-content modal-lg">
             <div className="modal-header">
-              <h3 className="modal-title" style={{ fontSize: '16px', fontWeight: '800' }}>Create Student Account</h3>
+              <h3 className="modal-title">Create Student Account</h3>
               <button className="modal-close-red" onClick={() => setShowCreateModal(false)} aria-label="Close modal"><X size={18} /></button>
             </div>
             <form onSubmit={handleCreateStudentSubmit}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '16px' }}>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label" htmlFor="createName" style={{ fontSize: '12.5px', fontWeight: '700', color: 'var(--text-secondary)', marginBottom: '6px', display: 'block' }}>Student Name *</label>
-                  <input id="createName" type="text" className="form-input" placeholder="e.g. John Doe" value={createName} onChange={(e) => setCreateName(e.target.value)} required style={{ height: '48px', borderRadius: '10px' }} />
-                </div>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label" htmlFor="createEmail" style={{ fontSize: '12.5px', fontWeight: '700', color: 'var(--text-secondary)', marginBottom: '6px', display: 'block' }}>Email Address *</label>
-                  <input id="createEmail" type="email" className="form-input" placeholder="john.doe@example.com" value={createEmail} onChange={(e) => setCreateEmail(e.target.value)} required style={{ height: '48px', borderRadius: '10px' }} />
-                </div>
-              </div>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '16px' }}>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label" htmlFor="createPhone" style={{ fontSize: '12.5px', fontWeight: '700', color: 'var(--text-secondary)', marginBottom: '6px', display: 'block' }}>Mobile Number *</label>
-                  <input id="createPhone" type="text" className="form-input" placeholder="e.g. 9876543210" value={createPhone} onChange={(e) => setCreatePhone(e.target.value)} required style={{ height: '48px', borderRadius: '10px' }} />
-                </div>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label" htmlFor="createTempPassword" style={{ fontSize: '12.5px', fontWeight: '700', color: 'var(--text-secondary)', marginBottom: '6px', display: 'block' }}>Temporary Password *</label>
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <input id="createTempPassword" type="text" className="form-input" value={createTempPassword} readOnly required style={{ width: 'calc(100% - 60px)', height: '48px', borderRadius: '10px', fontFamily: 'monospace', letterSpacing: '0.5px', background: 'var(--surface-alt)', cursor: 'default', flexGrow: 1 }} />
-                    <button type="button" className="btn btn-outline" style={{ width: '48px', height: '48px', borderRadius: '10px', marginLeft: '12px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }} onClick={() => setCreateTempPassword(generateRandomPassword())} title="Regenerate Password">
-                      <RefreshCw size={15} />
-                    </button>
+              <div className="modal-body">
+                <div className="modal-form-grid">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="createName">Student Name *</label>
+                    <input id="createName" type="text" className="form-input" placeholder="e.g. John Doe" value={createName} onChange={(e) => setCreateName(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="createEmail">Email Address *</label>
+                    <input id="createEmail" type="email" className="form-input" placeholder="john.doe@example.com" value={createEmail} onChange={(e) => setCreateEmail(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="createPhone">Mobile Number *</label>
+                    <input id="createPhone" type="text" className="form-input" placeholder="e.g. 9876543210" value={createPhone} onChange={(e) => setCreatePhone(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="createTempPassword">Temporary Password *</label>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <input id="createTempPassword" type="text" className="form-input" value={createTempPassword} readOnly required style={{ width: 'calc(100% - 60px)', height: '44px', fontFamily: 'monospace', letterSpacing: '0.5px', background: 'var(--surface-alt)', cursor: 'default', flexGrow: 1 }} />
+                      <button type="button" className="btn btn-outline" style={{ width: '44px', height: '44px', marginLeft: '12px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }} onClick={() => setCreateTempPassword(generateRandomPassword())} title="Regenerate Password">
+                        <RefreshCw size={15} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="createCourse">Course *</label>
+                    <select id="createCourse" className="form-select" value={createCourse} onChange={(e) => setCreateCourse(e.target.value)} required>
+                      {courses.length === 0 ? (
+                        <option value="">No courses available</option>
+                      ) : (
+                        <>
+                          <option value="">-- Select Course --</option>
+                          {courses.map(c => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
+                        </>
+                      )}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="createBatch">Batch *</label>
+                    <select id="createBatch" className="form-select" value={createBatchId} onChange={(e) => setCreateBatchId(e.target.value)} required>
+                      <option value="">-- Select Batch --</option>
+                      {batches.map(b => (
+                        <option key={b.id} value={b.id}>{b.name}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label" htmlFor="createCourse" style={{ fontSize: '12.5px', fontWeight: '700', color: 'var(--text-secondary)', marginBottom: '6px', display: 'block' }}>Course *</label>
-                  <select id="createCourse" className="form-select" value={createCourse} onChange={(e) => setCreateCourse(e.target.value)} required style={{ height: '48px', borderRadius: '10px' }}>
-                    {courses.length === 0 ? (
-                      <option value="">No courses available</option>
-                    ) : (
-                      <>
-                        <option value="">-- Select Course --</option>
-                        {courses.map(c => (
-                          <option key={c} value={c}>{c}</option>
-                        ))}
-                      </>
-                    )}
-                  </select>
-                </div>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label" htmlFor="createBatch" style={{ fontSize: '12.5px', fontWeight: '700', color: 'var(--text-secondary)', marginBottom: '6px', display: 'block' }}>Batch *</label>
-                  <select id="createBatch" className="form-select" value={createBatchId} onChange={(e) => setCreateBatchId(e.target.value)} required style={{ height: '48px', borderRadius: '10px' }}>
-                    <option value="">-- Select Batch --</option>
-                    {batches.map(b => (
-                      <option key={b.id} value={b.id}>{b.name}</option>
-                    ))}
-                  </select>
-                </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-outline" onClick={() => setShowCreateModal(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary">Create Student</button>
               </div>
-
-              <button type="submit" className="btn btn-primary btn-block" style={{ height: '50px', borderRadius: '12px', fontWeight: '700', fontSize: '14.5px', marginTop: '20px' }}>Create Student</button>
             </form>
           </div>
         </div>
@@ -5562,53 +5181,55 @@ const AdminDashboard = () => {
       {/* Created Credentials Modal */}
       {createdCredentials && (
         <div className="modal-overlay" style={{ zIndex: 1100 }}>
-          <div className="modal-content" style={{ maxWidth: '420px', textAlign: 'center', padding: '30px' }}>
-            <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(16,185,129,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: '#10B981' }}>
-              <CheckCircle size={32} />
-            </div>
-            <h3 style={{ fontSize: '18px', fontWeight: '800', margin: '0 0 8px' }}>Student Created Successfully</h3>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5, margin: '0 0 20px' }}>
-              Account credentials have been generated. Copy or share them below.
-            </p>
-            <div style={{ background: 'var(--surface-alt)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', textAlign: 'left', marginBottom: '20px' }}>
-              <div style={{ marginBottom: '12px' }}>
-                <span style={{ fontSize: '10.5px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 700, display: 'block', marginBottom: '2px' }}>Student ID</span>
-                <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{createdCredentials.username}</strong>
+          <div className="modal-content modal-sm">
+            <div className="modal-body" style={{ textAlign: 'center', padding: '32px' }}>
+              <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(16,185,129,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: '#10B981' }}>
+                <CheckCircle size={32} />
               </div>
-              <div>
-                <span style={{ fontSize: '10.5px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 700, display: 'block', marginBottom: '2px' }}>Temporary Password</span>
-                <strong style={{ fontSize: '14px', color: 'var(--text-primary)', fontFamily: 'monospace' }}>{createdCredentials.password}</strong>
+              <h3 style={{ fontSize: '18px', fontWeight: '800', margin: '0 0 8px' }}>Student Created Successfully</h3>
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5, margin: '0 0 20px' }}>
+                Account credentials have been generated. Copy or share them below.
+              </p>
+              <div style={{ background: 'var(--surface-alt)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', textAlign: 'left', marginBottom: '20px' }}>
+                <div style={{ marginBottom: '12px' }}>
+                  <span style={{ fontSize: '10.5px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 700, display: 'block', marginBottom: '2px' }}>Student ID</span>
+                  <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{createdCredentials.username}</strong>
+                </div>
+                <div>
+                  <span style={{ fontSize: '10.5px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 700, display: 'block', marginBottom: '2px' }}>Temporary Password</span>
+                  <strong style={{ fontSize: '14px', color: 'var(--text-primary)', fontFamily: 'monospace' }}>{createdCredentials.password}</strong>
+                </div>
               </div>
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <button className="btn btn-outline" style={{ height: '40px', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => {
-                navigator.clipboard.writeText(`Student ID: ${createdCredentials.username}\nTemporary Password: ${createdCredentials.password}`);
-                showModal("Copied", "Credentials copied to clipboard!", "success");
-              }}>
-                📋 Copy Credentials
-              </button>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <button className="btn btn-outline" style={{ height: '40px', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => {
-                  const body = encodeURIComponent(`Hello ${createdCredentials.name},\n\nYour account on Levlox Student Portal has been created.\n\nStudent ID: ${createdCredentials.username}\nTemporary Password: ${createdCredentials.password}\n\nPlease login and change your password.\n\nPortal: http://localhost:5173/login`);
-                  window.open(`mailto:${createdCredentials.email}?subject=Your Levlox Portal Credentials&body=${body}`, '_blank');
+                  navigator.clipboard.writeText(`Student ID: ${createdCredentials.username}\nTemporary Password: ${createdCredentials.password}`);
+                  showModal("Copied", "Credentials copied to clipboard!", "success");
                 }}>
-                  ✉ Send Email
+                  📋 Copy Credentials
                 </button>
-                <button className="btn btn-outline" style={{ height: '40px', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => {
-                  const text = encodeURIComponent(`Hello ${createdCredentials.name},\nYour student account is created.\nStudent ID: ${createdCredentials.username}\nTemporary Password: ${createdCredentials.password}\nPlease login at http://localhost:5173/login and change your password.`);
-                  const cleanPhone = createdCredentials.phone.replace(/[^0-9]/g, '');
-                  const link = `https://wa.me/${cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone}?text=${text}`;
-                  window.open(link, '_blank');
-                }}>
-                  📱 Send WhatsApp
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <button className="btn btn-outline" style={{ height: '40px', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => {
+                    const body = encodeURIComponent(`Hello ${createdCredentials.name},\n\nYour account on Levlox Student Portal has been created.\n\nStudent ID: ${createdCredentials.username}\nTemporary Password: ${createdCredentials.password}\n\nPlease login and change your password.\n\nPortal: http://localhost:5173/login`);
+                    window.open(`mailto:${createdCredentials.email}?subject=Your Levlox Portal Credentials&body=${body}`, '_blank');
+                  }}>
+                    ✉ Send Email
+                  </button>
+                  <button className="btn btn-outline" style={{ height: '40px', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => {
+                    const text = encodeURIComponent(`Hello ${createdCredentials.name},\nYour student account is created.\nStudent ID: ${createdCredentials.username}\nTemporary Password: ${createdCredentials.password}\nPlease login at http://localhost:5173/login and change your password.`);
+                    const cleanPhone = createdCredentials.phone.replace(/[^0-9]/g, '');
+                    const link = `https://wa.me/${cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone}?text=${text}`;
+                    window.open(link, '_blank');
+                  }}>
+                    📱 Send WhatsApp
+                  </button>
+                </div>
+
+                <button className="btn btn-primary" style={{ height: '40px', marginTop: '4px' }} onClick={() => setCreatedCredentials(null)}>
+                  ✓ Done
                 </button>
               </div>
-
-              <button className="btn btn-primary" style={{ height: '40px', marginTop: '4px' }} onClick={() => setCreatedCredentials(null)}>
-                ✓ Done
-              </button>
             </div>
           </div>
         </div>
@@ -5617,25 +5238,27 @@ const AdminDashboard = () => {
       {/* Reset Password Credentials Modal */}
       {resetCredentials && (
         <div className="modal-overlay" style={{ zIndex: 1100 }}>
-          <div className="modal-content" style={{ maxWidth: '400px', textAlign: 'center', padding: '30px' }}>
-            <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(108,60,240,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: 'var(--primary-color)' }}>
-              <RefreshCw size={28} />
+          <div className="modal-content modal-sm">
+            <div className="modal-body" style={{ textAlign: 'center', padding: '32px' }}>
+              <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(108,60,240,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: 'var(--primary-color)' }}>
+                <RefreshCw size={28} />
+              </div>
+              <h3 style={{ fontSize: '18px', fontWeight: '800', margin: '0 0 8px' }}>Temporary Password Generated</h3>
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5, margin: '0 0 24px' }}>
+                The student's password has been reset. Share this temporary password. They will be forced to change it on their next login.
+              </p>
+              <div style={{ background: 'var(--surface-alt)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', textAlign: 'center', marginBottom: '24px' }}>
+                <span style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 700, display: 'block', marginBottom: '4px' }}>New Temporary Password</span>
+                <strong style={{ fontSize: '18px', color: 'var(--text-primary)', fontFamily: 'monospace', letterSpacing: '0.5px' }}>{resetCredentials.password}</strong>
+              </div>
+              <button className="btn btn-primary btn-block" style={{ height: '40px' }} onClick={() => {
+                navigator.clipboard.writeText(resetCredentials.password);
+                showModal("Copied", "Temporary password copied to clipboard!", "success");
+                setResetCredentials(null);
+              }}>
+                Copy & Close
+              </button>
             </div>
-            <h3 style={{ fontSize: '18px', fontWeight: '800', margin: '0 0 8px' }}>Temporary Password Generated</h3>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5, margin: '0 0 24px' }}>
-              The student's password has been reset. Share this temporary password. They will be forced to change it on their next login.
-            </p>
-            <div style={{ background: 'var(--surface-alt)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', textAlign: 'center', marginBottom: '24px' }}>
-              <span style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 700, display: 'block', marginBottom: '4px' }}>New Temporary Password</span>
-              <strong style={{ fontSize: '18px', color: 'var(--text-primary)', fontFamily: 'monospace', letterSpacing: '0.5px' }}>{resetCredentials.password}</strong>
-            </div>
-            <button className="btn btn-primary btn-block" style={{ height: '40px' }} onClick={() => {
-              navigator.clipboard.writeText(resetCredentials.password);
-              showModal("Copied", "Temporary password copied to clipboard!", "success");
-              setResetCredentials(null);
-            }}>
-              Copy & Close
-            </button>
           </div>
         </div>
       )}
@@ -5643,116 +5266,120 @@ const AdminDashboard = () => {
       {/* View Student Details Modal */}
       {showDetailsModal && selectedStudentDetails && (
         <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '700px', padding: '28px', maxHeight: '90vh', overflowY: 'auto' }}>
+          <div className="modal-content modal-lg">
             <div className="modal-header">
-              <h3 className="modal-title" style={{ fontSize: '18px', fontWeight: '800' }}>Student Academic & Personal Profile</h3>
+              <h3 className="modal-title">Student Profile Details</h3>
               <button className="modal-close-red" onClick={() => { setShowDetailsModal(false); setSelectedStudentDetails(null); }} aria-label="Close modal"><X size={18} /></button>
             </div>
-            
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '24px', alignItems: 'start' }}>
-              {/* Left Column: Profile Card */}
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', background: 'var(--surface-alt)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '20px' }}>
-                <div style={{ width: '90px', height: '90px', borderRadius: '50%', overflow: 'hidden', background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '3px solid white', boxShadow: 'var(--shadow-card)', marginBottom: '12px' }}>
-                  {selectedStudentDetails.profile_pic && selectedStudentDetails.profile_pic.trim() !== '' ? (
-                    <img src={selectedStudentDetails.profile_pic} alt={selectedStudentDetails.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  ) : (
-                    <span style={{ fontSize: '32px', fontWeight: 'bold', color: 'var(--primary-color)' }}>{selectedStudentDetails.name?.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}</span>
-                  )}
-                </div>
-                <h4 style={{ fontSize: '16px', fontWeight: '800', margin: '0 0 4px', color: 'var(--text-primary)' }}>{selectedStudentDetails.name}</h4>
-                <code style={{ fontSize: '11.5px', color: 'var(--text-secondary)', display: 'block', marginBottom: '14px' }}>{selectedStudentDetails.rollNumber}</code>
-                
-                <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px', borderTop: '1px solid var(--border-color)', paddingTop: '14px', textAlign: 'left' }}>
-                  <div>
-                    <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 700, display: 'block' }}>Attendance</span>
-                    <strong style={{ fontSize: '13px', color: 'var(--primary-color)' }}>{selectedStudentDetails.attendance}% Rate</strong>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 700, display: 'block' }}>Fee Status</span>
-                    <span className={`badge-status-fixed ${selectedStudentDetails.feesStatus === 'Paid' ? 'paid' : 'unpaid'}`} style={{ fontSize: '10.5px', marginTop: '3px', display: 'inline-flex' }}>
-                      {selectedStudentDetails.feesStatus || 'Pending'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Right Column: Profile Details */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                <div>
-                  <h4 style={{ fontSize: '13px', textTransform: 'uppercase', color: 'var(--primary-color)', fontWeight: 800, margin: '0 0 10px', borderBottom: '1px solid var(--border-light)', paddingBottom: '4px' }}>Academic & Personal Details</h4>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                    <div>
-                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>Student ID / Roll No</span>
-                      <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: 700 }}>{selectedStudentDetails.rollNumber}</p>
-                    </div>
-                    <div>
-                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>Admission Date</span>
-                      <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: 600 }}>{selectedStudentDetails.join_date || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>Email Address</span>
-                      <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: 600, wordBreak: 'break-all' }}>{selectedStudentDetails.email}</p>
-                    </div>
-                    <div>
-                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>Mobile Number</span>
-                      <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: 600 }}>{selectedStudentDetails.phone || 'None'}</p>
-                    </div>
-                    <div>
-                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>Course Enrolled</span>
-                      <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: 600 }}>{selectedStudentDetails.course}</p>
-                    </div>
-                    <div>
-                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>Assigned Batch</span>
-                      <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: 600 }}>{selectedStudentDetails.batch_name || 'Not Assigned'}</p>
-                    </div>
-                    <div>
-                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>College</span>
-                      <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: 600 }}>{selectedStudentDetails.college || 'Levlox Academy'}</p>
-                    </div>
-                    <div>
-                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>Company</span>
-                      <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: 600 }}>{selectedStudentDetails.company || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>Current Location</span>
-                      <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: 600 }}>{selectedStudentDetails.current_location || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>Permanent Address</span>
-                      <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: 600 }}>{selectedStudentDetails.permanent_address || 'N/A'}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <h4 style={{ fontSize: '13px', textTransform: 'uppercase', color: 'var(--primary-color)', fontWeight: 800, margin: '0 0 10px', borderBottom: '1px solid var(--border-light)', paddingBottom: '4px' }}>Recorded Lessons Progress</h4>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{ flex: 1, height: '8px', background: 'var(--border-color)', borderRadius: '4px', overflow: 'hidden' }}>
-                      <div style={{ width: `${selectedStudentDetails.progress?.percentage || 0}%`, height: '100%', background: 'var(--primary-color)', borderRadius: '4px' }} />
-                    </div>
-                    <span style={{ fontSize: '13px', fontWeight: 700 }}>{selectedStudentDetails.progress?.percentage || 0}% ({selectedStudentDetails.progress?.completed}/{selectedStudentDetails.progress?.total})</span>
-                  </div>
-                </div>
-
-                <div>
-                  <h4 style={{ fontSize: '13px', textTransform: 'uppercase', color: 'var(--primary-color)', fontWeight: 800, margin: '0 0 10px', borderBottom: '1px solid var(--border-light)', paddingBottom: '4px' }}>Recent Portal Activity</h4>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '150px', overflowY: 'auto' }}>
-                    {selectedStudentDetails.recent_activities?.length === 0 ? (
-                      <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>No recent activities found.</p>
+            <div className="modal-body">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '24px', alignItems: 'start' }}>
+                {/* Left Column: Profile Card */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', background: 'var(--surface-alt)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '20px' }}>
+                  <div style={{ width: '90px', height: '90px', borderRadius: '50%', overflow: 'hidden', background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '3px solid white', boxShadow: 'var(--shadow-card)', marginBottom: '12px' }}>
+                    {selectedStudentDetails.profile_pic && selectedStudentDetails.profile_pic.trim() !== '' ? (
+                      <img src={selectedStudentDetails.profile_pic} alt={selectedStudentDetails.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : (
-                      selectedStudentDetails.recent_activities?.map((act, index) => (
-                        <div key={index} style={{ padding: '8px', background: 'var(--surface-alt)', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div>
-                            <span style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--primary-color)', fontWeight: 800, display: 'block' }}>{act.type}</span>
-                            <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>{act.title}</span>
-                          </div>
-                          <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{act.date}</span>
-                        </div>
-                      ))
+                      <span style={{ fontSize: '32px', fontWeight: 'bold', color: 'var(--primary-color)' }}>{selectedStudentDetails.name?.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}</span>
                     )}
                   </div>
+                  <h4 style={{ fontSize: '16px', fontWeight: '800', margin: '0 0 4px', color: 'var(--text-primary)' }}>{selectedStudentDetails.name}</h4>
+                  <code style={{ fontSize: '11.5px', color: 'var(--text-secondary)', display: 'block', marginBottom: '14px' }}>{selectedStudentDetails.rollNumber}</code>
+                  
+                  <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px', borderTop: '1px solid var(--border-color)', paddingTop: '14px', textAlign: 'left' }}>
+                    <div>
+                      <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 700, display: 'block' }}>Attendance</span>
+                      <strong style={{ fontSize: '13px', color: 'var(--primary-color)' }}>{selectedStudentDetails.attendance}% Rate</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 700, display: 'block' }}>Fee Status</span>
+                      <span className={`badge-status-fixed ${selectedStudentDetails.feesStatus === 'Paid' ? 'paid' : 'unpaid'}`} style={{ fontSize: '10.5px', marginTop: '3px', display: 'inline-flex' }}>
+                        {selectedStudentDetails.feesStatus || 'Pending'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column: Profile Details */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  <div>
+                    <h4 style={{ fontSize: '13px', textTransform: 'uppercase', color: 'var(--primary-color)', fontWeight: 800, margin: '0 0 10px', borderBottom: '1px solid var(--border-light)', paddingBottom: '4px' }}>Academic & Personal Details</h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                      <div>
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>Student ID / Roll No</span>
+                        <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: 700 }}>{selectedStudentDetails.rollNumber}</p>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>Admission Date</span>
+                        <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: 600 }}>{selectedStudentDetails.join_date || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>Email Address</span>
+                        <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: 600, wordBreak: 'break-all' }}>{selectedStudentDetails.email}</p>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>Mobile Number</span>
+                        <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: 600 }}>{selectedStudentDetails.phone || 'None'}</p>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>Course Enrolled</span>
+                        <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: 600 }}>{selectedStudentDetails.course}</p>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>Assigned Batch</span>
+                        <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: 600 }}>{selectedStudentDetails.batch_name || 'Not Assigned'}</p>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>College</span>
+                        <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: 600 }}>{selectedStudentDetails.college || 'Levlox Academy'}</p>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>Company</span>
+                        <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: 600 }}>{selectedStudentDetails.company || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>Current Location</span>
+                        <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: 600 }}>{selectedStudentDetails.current_location || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>Permanent Address</span>
+                        <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: 600 }}>{selectedStudentDetails.permanent_address || 'N/A'}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 style={{ fontSize: '13px', textTransform: 'uppercase', color: 'var(--primary-color)', fontWeight: 800, margin: '0 0 10px', borderBottom: '1px solid var(--border-light)', paddingBottom: '4px' }}>Recorded Lessons Progress</h4>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ flex: 1, height: '8px', background: 'var(--border-color)', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div style={{ width: `${selectedStudentDetails.progress?.percentage || 0}%`, height: '100%', background: 'var(--primary-color)', borderRadius: '4px' }} />
+                      </div>
+                      <span style={{ fontSize: '13px', fontWeight: 700 }}>{selectedStudentDetails.progress?.percentage || 0}% ({selectedStudentDetails.progress?.completed}/{selectedStudentDetails.progress?.total})</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 style={{ fontSize: '13px', textTransform: 'uppercase', color: 'var(--primary-color)', fontWeight: 800, margin: '0 0 10px', borderBottom: '1px solid var(--border-light)', paddingBottom: '4px' }}>Recent Portal Activity</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '150px', overflowY: 'auto' }}>
+                      {selectedStudentDetails.recent_activities?.length === 0 ? (
+                        <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>No recent activities found.</p>
+                      ) : (
+                        selectedStudentDetails.recent_activities?.map((act, index) => (
+                          <div key={index} style={{ padding: '8px', background: 'var(--surface-alt)', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                              <span style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--primary-color)', fontWeight: 800, display: 'block' }}>{act.type}</span>
+                              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>{act.title}</span>
+                            </div>
+                            <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{act.date}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-primary" onClick={() => { setShowDetailsModal(false); setSelectedStudentDetails(null); }}>Close</button>
             </div>
           </div>
         </div>
@@ -5804,6 +5431,556 @@ const AdminDashboard = () => {
                 Delete
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Creation/Edit Modal */}
+      {showBatchModal && (
+        <div className="modal-overlay">
+          <div className="modal-content modal-lg">
+            <div className="modal-header">
+              <h3 className="modal-title">
+                {editingBatch ? 'Edit Batch Details' : 'Create New Batch'}
+              </h3>
+              <button className="modal-close-red" onClick={() => {
+                setShowBatchModal(false);
+                setEditingBatch(null);
+                setBatchName('');
+                setBatchCourseName('');
+                setBatchTrainerName('');
+                setBatchStartDate('');
+                setBatchEndDate('');
+                setBatchStatus('Active');
+                setBatchMaxStudents(30);
+              }} aria-label="Close modal"><X size={18} /></button>
+            </div>
+            <form onSubmit={editingBatch ? saveBatchEdit : createBatch}>
+              <div className="modal-body">
+                <div className="modal-form-grid">
+                  <div className="form-group grid-col-span-2">
+                    <label className="form-label" htmlFor="batchName">Batch Name</label>
+                    <input id="batchName" type="text" className="form-input" value={batchName} onChange={(e) => setBatchName(e.target.value)} placeholder="e.g. Fullstack MERN Web Dev - Alpha" required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="batchCourseName">Course Title</label>
+                    <input id="batchCourseName" type="text" className="form-input" value={batchCourseName} onChange={(e) => setBatchCourseName(e.target.value)} placeholder="e.g. Fullstack Engineering" required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="batchTrainerName">Trainer / Instructor</label>
+                    <input id="batchTrainerName" type="text" className="form-input" value={batchTrainerName} onChange={(e) => setBatchTrainerName(e.target.value)} placeholder="e.g. Dr. Sarah Jenkins" required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="batchStartDate">Start Date</label>
+                    <input id="batchStartDate" type="date" className="form-input" value={batchStartDate} onChange={(e) => setBatchStartDate(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="batchEndDate">End Date</label>
+                    <input id="batchEndDate" type="date" className="form-input" value={batchEndDate} onChange={(e) => setBatchEndDate(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="batchStatusSelect">Batch Status</label>
+                    <select id="batchStatusSelect" className="form-select" value={batchStatus} onChange={(e) => setBatchStatus(e.target.value)}>
+                      <option value="Active">Active</option>
+                      <option value="Completed">Completed</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="batchMaxStudents">Maximum Seats</label>
+                    <input id="batchMaxStudents" type="number" className="form-input" value={batchMaxStudents} onChange={(e) => setBatchMaxStudents(e.target.value)} required />
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-outline" onClick={() => {
+                  setShowBatchModal(false);
+                  setEditingBatch(null);
+                  setBatchName('');
+                  setBatchCourseName('');
+                  setBatchTrainerName('');
+                  setBatchStartDate('');
+                  setBatchEndDate('');
+                  setBatchStatus('Active');
+                  setBatchMaxStudents(30);
+                }}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  {editingBatch ? 'Save Batch Changes' : 'Confirm New Batch'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Schedule Live Class Modal */}
+      {showLiveClassModal && (
+        <div className="modal-overlay">
+          <div className="modal-content modal-lg">
+            <div className="modal-header">
+              <h3 className="modal-title">Schedule Live Lecture</h3>
+              <button className="modal-close-red" onClick={() => setShowLiveClassModal(false)} aria-label="Close modal"><X size={18} /></button>
+            </div>
+            <form onSubmit={addLiveClass}>
+              <div className="modal-body">
+                <div className="modal-form-grid">
+                  <div className="form-group grid-col-span-2">
+                    <label className="form-label">Target Batch</label>
+                    <CustomDropdown
+                      label="Target Batch"
+                      value={selectedBatchId}
+                      onChange={(val) => setSelectedBatchId(val)}
+                      width="100%"
+                      placeholder="-- Choose Batch --"
+                      options={[
+                        { value: '', label: '-- Choose Batch --' },
+                        ...batches.map(b => ({ value: b.id, label: `${b.name} (${b.code})` }))
+                      ]}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="liveTitle">Lecture Title</label>
+                    <input id="liveTitle" type="text" className="form-input" placeholder="e.g. Intro to React" value={liveTitle} onChange={(e) => setLiveTitle(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="liveInstructor">Lead Faculty</label>
+                    <input id="liveInstructor" type="text" className="form-input" placeholder="e.g. Sri Aakash" value={liveInstructor} onChange={(e) => setLiveInstructor(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="liveDate">Date</label>
+                    <input id="liveDate" type="date" className="form-input" value={liveDate} onChange={(e) => setLiveDate(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="liveTime">Time / Schedule</label>
+                    <input id="liveTime" type="text" className="form-input" value={liveTime} onChange={(e) => setLiveTime(e.target.value)} placeholder="e.g. 7:00 PM - 8:30 PM" required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="liveUrl">Google Meet Link</label>
+                    <input id="liveUrl" type="url" className="form-input" placeholder="https://meet.google.com/..." value={liveUrl} onChange={(e) => setLiveUrl(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Class Status</label>
+                    <CustomDropdown
+                      label="Class Status"
+                      value={liveStatus}
+                      onChange={(val) => setLiveStatus(val)}
+                      width="100%"
+                      options={[
+                        { value: 'Upcoming', label: 'Upcoming' },
+                        { value: 'Live', label: 'Live' },
+                        { value: 'Completed', label: 'Completed' }
+                      ]}
+                    />
+                  </div>
+                  <div className="form-group grid-col-span-2">
+                    <label className="form-label" htmlFor="liveDescription">Description</label>
+                    <textarea id="liveDescription" className="form-input" style={{ height: '100px', resize: 'none' }} placeholder="Brief overview of lecture contents..." value={liveDescription} onChange={(e) => setLiveDescription(e.target.value)} />
+                  </div>
+                  <div className="form-group grid-col-span-2" style={{ flexDirection: 'row', gap: '24px', alignItems: 'center', marginTop: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                      <input id="liveToday" type="checkbox" checked={liveToday} onChange={(e) => setLiveToday(e.target.checked)} style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
+                      <label htmlFor="liveToday" className="form-label" style={{ marginBottom: 0, cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}>Happening Today?</label>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                      <input id="livePublished" type="checkbox" checked={livePublished} onChange={(e) => setLivePublished(e.target.checked)} style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
+                      <label htmlFor="livePublished" className="form-label" style={{ marginBottom: 0, cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}>Publish Stream</label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-outline" onClick={() => setShowLiveClassModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">Confirm Live Lecture</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Recorded Class Modal */}
+      {showRecordedClassModal && (
+        <div className="modal-overlay">
+          <div className="modal-content modal-lg">
+            <div className="modal-header">
+              <h3 className="modal-title">
+                {editingRecordedClass ? '✏️ Edit Lesson' : '➕ Upload New Lesson'}
+              </h3>
+              <button className="modal-close-red" onClick={() => {
+                setShowRecordedClassModal(false);
+                setEditingRecordedClass(null);
+                setRecTitle(''); setRecModule('Module 1 - Python Basics'); setRecVideoUrl(''); setRecThumbnailUrl(''); setRecLessonDescription(''); setRecNotesUrl(''); setRecAssignment(''); setRecVisibility('everyone'); setRecSortOrder(''); setRecDuration('1h 30m'); setVideoSourceType('link'); setRecStudyMaterials([]);
+              }} aria-label="Close modal"><X size={18} /></button>
+            </div>
+            <form onSubmit={addRecordedClass}>
+              <div className="modal-body">
+                <div className="modal-form-grid">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="recBatchSelect">Target Batch</label>
+                    <select id="recBatchSelect" className="form-select" value={selectedBatchId} onChange={(e) => setSelectedBatchId(e.target.value)} required>
+                      <option value="">-- Choose Batch --</option>
+                      {batches.map(b => (
+                        <option key={b.id} value={b.id}>{b.name} ({b.code})</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="recCourseTitle">Course Name</label>
+                    <input id="recCourseTitle" type="text" className="form-input" value={recCourseTitle} onChange={(e) => setRecCourseTitle(e.target.value)} placeholder="e.g. Python Full Stack" required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="recModule">Module Section</label>
+                    <input id="recModule" type="text" className="form-input" value={recModule} onChange={(e) => setRecModule(e.target.value)} placeholder="e.g. Module 1 - Python Basics" required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="recTitle">Lesson Title</label>
+                    <input id="recTitle" type="text" className="form-input" value={recTitle} onChange={(e) => setRecTitle(e.target.value)} placeholder="e.g. Variables & Data Types" required />
+                  </div>
+
+                  {/* Video Source Type */}
+                  <div className="form-group grid-col-span-2">
+                    <label className="form-label">Video Source</label>
+                    <div style={{ display: 'flex', gap: '16px', marginTop: '6px', marginBottom: '8px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', cursor: 'pointer' }}>
+                        <input type="radio" name="videoSourceType" value="link" checked={videoSourceType === 'link'} onChange={() => setVideoSourceType('link')} />
+                        Google Drive Link / External Link
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', cursor: 'pointer' }}>
+                        <input type="radio" name="videoSourceType" value="upload" checked={videoSourceType === 'upload'} onChange={() => setVideoSourceType('upload')} />
+                        Upload Video File
+                      </label>
+                    </div>
+
+                    {videoSourceType === 'link' ? (
+                      <input id="recVideoUrl" type="url" className="form-input" value={recVideoUrl} onChange={(e) => setRecVideoUrl(e.target.value)} placeholder="https://youtube.com/watch?v=... or Drive link" />
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <input 
+                          type="file" 
+                          accept="video/*" 
+                          className="form-input" 
+                          onChange={async (e) => {
+                            const file = e.target.files[0];
+                            if (!file) return;
+                            setUploadingVideo(true);
+                            const res = await handleFileUpload(file);
+                            setUploadingVideo(false);
+                            if (res && res.url) {
+                              setRecVideoUrl(res.url);
+                            }
+                          }} 
+                        />
+                        {uploadingVideo && <span style={{ fontSize: 12, color: 'var(--primary-color)' }}>Uploading video file... Please wait.</span>}
+                        {recVideoUrl && !uploadingVideo && (
+                          <span style={{ fontSize: 11, color: '#059669', wordBreak: 'break-all' }}>✓ Video ready: {recVideoUrl}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="recThumbnailUrl">Thumbnail URL</label>
+                    <input id="recThumbnailUrl" type="url" className="form-input" value={recThumbnailUrl} onChange={(e) => setRecThumbnailUrl(e.target.value)} placeholder="https://img.youtube.com/vi/.../hqdefault.jpg" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="recDuration">Duration</label>
+                    <input id="recDuration" type="text" className="form-input" value={recDuration} onChange={(e) => setRecDuration(e.target.value)} placeholder="e.g. 1h 15m" />
+                  </div>
+
+                  <div className="form-group grid-col-span-2">
+                    <label className="form-label" htmlFor="recLessonDescription">Lesson Description</label>
+                    <textarea id="recLessonDescription" className="form-input" style={{ height: 60, resize: 'none' }} value={recLessonDescription} onChange={(e) => setRecLessonDescription(e.target.value)} placeholder="Brief overview of what students will learn..." />
+                  </div>
+
+                  {/* Multiple Study Materials Manager */}
+                  <div className="form-group grid-col-span-2" style={{ background: 'var(--bg-secondary)', padding: 14, borderRadius: 12, border: '1px solid var(--border-color)' }}>
+                    <label className="form-label" style={{ fontWeight: 800 }}>Study Materials Manager</label>
+                    {/* Current Materials List */}
+                    {recStudyMaterials.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12, marginTop: 6 }}>
+                        {recStudyMaterials.map((mat, index) => (
+                          <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border-light)' }}>
+                            <span style={{ fontSize: 12, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '80%' }}>
+                              📄 {mat.name} ({mat.type?.toUpperCase()})
+                            </span>
+                            <button 
+                              type="button" 
+                              style={{ background: 'none', border: 'none', color: 'var(--danger-color)', cursor: 'pointer', fontSize: 11, fontWeight: 700 }}
+                              onClick={() => setRecStudyMaterials(prev => prev.filter((_, i) => i !== index))}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Add New Material Box */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8, borderTop: '1px solid var(--border-light)', paddingTop: 10 }}>
+                      <input 
+                        type="text" 
+                        placeholder="Material Name (e.g. Slide Lecture 1)" 
+                        className="form-input" 
+                        style={{ height: 36, fontSize: 12.5 }}
+                        value={newMaterialName} 
+                        onChange={(e) => setNewMaterialName(e.target.value)} 
+                      />
+                      <div style={{ display: 'flex', gap: 12 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: 12, cursor: 'pointer' }}>
+                          <input type="radio" name="newMaterialSourceType" value="link" checked={newMaterialSourceType === 'link'} onChange={() => setNewMaterialSourceType('link')} />
+                          Drive Link
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: 12, cursor: 'pointer' }}>
+                          <input type="radio" name="newMaterialSourceType" value="upload" checked={newMaterialSourceType === 'upload'} onChange={() => setNewMaterialSourceType('upload')} />
+                          Upload File
+                        </label>
+                      </div>
+
+                      {newMaterialSourceType === 'link' ? (
+                        <input 
+                          type="url" 
+                          placeholder="https://drive.google.com/..." 
+                          className="form-input" 
+                          style={{ height: 36, fontSize: 12.5 }}
+                          value={newMaterialUrl} 
+                          onChange={(e) => setNewMaterialUrl(e.target.value)} 
+                        />
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <input 
+                            type="file" 
+                            accept=".pdf,.docx,.ppt,.pptx,.zip,.rar,image/*" 
+                            className="form-input" 
+                            style={{ fontSize: 12 }}
+                            onChange={async (e) => {
+                              const file = e.target.files[0];
+                              if (!file) return;
+                              setUploadingMaterial(true);
+                              const res = await handleFileUpload(file);
+                              setUploadingMaterial(false);
+                              if (res && res.url) {
+                                setNewMaterialUrl(res.url);
+                              }
+                            }} 
+                          />
+                          {uploadingMaterial && <span style={{ fontSize: 11, color: 'var(--primary-color)' }}>Uploading file...</span>}
+                        </div>
+                      )}
+
+                      <button 
+                        type="button" 
+                        className="btn btn-outline" 
+                        style={{ alignSelf: 'flex-start', padding: '5px 12px', fontSize: 12, height: 30 }}
+                        onClick={() => {
+                          if (!newMaterialName.trim() || !newMaterialUrl.trim()) {
+                            showModal("Warning", "Please provide a name and a link/file for the study material.", "warning");
+                            return;
+                          }
+                          const fileExt = newMaterialUrl.split('.').pop()?.split('?')[0]?.toLowerCase() || 'pdf';
+                          setRecStudyMaterials(prev => [...prev, {
+                            name: newMaterialName.trim(),
+                            url: newMaterialUrl.trim(),
+                            type: fileExt
+                          }]);
+                          setNewMaterialName('');
+                          setNewMaterialUrl('');
+                        }}
+                      >
+                        + Add Material
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="recAssignment">Assignment Title</label>
+                    <input id="recAssignment" type="text" className="form-input" value={recAssignment} onChange={(e) => setRecAssignment(e.target.value)} placeholder="e.g. Variables & Operators Lab" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="recSortOrder">Sort Order</label>
+                    <input id="recSortOrder" type="number" className="form-input" value={recSortOrder} onChange={(e) => setRecSortOrder(e.target.value)} placeholder="e.g. 1, 2, 3..." min="1" />
+                  </div>
+
+                  <div className="form-group grid-col-span-2">
+                    <label className="form-label">Visibility Access</label>
+                    <div style={{ display: 'flex', gap: '16px', marginTop: '6px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13.5px', cursor: 'pointer' }}>
+                        <input type="radio" name="recVisibility" value="everyone" checked={recVisibility === 'everyone'} onChange={() => setRecVisibility('everyone')} />
+                        🌐 Everyone
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13.5px', cursor: 'pointer' }}>
+                        <input type="radio" name="recVisibility" value="paid" checked={recVisibility === 'paid'} onChange={() => setRecVisibility('paid')} />
+                        🔒 Paid Students Only
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button type="button" className="btn btn-outline" onClick={() => {
+                  setShowRecordedClassModal(false);
+                  setEditingRecordedClass(null);
+                  setRecTitle(''); setRecModule('Module 1 - Python Basics'); setRecVideoUrl(''); setRecThumbnailUrl(''); setRecLessonDescription(''); setRecNotesUrl(''); setRecAssignment(''); setRecVisibility('everyone'); setRecSortOrder(''); setRecDuration('1h 30m'); setVideoSourceType('link'); setRecStudyMaterials([]);
+                }}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  {editingRecordedClass ? 'Update Lesson' : 'Save LMS Lesson'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Create Announcement Modal */}
+      {showAnnouncementModal && (
+        <div className="modal-overlay">
+          <div className="modal-content modal-lg">
+            <div className="modal-header">
+              <h3 className="modal-title">Publish Announcement</h3>
+              <button className="modal-close-red" onClick={() => setShowAnnouncementModal(false)} aria-label="Close modal"><X size={18} /></button>
+            </div>
+            <form onSubmit={addAnnouncement}>
+              <div className="modal-body">
+                <div className="modal-form-grid">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="annBatchSelect">Target Batch</label>
+                    <select id="annBatchSelect" className="form-select" value={selectedBatchId} onChange={(e) => setSelectedBatchId(e.target.value)} required style={{ height: '44px' }}>
+                      <option value="">-- Choose Batch --</option>
+                      {batches.map(b => (
+                        <option key={b.id} value={b.id}>{b.name} ({b.code})</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="annTitle">Notice Title</label>
+                    <input id="annTitle" type="text" className="form-input" value={annTitle} onChange={(e) => setAnnTitle(e.target.value)} required style={{ height: '44px' }} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="annPriority">Priority Level</label>
+                    <select id="annPriority" className="form-select" value={annPriority} onChange={(e) => setAnnPriority(e.target.value)} style={{ height: '44px' }}>
+                      <option value="Low">Low Priority</option>
+                      <option value="Medium">Medium Priority</option>
+                      <option value="High">High Priority</option>
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ flexDirection: 'row', gap: '8px', alignItems: 'center', marginTop: '30px' }}>
+                    <input id="annPinned" type="checkbox" checked={annPinned} onChange={(e) => setAnnPinned(e.target.checked)} style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
+                    <label htmlFor="annPinned" className="form-label" style={{ marginBottom: 0, cursor: 'pointer', fontWeight: 600 }}>Pin Announcement?</label>
+                  </div>
+                  <div className="form-group grid-col-span-2">
+                    <label className="form-label" htmlFor="annContent">Message Content</label>
+                    <textarea id="annContent" className="form-input" style={{ height: '100px', resize: 'none' }} value={annContent} onChange={(e) => setAnnContent(e.target.value)} required />
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-outline" onClick={() => setShowAnnouncementModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">Broadcast Notice</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Award Activity Points Modal */}
+      {showActivityScoreModal && (
+        <div className="modal-overlay">
+          <div className="modal-content modal-lg">
+            <div className="modal-header">
+              <h3 className="modal-title">Award Activity Points</h3>
+              <button className="modal-close-red" onClick={() => setShowActivityScoreModal(false)} aria-label="Close modal"><X size={18} /></button>
+            </div>
+            <form onSubmit={handleAwardActivity}>
+              <div className="modal-body">
+                <div className="modal-form-grid">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="actBatchSelect">Target Batch</label>
+                    <select id="actBatchSelect" className="form-select" value={actBatchId} onChange={(e) => handleActBatchChange(e.target.value)} required>
+                      <option value="">-- Choose Batch --</option>
+                      {batches.map(b => (
+                        <option key={b.id} value={b.id}>{b.name} ({b.code})</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="actStudentSelect">Select Student</label>
+                    <select id="actStudentSelect" className="form-select" value={actStudentId} onChange={(e) => setActStudentId(e.target.value)} required>
+                      <option value="">-- Choose Student --</option>
+                      {batchStudents.map(s => (
+                        <option key={s.id} value={s.id}>{s.name} ({s.rollNumber})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="actDate">Date</label>
+                    <input id="actDate" type="date" className="form-input" value={actDate} onChange={(e) => setActDate(e.target.value)} required />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="actMeeting">Google Meet Session / Lecture Name</label>
+                    <input id="actMeeting" type="text" className="form-input" value={actMeeting} onChange={(e) => setActMeeting(e.target.value)} placeholder="e.g. Python Variables Class" required />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="actPreset">Activity Preset Type</label>
+                    <select 
+                      id="actPreset" 
+                      className="form-select" 
+                      value={actType} 
+                      onChange={(e) => {
+                        const type = e.target.value;
+                        setActType(type);
+                        if (type.includes("+10")) setActPoints(10);
+                        else if (type.includes("+5")) setActPoints(5);
+                        else if (type.includes("+3")) setActPoints(3);
+                        else if (type.includes("+2")) setActPoints(2);
+                        else if (type.includes("-5")) setActPoints(-5);
+                      }}
+                    >
+                      <option value="+10 Answered Questions">Answered Questions (+10 pts)</option>
+                      <option value="+5 Active Participation">Active Participation (+5 pts)</option>
+                      <option value="+3 Attendance on Time">Attendance on Time (+3 pts)</option>
+                      <option value="+5 Helped Others">Helped Others (+5 pts)</option>
+                      <option value="+2 Camera On">Camera On (+2 pts)</option>
+                      <option value="-5 Penalty/Deduction">Deduction (-5 pts)</option>
+                      <option value="Custom">Custom Activity Type</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="actPoints">Points</label>
+                    <input id="actPoints" type="number" className="form-input" value={actPoints} onChange={(e) => setActPoints(parseInt(e.target.value) || 0)} required />
+                  </div>
+
+                  {actType === 'Custom' && (
+                    <div className="form-group grid-col-span-2">
+                      <label className="form-label" htmlFor="customActType">Custom Activity Title</label>
+                      <input id="customActType" type="text" className="form-input" placeholder="e.g. Completed Extra Lab Task" onChange={(e) => setActType(e.target.value)} required />
+                    </div>
+                  )}
+
+                  <div className="form-group grid-col-span-2">
+                    <label className="form-label" htmlFor="actRemarks">Remarks</label>
+                    <textarea id="actRemarks" className="form-input" style={{ height: '60px', resize: 'none' }} value={actRemarks} onChange={(e) => setActRemarks(e.target.value)} placeholder="Provide context..." />
+                  </div>
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button type="button" className="btn btn-outline" onClick={() => setShowActivityScoreModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">Award Activity Points</button>
+              </div>
+            </form>
           </div>
         </div>
       )}

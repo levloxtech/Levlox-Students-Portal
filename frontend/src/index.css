@@ -1136,31 +1136,36 @@ button, input, select, textarea {
   z-index: 2000;
   padding: 20px;
   animation: fadeInModal 0.2s ease-out;
+  overflow: hidden;
 }
 
 .modal-content {
   background-color: var(--surface-color);
-  border-radius: var(--radius-lg);
+  border-radius: 20px;
   border: 1.5px solid var(--border-color);
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.15);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   width: 100%;
-  max-width: 500px;
+  max-width: 800px;
+  max-height: 85vh;
   animation: scaleUpModal 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
 }
 
-.modal-sm { max-width: 400px; }
-.modal-md { max-width: 550px; }
-.modal-lg { max-width: 800px; }
+.modal-sm { max-width: 420px !important; }
+.modal-md { max-width: 600px !important; }
+.modal-lg { max-width: 800px !important; }
+.modal-xl { max-width: 900px !important; }
 
 .modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 24px;
+  padding: 24px 32px 18px;
   border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
 }
 
 .modal-title-container {
@@ -1173,14 +1178,15 @@ button, input, select, textarea {
 
 .modal-title {
   margin: 0;
-  font-size: 16px;
-  font-weight: 700;
+  font-size: 17px;
+  font-weight: 800;
   color: var(--text-primary);
 }
+
 .modal-close-btn, .modal-close-red {
   background: transparent;
   border: none;
-  color: #EF4444 !important; /* Clean red icon */
+  color: #EF4444 !important;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1190,12 +1196,53 @@ button, input, select, textarea {
   height: 34px;
   border-radius: 50% !important;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
-  margin-top: -8px; /* Move slightly upward (8-10px) to center perfectly in header and not touch divider */
 }
 
 .modal-close-btn:hover, .modal-close-red:hover {
   background-color: rgba(239, 68, 68, 0.08) !important;
   color: #EF4444 !important;
+}
+
+/* Modal form grid system */
+.modal-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px 24px;
+}
+
+.grid-col-span-2 {
+  grid-column: span 2;
+}
+
+@media (max-width: 768px) {
+  .modal-form-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .grid-col-span-2 {
+    grid-column: span 1;
+  }
+}
+
+.modal-form-grid .form-group {
+  margin-bottom: 0 !important;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.modal-form-grid .form-label {
+  margin-bottom: 0 !important;
+  font-weight: 700;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.modal-form-grid .form-input,
+.modal-form-grid .form-select,
+.modal-form-grid .form-textarea {
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* Custom Dropdown Styling */
@@ -1441,22 +1488,23 @@ button, input, select, textarea {
 }
 
 .modal-body {
-  padding: 24px;
+  padding: 24px 32px 32px;
   font-size: 14px;
   color: var(--text-secondary);
   line-height: 1.65;
   overflow-y: auto;
-  max-height: calc(80vh - 150px);
+  flex-grow: 1;
 }
 
 .modal-footer {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
-  padding: 16px 24px;
+  gap: 12px;
+  padding: 20px 32px 24px;
   background-color: #fafafd;
   border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
 }
 
 /* ══════════════════════════════════════════════════════
@@ -3007,12 +3055,16 @@ button, input, select, textarea {
   display: flex;
   justify-content: flex-start;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
   width: 100%;
+  box-sizing: border-box;
 }
 
 @media (min-width: 1024px) {
+  .levlox-filter-bar {
+    padding: 16px 24px;
+  }
   .levlox-filter-row-1 {
     flex-wrap: nowrap;
   }
@@ -3022,14 +3074,14 @@ button, input, select, textarea {
   position: relative;
   display: flex;
   align-items: center;
-  flex: 1 1 auto;
-  min-width: 200px;
+  flex: 1 1 180px;
+  min-width: 150px;
 }
 
 @media (min-width: 1024px) {
   .levlox-filter-search-container {
-    flex: 0 0 240px;
-    width: 240px;
+    flex: 1 1 220px;
+    max-width: 240px;
   }
 }
 
@@ -3060,26 +3112,11 @@ button, input, select, textarea {
   box-shadow: 0 0 0 3px rgba(108, 60, 240, 0.12);
 }
 
-.levlox-filter-dropdown-container {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  align-items: center;
-  flex: 1 1 auto;
-}
-
-@media (min-width: 1024px) {
-  .levlox-filter-dropdown-container {
-    flex-wrap: nowrap;
-    flex: 0 1 auto;
-  }
-}
-
 .levlox-filter-dropdown {
   background-color: var(--surface-alt);
   border: 1.5px solid var(--border-color);
   border-radius: var(--radius-md);
-  padding: 0 36px 0 16px;
+  padding: 0 32px 0 12px;
   font-size: 13.5px;
   color: var(--text-primary);
   outline: none;
@@ -3087,18 +3124,18 @@ button, input, select, textarea {
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%235E6478'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 14px center;
-  background-size: 14px;
+  background-position: right 12px center;
+  background-size: 12px;
   transition: all var(--transition-normal);
-  min-width: 120px;
+  min-width: 100px;
   height: 44px;
   box-sizing: border-box;
+  flex: 1 1 120px;
 }
 
 @media (min-width: 1024px) {
   .levlox-filter-dropdown {
-    width: 160px;
-    flex-shrink: 0;
+    max-width: 145px;
   }
 }
 
@@ -3106,6 +3143,36 @@ button, input, select, textarea {
   border-color: var(--primary-color);
   background-color: #ffffff;
   box-shadow: 0 0 0 3px rgba(108, 60, 240, 0.12);
+}
+
+.levlox-filter-action-btn {
+  background: linear-gradient(135deg, var(--primary-color), var(--primary-hover));
+  color: white;
+  border: none;
+  border-radius: var(--radius-full);
+  height: 44px;
+  padding: 0 20px;
+  font-size: 13.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  box-shadow: 0 4px 12px rgba(108, 60, 240, 0.15);
+  box-sizing: border-box;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.levlox-filter-action-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(108, 60, 240, 0.25);
+}
+
+.levlox-filter-action-btn:active {
+  transform: translateY(0);
 }
 
 .levlox-filter-actions {

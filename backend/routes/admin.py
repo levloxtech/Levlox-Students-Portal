@@ -322,6 +322,26 @@ def get_students():
     if batch:
         query["batch_id"] = batch
 
+    start_date_str = request.args.get('startDate', '').strip()
+    end_date_str = request.args.get('endDate', '').strip()
+
+    if start_date_str or end_date_str:
+        date_query = {}
+        if start_date_str:
+            try:
+                dt = datetime.datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+                date_query["$gte"] = dt
+            except ValueError:
+                pass
+        if end_date_str:
+            try:
+                dt = datetime.datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
+                date_query["$lte"] = dt
+            except ValueError:
+                pass
+        if date_query:
+            query["created_at"] = date_query
+
     total_count = db.users.count_documents(query)
     skip = (page - 1) * limit
     
@@ -1103,6 +1123,8 @@ def get_announcements():
         for a in ann:
             a['id'] = str(a['_id'])
             a.pop('_id', None)
+            if 'batch_id' in a and a['batch_id']:
+                a['batch_id'] = str(a['batch_id'])
             if 'uploaded_at' in a and isinstance(a['uploaded_at'], datetime.datetime):
                 a['uploaded_at'] = a['uploaded_at'].isoformat()
         return jsonify({"announcements": ann}), 200
@@ -1259,8 +1281,16 @@ def get_attendance_sheets_history():
         for s in sheets:
             s['id'] = str(s['_id'])
             s.pop('_id', None)
+            if 'live_class_id' in s and s['live_class_id']:
+                s['live_class_id'] = str(s['live_class_id'])
+            if 'batch_id' in s and s['batch_id']:
+                s['batch_id'] = str(s['batch_id'])
             if 'saved_at' in s and isinstance(s['saved_at'], datetime.datetime):
                 s['saved_at'] = s['saved_at'].isoformat()
+            if 'records' in s:
+                for r in s['records']:
+                    if 'student_id' in r and r['student_id']:
+                        r['student_id'] = str(r['student_id'])
         return jsonify(sheets), 200
     except Exception as e:
         return jsonify({'message': 'Error loading attendance history', 'error': str(e)}), 400
