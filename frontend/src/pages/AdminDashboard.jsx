@@ -3236,7 +3236,7 @@ const AdminDashboard = () => {
                   </div>
                 </div>
                 <div>
-                  <h3 className="stat-card-value" style={{ fontSize: '22px', fontWeight: '800', margin: '4px 0' }}>${(stats.feesCollected || 0).toLocaleString()}</h3>
+                  <h3 className="stat-card-value" style={{ fontSize: '22px', fontWeight: '800', margin: '4px 0' }}>₹{(stats.feesCollected || 0).toLocaleString()}</h3>
                   <span className="stat-card-footer" style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Total Received</span>
                 </div>
               </div>
@@ -3252,7 +3252,7 @@ const AdminDashboard = () => {
                 <div>
                   <h3 className="stat-card-value" style={{ fontSize: '24px', fontWeight: '800', margin: '4px 0' }}>{stats.pendingPaymentsCount}</h3>
                   <span className="stat-card-footer" style={{ fontSize: '10.5px', color: 'var(--danger-color)', fontWeight: '600' }}>
-                    Dues: ${stats.pendingAmount ? stats.pendingAmount.toLocaleString() : 0}
+                    Dues: ₹{stats.pendingAmount ? stats.pendingAmount.toLocaleString() : 0}
                   </span>
                 </div>
               </div>
@@ -3324,11 +3324,11 @@ const AdminDashboard = () => {
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                         <div>
                           <span style={{ fontSize: '10.5px', color: 'var(--text-secondary)', textTransform: 'uppercase', display: 'block' }}>Total Collection</span>
-                          <strong style={{ fontSize: '18px', color: 'var(--success-color)' }}>${(stats.feeOverview.totalCollected || 0).toLocaleString()}</strong>
+                          <strong style={{ fontSize: '18px', color: 'var(--success-color)' }}>₹{(stats.feeOverview.totalCollected || 0).toLocaleString()}</strong>
                         </div>
                         <div>
                           <span style={{ fontSize: '10.5px', color: 'var(--text-secondary)', textTransform: 'uppercase', display: 'block' }}>Pending Amount</span>
-                          <strong style={{ fontSize: '18px', color: 'var(--danger-color)' }}>${(stats.feeOverview.pendingAmount || 0).toLocaleString()}</strong>
+                          <strong style={{ fontSize: '18px', color: 'var(--danger-color)' }}>₹{(stats.feeOverview.pendingAmount || 0).toLocaleString()}</strong>
                         </div>
                       </div>
                       <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -5010,11 +5010,11 @@ const AdminDashboard = () => {
               <div className="modal-body">
                 <div className="modal-form-grid">
                   <div className="form-group">
-                    <label className="form-label" htmlFor="editTotal">Total Fees ($)</label>
+                    <label className="form-label" htmlFor="editTotal">Total Fees (₹)</label>
                     <input id="editTotal" type="number" className="form-input" value={editTotal} onChange={(e) => setEditTotal(e.target.value)} required />
                   </div>
                   <div className="form-group">
-                    <label className="form-label" htmlFor="editPaid">Paid Amount ($)</label>
+                    <label className="form-label" htmlFor="editPaid">Paid Amount (₹)</label>
                     <input id="editPaid" type="number" className="form-input" value={editPaid} onChange={(e) => setEditPaid(e.target.value)} required />
                   </div>
                   <div className="form-group">
