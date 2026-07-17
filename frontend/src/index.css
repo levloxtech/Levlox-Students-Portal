@@ -1124,6 +1124,10 @@ button, input, select, textarea {
 /* ══════════════════════════════════════════════════════
    MODALS
 ══════════════════════════════════════════════════════ */
+body:has(.modal-overlay) {
+  overflow: hidden !important;
+}
+
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -1152,6 +1156,15 @@ button, input, select, textarea {
   max-height: 85vh;
   animation: scaleUpModal 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   box-sizing: border-box;
+}
+
+.modal-content form {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: 100%;
+  max-height: inherit;
+  margin: 0;
 }
 
 .modal-sm { max-width: 420px !important; }

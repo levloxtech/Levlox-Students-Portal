@@ -69,9 +69,9 @@ def register():
     if role == 'student':
         user_doc.update({
             "feesPaid": False,
-            "feesTotal": 1500,
+            "feesTotal": 20000,
             "feesPaidAmount": 0,
-            "feesRemainingAmount": 1500,
+            "feesRemainingAmount": 20000,
             "feesStatus": "Pending",
             "feesPaymentDate": "",
             "feesDueDate": "2026-08-31",

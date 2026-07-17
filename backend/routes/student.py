@@ -6,94 +6,26 @@ from auth_middleware import token_required
 
 student_bp = Blueprint('student', __name__)
 
+def get_batch_query_criteria(batch_id):
+    if not batch_id:
+        return {"$in": [None, ""]}
+    criteria = [batch_id]
+    if isinstance(batch_id, str):
+        if len(batch_id) == 24:
+            try:
+                criteria.append(ObjectId(batch_id))
+            except:
+                pass
+    elif isinstance(batch_id, ObjectId):
+        criteria.append(str(batch_id))
+    return {"$in": criteria}
+
 def seed_starter_data():
-    # Seed live classes if empty
-    if db.live_classes.count_documents({}) == 0:
-        db.live_classes.insert_many([
-            {
-                "title": "Advanced React Design Patterns & Performance",
-                "instructor": "Dr. Sarah Jenkins",
-                "time": "Today, 02:00 PM",
-                "join_url": "https://zoom.us/j/1234567890",
-                "is_today": True
-            },
-            {
-                "title": "Python Flask RESTful API Development",
-                "instructor": "Prof. Charles Babbage",
-                "time": "Tomorrow, 10:00 AM",
-                "join_url": "https://zoom.us/j/0987654321",
-                "is_today": False
-            },
-            {
-                "title": "Introduction to MongoDB Atlas & Aggregations",
-                "instructor": "Dr. Alan Turing",
-                "time": "July 12, 11:30 AM",
-                "join_url": "https://zoom.us/j/1122334455",
-                "is_today": False
-            }
-        ])
-
-    # Seed announcements if empty
-    if db.announcements.count_documents({}) == 0:
-        db.announcements.insert_many([
-            {
-                "title": "Mid-Term Project Guidelines Released",
-                "content": "Please check the course syllabus for full project parameters. Submission deadline is July 20th.",
-                "date": "July 8, 2026"
-            },
-            {
-                "title": "Scheduled Server Maintenance",
-                "content": "The student portal will undergo maintenance on Sunday, July 12th from 2:00 AM to 4:00 AM.",
-                "date": "July 7, 2026"
-            }
-        ])
-
-    # Seed study materials if empty
-    if db.study_materials.count_documents({}) == 0:
-        db.study_materials.insert_many([
-            {
-                "title": "React Hooks Cheat Sheet (PDF)",
-                "type": "pdf",
-                "url": "https://react.dev",
-                "uploaded_at": "July 5, 2026"
-            },
-            {
-                "title": "Flask API Design Handbook",
-                "type": "epub",
-                "url": "https://flask.palletsprojects.com",
-                "uploaded_at": "July 6, 2026"
-            },
-            {
-                "title": "LMS System Schema Diagram",
-                "type": "zip",
-                "url": "https://mongodb.com",
-                "uploaded_at": "July 7, 2026"
-            }
-        ])
-
-    # Seed recorded classes if empty
-    if db.recorded_classes.count_documents({}) == 0:
-        db.recorded_classes.insert_many([
-            {
-                "title": "Lecture 4: State Management with Context & Redux",
-                "duration": "1h 15m",
-                "url": "https://www.youtube.com/watch?v=35lXWvCuDKo",
-                "uploaded_at": "July 6, 2026"
-            },
-            {
-                "title": "Lecture 3: React Router DOM Navigation Setup",
-                "duration": "58m",
-                "url": "https://www.youtube.com/watch?v=lawexDFUtGY",
-                "uploaded_at": "July 4, 2026"
-            }
-        ])
+    pass
 
 @student_bp.route('/dashboard', methods=['GET'])
 @token_required(allowed_roles=['student'])
 def get_dashboard():
-    # Make sure default starter data is loaded
-    seed_starter_data()
-
     student = g.current_user
     
     # Check if student document has default fields in case of legacy records
@@ -102,13 +34,13 @@ def get_dashboard():
         student['feesPaid'] = False
         updated = True
     if 'feesTotal' not in student:
-        student['feesTotal'] = 1500
+        student['feesTotal'] = 20000
         updated = True
     if 'feesPaidAmount' not in student:
         student['feesPaidAmount'] = 0
         updated = True
     if 'feesRemainingAmount' not in student:
-        student['feesRemainingAmount'] = student.get('feesTotal', 1500) - student.get('feesPaidAmount', 0)
+        student['feesRemainingAmount'] = student.get('feesTotal', 20000) - student.get('feesPaidAmount', 0)
         updated = True
     if 'feesStatus' not in student:
         student['feesStatus'] = 'Pending'
@@ -151,7 +83,7 @@ def get_dashboard():
     batch_id = student_db.get('batch_id') if student_db else None
 
     # Fetch live classes (only published ones and assigned to their batch)
-    live_classes_list = list(db.live_classes.find({"is_published": True, "batch_id": batch_id}))
+    live_classes_list = list(db.live_classes.find({"is_published": True, "batch_id": get_batch_query_criteria(batch_id)}))
     
     # Securely check if student's fees are paid
     fees_are_paid = student.get('feesPaid', False)
@@ -170,21 +102,21 @@ def get_dashboard():
     upcoming_live = [c for c in live_classes_list if not (c.get('is_today', False) or c.get('status') == 'Live')]
 
     # Fetch announcements (pinned notices float to the top)
-    announcements_list = list(db.announcements.find({"batch_id": batch_id}).sort([('is_pinned', -1), ('_id', -1)]).limit(10))
+    announcements_list = list(db.announcements.find({"batch_id": get_batch_query_criteria(batch_id)}).sort([('is_pinned', -1), ('_id', -1)]).limit(10))
     for item in announcements_list:
         item['_id'] = str(item['_id'])
         if 'batch_id' in item and item['batch_id']:
             item['batch_id'] = str(item['batch_id'])
 
     # Fetch study materials
-    study_materials_list = list(db.study_materials.find({"batch_id": batch_id}))
+    study_materials_list = list(db.study_materials.find({"batch_id": get_batch_query_criteria(batch_id)}))
     for item in study_materials_list:
         item['_id'] = str(item['_id'])
         if 'batch_id' in item and item['batch_id']:
             item['batch_id'] = str(item['batch_id'])
 
     # Fetch recorded classes — enriched with access + progress
-    raw_recorded = list(db.recorded_classes.find({"batch_id": batch_id}).sort("sort_order", 1))
+    raw_recorded = list(db.recorded_classes.find({"batch_id": get_batch_query_criteria(batch_id)}).sort("sort_order", 1))
 
     # Get lesson_progress for this student
     student_oid = ObjectId(student['id'])
@@ -258,7 +190,7 @@ def pay_fees():
     student_id = g.current_user['id']
     student = db.users.find_one({"_id": ObjectId(student_id)})
     
-    total = student.get('feesTotal', 1500)
+    total = student.get('feesTotal', 20000)
     today = datetime.date.today().isoformat()
 
     db.users.update_one(
@@ -291,11 +223,17 @@ def get_profile():
         batch_id = user.get('batch_id')
         batch_name = "Not Assigned"
         trainer = "Not Assigned"
+        batch_start_date = "N/A"
+        batch_end_date = "N/A"
+        batch_status = "N/A"
         if batch_id:
             batch_doc = db.batches.find_one({"_id": ObjectId(batch_id)} if isinstance(batch_id, str) and len(batch_id) == 24 else {"_id": batch_id})
             if batch_doc:
                 batch_name = batch_doc.get('name', 'Not Assigned')
                 trainer = batch_doc.get('trainer_name', batch_doc.get('trainer', 'Not Assigned'))
+                batch_start_date = batch_doc.get('start_date', 'N/A')
+                batch_end_date = batch_doc.get('end_date', 'N/A')
+                batch_status = batch_doc.get('status', 'N/A')
 
         profile_data = {
             "name": user.get('name'),
@@ -305,9 +243,9 @@ def get_profile():
             "course": user.get('course', 'Fullstack Engineering'),
             "join_date": user.get('join_date', user.get('enrollmentDate', 'July 08, 2026')),
             "feesStatus": user.get('feesStatus', 'Pending'),
-            "feesTotal": user.get('feesTotal', 1500),
-            "feesPaidAmount": user.get('feesPaidAmount', 1000),
-            "feesRemainingAmount": user.get('feesRemainingAmount', 500),
+            "feesTotal": user.get('feesTotal', 20000),
+            "feesPaidAmount": user.get('feesPaidAmount', 0),
+            "feesRemainingAmount": user.get('feesRemainingAmount', 20000),
             "feesDueDate": user.get('feesDueDate', 'July 15, 2026'),
             "attendance": user.get('attendance', {}).get('percentage', 92),
             "profile_pic": user.get('profile_pic', ''),
@@ -316,7 +254,10 @@ def get_profile():
             "company": user.get('company', ''),
             "rollNumber": user.get('rollNumber', 'LSP-2026-9999'),
             "batch_name": batch_name,
-            "trainer": trainer
+            "trainer": trainer,
+            "batch_start_date": batch_start_date,
+            "batch_end_date": batch_end_date,
+            "batch_status": batch_status
         }
         return jsonify(profile_data), 200
     except Exception as e:
@@ -517,7 +458,7 @@ def get_live_classes():
         student_db = db.users.find_one({"_id": ObjectId(student['id'])})
         batch_id = student_db.get('batch_id') if student_db else None
 
-        classes = list(db.live_classes.find({"is_published": True, "batch_id": batch_id}))
+        classes = list(db.live_classes.find({"is_published": True, "batch_id": get_batch_query_criteria(batch_id)}))
         for c in classes:
             c['_id'] = str(c['_id'])
             # Strip links for security from the list view if unpaid
@@ -591,38 +532,57 @@ def get_analytics():
             }), 200
             
         completed_assignments_cnt = db.submissions.count_documents({"student_id": str(user_id), "status": "Submitted"})
-        total_assignments_cnt = db.assignments.count_documents({"batch_id": batch_id})
+        total_assignments_cnt = db.assignments.count_documents({"batch_id": get_batch_query_criteria(batch_id)})
         pending_assignments_cnt = max(0, total_assignments_cnt - completed_assignments_cnt)
         submission_rate = round((completed_assignments_cnt / max(1, total_assignments_cnt)) * 100)
 
         attendance_info = student.get('attendance', {"percentage": 92, "present": 46, "absent": 4})
         
+        # Calculate overall lesson progress
+        tot_lessons = db.recorded_classes.count_documents({"batch_id": get_batch_query_criteria(batch_id)})
+        comp_lessons = db.lesson_progress.count_documents({"student_id": str(user_id)})
+        overall_progress_pct = round((comp_lessons / max(1, tot_lessons)) * 100) if tot_lessons > 0 else 0
+        if overall_progress_pct > 100: overall_progress_pct = 100
+
+        # Retrieve mock interviews
+        interviews = list(db.mock_interviews.find({"student_id": ObjectId(user_id)}))
+        total_ivs = len(interviews)
+        completed_ivs = sum(1 for iv in interviews if iv.get('score') is not None)
+        pending_ivs = max(0, total_ivs - completed_ivs)
+        avg_score = round(sum(i.get('score', 0) for i in interviews if i.get('score') is not None) / max(1, completed_ivs)) if completed_ivs > 0 else 0
+        best_score = max((i.get('score', 0) for i in interviews if i.get('score') is not None), default=0)
+        latest_date = "N/A"
+        if interviews:
+            latest_iv = interviews[-1]
+            latest_date = latest_iv.get('date', latest_iv.get('scheduled_date', 'N/A'))
+        iv_scores = [i.get('score', 0) for i in interviews if i.get('score') is not None]
+
         analytics_data = {
             "has_data": True,
             "overall_progress": {
-                "percentage": 78,
-                "completed_modules": 11,
-                "remaining_modules": 3
+                "percentage": overall_progress_pct,
+                "completed_modules": comp_lessons,
+                "remaining_modules": max(0, tot_lessons - comp_lessons)
             },
-            "weekly_learning": [3.5, 4.2, 2.0, 5.5, 6.0, 1.5, 4.0],
+            "weekly_learning": [3.5, 4.2, 2.0, 5.5, 6.0, 1.5, 4.0], # Normal tracked usage placeholder
             "mock_interviews": {
-                "total": 6,
-                "completed": 4,
-                "pending": 2,
-                "average_score": 82,
-                "best_score": 95,
-                "latest_date": "July 06, 2026",
-                "scores": [70, 78, 85, 95]
+                "total": total_ivs or 1,
+                "completed": completed_ivs,
+                "pending": pending_ivs,
+                "average_score": avg_score or 75,
+                "best_score": best_score or 75,
+                "latest_date": latest_date,
+                "scores": iv_scores or [75]
             },
             "coding_practice": {
-                "solved": 142,
-                "streak": 12,
-                "hours": 58
+                "solved": student.get("coding_solved", 142),
+                "streak": student.get("streak", 12),
+                "hours": student.get("coding_hours", 58)
             },
             "assignments": {
-                "completed": completed_assignments_cnt or 8,
-                "pending": pending_assignments_cnt or 2,
-                "submission_rate": submission_rate or 80
+                "completed": completed_assignments_cnt,
+                "pending": pending_assignments_cnt,
+                "submission_rate": submission_rate
             },
             "attendance": {
                 "percentage": attendance_info.get("percentage", 92),
@@ -630,9 +590,9 @@ def get_analytics():
                 "absent": attendance_info.get("absent", 4)
             },
             "milestones": {
-                "beginner": "Completed",
-                "intermediate": "In Progress",
-                "advanced": "Pending"
+                "beginner": "Completed" if overall_progress_pct >= 30 else "In Progress",
+                "intermediate": "Completed" if overall_progress_pct >= 70 else ("In Progress" if overall_progress_pct >= 30 else "Pending"),
+                "advanced": "Completed" if overall_progress_pct == 100 else ("In Progress" if overall_progress_pct >= 70 else "Pending")
             }
         }
         return jsonify(analytics_data), 200
@@ -697,9 +657,9 @@ def get_overall_leaderboard():
         
         query = {"role": "student"}
         if batch_id and batch_id != "all":
-            query["batch_id"] = batch_id
+            query["batch_id"] = get_batch_query_criteria(batch_id)
         elif not batch_id and student_db.get('batch_id'):
-            query["batch_id"] = student_db.get('batch_id')
+            query["batch_id"] = get_batch_query_criteria(student_db.get('batch_id'))
             
         if course_id and course_id != "all":
             query["course"] = course_id
@@ -724,7 +684,7 @@ def get_overall_leaderboard():
             s_batch = s.get('batch_id')
             assigns_query = {}
             if s_batch:
-                assigns_query["batch_id"] = s_batch
+                assigns_query["batch_id"] = get_batch_query_criteria(s_batch)
             total_assigns = db.assignments.count_documents(assigns_query) or 10
             
             subs = list(db.submissions.find({"student_id": s_id_obj}))
@@ -809,9 +769,9 @@ def get_mock_leaderboard():
         
         query = {"role": "student"}
         if batch_id and batch_id != "all":
-            query["batch_id"] = batch_id
+            query["batch_id"] = get_batch_query_criteria(batch_id)
         elif not batch_id and student_db.get('batch_id'):
-            query["batch_id"] = student_db.get('batch_id')
+            query["batch_id"] = get_batch_query_criteria(student_db.get('batch_id'))
             
         if course_id and course_id != "all":
             query["course"] = course_id
@@ -867,9 +827,9 @@ def get_task_leaderboard():
         
         query = {"role": "student"}
         if batch_id and batch_id != "all":
-            query["batch_id"] = batch_id
+            query["batch_id"] = get_batch_query_criteria(batch_id)
         elif not batch_id and student_db.get('batch_id'):
-            query["batch_id"] = student_db.get('batch_id')
+            query["batch_id"] = get_batch_query_criteria(student_db.get('batch_id'))
             
         if course_id and course_id != "all":
             query["course"] = course_id
@@ -884,7 +844,7 @@ def get_task_leaderboard():
             s_batch = s.get('batch_id')
             assigns_query = {}
             if s_batch:
-                assigns_query["batch_id"] = s_batch
+                assigns_query["batch_id"] = get_batch_query_criteria(s_batch)
             total_assignments = db.assignments.count_documents(assigns_query) or 10
             
             subs = list(db.submissions.find({"student_id": s_id_obj}))
@@ -944,9 +904,9 @@ def get_live_class_activity_leaderboard():
         
         query = {"role": "student"}
         if batch_id and batch_id != "all":
-            query["batch_id"] = batch_id
+            query["batch_id"] = get_batch_query_criteria(batch_id)
         elif not batch_id and student_db.get('batch_id'):
-            query["batch_id"] = student_db.get('batch_id')
+            query["batch_id"] = get_batch_query_criteria(student_db.get('batch_id'))
             
         if course_id and course_id != "all":
             query["course"] = course_id

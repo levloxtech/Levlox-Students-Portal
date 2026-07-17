@@ -1352,33 +1352,34 @@ const StudentDashboard = () => {
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {(dashboardData.announcements && dashboardData.announcements.length > 0 ? dashboardData.announcements : [
-                      { title: "Mock Interview Schedule Released", content: "Individual time slots have been assigned. Check your profile dashboard to join the mock sessions.", date: "July 09, 2026", priority: "High" },
-                      { title: "React Live Session Today at 7 PM", content: "Important discussion on React Suspense and Server Components. Attendance is mandatory.", date: "July 09, 2026", priority: "High" },
-                      { title: "Assignment Submission Deadline Extended", content: "The submission deadline for Python Rest API has been extended by 48 hours.", date: "July 08, 2026", priority: "Medium" },
-                      { title: "Weekend Coding Contest", content: "Compete this Saturday to climb up the Leaderboard ranks. Top 3 win premium badges.", date: "July 07, 2026", priority: "Low" }
-                    ]).slice(0, 4).map((a, i) => {
-                      const isHigh = a.priority === "High" || a.is_pinned;
-                      const isMed = a.priority === "Medium";
-                      const priorityColor = isHigh ? "#EF4444" : isMed ? "#F59E0B" : "#10B981";
-                      const priorityBg = isHigh ? "rgba(239,68,68,0.1)" : isMed ? "rgba(245,158,11,0.1)" : "rgba(16,185,129,0.1)";
+                    {dashboardData.announcements && dashboardData.announcements.length > 0 ? (
+                      dashboardData.announcements.slice(0, 4).map((a, i) => {
+                        const isHigh = a.priority === "High" || a.is_pinned;
+                        const isMed = a.priority === "Medium";
+                        const priorityColor = isHigh ? "#EF4444" : isMed ? "#F59E0B" : "#10B981";
+                        const priorityBg = isHigh ? "rgba(239,68,68,0.1)" : isMed ? "rgba(245,158,11,0.1)" : "rgba(16,185,129,0.1)";
 
-                      return (
-                        <div key={i} style={{ padding: '12px 14px', background: 'var(--surface-alt)', borderRadius: 12, border: '1.5px solid var(--border-color)', borderLeft: `4px solid ${priorityColor}`, transition: 'all 0.2s' }}
-                          onMouseEnter={e => { e.currentTarget.style.background = 'white'; e.currentTarget.style.borderColor = 'var(--primary-border)'; e.currentTarget.style.boxShadow = 'var(--shadow-sm)'; }}
-                          onMouseLeave={e => { e.currentTarget.style.background = 'var(--surface-alt)'; e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderLeft = `4px solid ${priorityColor}`; }}
-                        >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                            <span style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--text-tertiary)' }}>{a.date}</span>
-                            <span style={{ fontSize: 9, fontWeight: 800, color: priorityColor, background: priorityBg, padding: '2px 6px', borderRadius: 4, textTransform: 'uppercase' }}>
-                              {a.priority || "Info"}
-                            </span>
+                        return (
+                          <div key={i} style={{ padding: '12px 14px', background: 'var(--surface-alt)', borderRadius: 12, border: '1.5px solid var(--border-color)', borderLeft: `4px solid ${priorityColor}`, transition: 'all 0.2s' }}
+                            onMouseEnter={e => { e.currentTarget.style.background = 'white'; e.currentTarget.style.borderColor = 'var(--primary-border)'; e.currentTarget.style.boxShadow = 'var(--shadow-sm)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'var(--surface-alt)'; e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderLeft = `4px solid ${priorityColor}`; }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                              <span style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--text-tertiary)' }}>{a.date}</span>
+                              <span style={{ fontSize: 9, fontWeight: 800, color: priorityColor, background: priorityBg, padding: '2px 6px', borderRadius: 4, textTransform: 'uppercase' }}>
+                                {a.priority || "Info"}
+                              </span>
+                            </div>
+                            <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{a.title}</p>
+                            <p style={{ margin: 0, fontSize: 11.5, color: 'var(--text-secondary)', lineHeight: 1.45 }}>{a.content}</p>
                           </div>
-                          <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{a.title}</p>
-                          <p style={{ margin: 0, fontSize: 11.5, color: 'var(--text-secondary)', lineHeight: 1.45 }}>{a.content}</p>
-                        </div>
-                      );
-                    })}
+                        );
+                      })
+                    ) : (
+                      <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)', border: '1px dashed var(--border-color)', borderRadius: 12 }}>
+                        <p style={{ margin: 0, fontSize: 13.5 }}>No announcements published yet.</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

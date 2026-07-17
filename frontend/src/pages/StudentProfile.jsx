@@ -459,6 +459,10 @@ const StudentProfile = ({ dashboardData, enrolledCourses = [], token, onProfileU
               {[
                 { label: 'Course', val: course, icon: <BookOpen size={15} color="var(--primary-color)" /> },
                 { label: 'Batch', val: batchName, icon: <Users size={15} color="var(--primary-color)" /> },
+                { label: 'Trainer', val: trainer, icon: <UserCheck size={15} color="var(--primary-color)" /> },
+                { label: 'Batch Status', val: profileData?.batch_status || 'N/A', icon: <CheckCircle size={15} color="var(--primary-color)" /> },
+                { label: 'Start Date', val: profileData?.batch_start_date || 'N/A', icon: <Calendar size={15} color="var(--primary-color)" /> },
+                { label: 'End Date', val: profileData?.batch_end_date || 'N/A', icon: <Calendar size={15} color="var(--primary-color)" /> },
                 { label: 'Attendance %', val: `${attendancePct}%`, icon: <Percent size={15} color="var(--primary-color)" /> }
               ].map((f, i) => (
                 <div
@@ -517,21 +521,21 @@ const StudentProfile = ({ dashboardData, enrolledCourses = [], token, onProfileU
               {/* Total Course Fee */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>Total Course Fee</span>
-                <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-primary)' }}>₹{profileData?.feesTotal || 1500}</span>
+                <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-primary)' }}>₹{profileData?.feesTotal || 20000}</span>
               </div>
 
               {/* Progress Summary box */}
               <div style={{ background: 'var(--surface-alt)', border: '1px solid var(--border-color)', borderRadius: 12, padding: 14 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, fontWeight: 700, marginBottom: 8 }}>
-                  <span style={{ color: 'var(--success-color)' }}>Paid : ₹{profileData?.feesPaidAmount || 1000}</span>
-                  <span style={{ color: 'var(--text-secondary)' }}>Remaining : ₹{profileData?.feesRemainingAmount || 500}</span>
+                  <span style={{ color: 'var(--success-color)' }}>Paid : ₹{profileData?.feesPaidAmount || 0}</span>
+                  <span style={{ color: 'var(--text-secondary)' }}>Remaining : ₹{profileData?.feesRemainingAmount || 20000}</span>
                 </div>
 
                 {/* Progress Bar */}
                 <div style={{ height: 6, background: 'var(--border-color)', borderRadius: 99, overflow: 'hidden', marginBottom: 4 }}>
                   <div style={{ 
                     height: '100%', 
-                    width: `${Math.round(((profileData?.feesPaidAmount || 1000) / (profileData?.feesTotal || 1500)) * 100)}%`, 
+                    width: `${Math.round(((profileData?.feesPaidAmount || 0) / (profileData?.feesTotal || 20000)) * 100)}%`, 
                     background: 'var(--primary-color)', 
                     borderRadius: 99 
                   }} />
@@ -539,7 +543,7 @@ const StudentProfile = ({ dashboardData, enrolledCourses = [], token, onProfileU
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600 }}>
                   <span>Progress</span>
-                  <span>{Math.round(((profileData?.feesPaidAmount || 1000) / (profileData?.feesTotal || 1500)) * 100)}%</span>
+                  <span>{Math.round(((profileData?.feesPaidAmount || 0) / (profileData?.feesTotal || 20000)) * 100)}%</span>
                 </div>
               </div>
 

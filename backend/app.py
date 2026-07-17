@@ -7,21 +7,13 @@ from routes.assignments import assignments_bp
 from routes.student import student_bp
 from routes.admin import admin_bp
 from routes.settings import settings_bp
+from routes.files import files_bp
 
 app = Flask(__name__)
 app.config.from_object(Config)
 
-import os
-from flask import send_from_directory
-UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-
-@app.route('/uploads/<path:filename>', methods=['GET'])
-def serve_uploads(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
-
 # Enable CORS for all routes (important for React Dev server)
+# Trigger reload
 CORS(app, resources={r"/api/*": {
     "origins": [
         "http://localhost:5174",
@@ -40,6 +32,7 @@ app.register_blueprint(assignments_bp, url_prefix='/api/assignments')
 app.register_blueprint(student_bp, url_prefix='/api/student')
 app.register_blueprint(admin_bp, url_prefix='/api/admin')
 app.register_blueprint(settings_bp, url_prefix='/api')
+app.register_blueprint(files_bp, url_prefix='/api/files')
 
 from werkzeug.exceptions import HTTPException
 

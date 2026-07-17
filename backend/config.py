@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 
 # Load variables from .env file
-load_dotenv()
+load_dotenv(override=True)
 
 class Config:
     MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/levlox_lms")

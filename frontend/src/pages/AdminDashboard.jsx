@@ -184,7 +184,7 @@ const AdminDashboard = () => {
   const [recordedBatchFilter, setRecordedBatchFilter] = useState('');
   const [recordedVisibilityFilter, setRecordedVisibilityFilter] = useState('');
   const [recordedUploadTypeFilter, setRecordedUploadTypeFilter] = useState('');
-  const [recordedDateFilter, setRecordedDateFilter] = useState('This Month');
+  const [recordedDateFilter, setRecordedDateFilter] = useState('Today');
   const [recordedStartDateFilter, setRecordedStartDateFilter] = useState('');
   const [recordedEndDateFilter, setRecordedEndDateFilter] = useState('');
 
@@ -196,15 +196,15 @@ const AdminDashboard = () => {
   const [feesPaymentMethodFilter, setFeesPaymentMethodFilter] = useState('');
   const [feesStartDateFilter, setFeesStartDateFilter] = useState('');
   const [feesEndDateFilter, setFeesEndDateFilter] = useState('');
-  const [feesDateFilter, setFeesDateFilter] = useState('This Month');
+  const [feesDateFilter, setFeesDateFilter] = useState('Today');
 
   // Student Date filters
-  const [studentDateFilter, setStudentDateFilter] = useState('This Month');
+  const [studentDateFilter, setStudentDateFilter] = useState('Today');
   const [studentStartDateFilter, setStudentStartDateFilter] = useState('');
   const [studentEndDateFilter, setStudentEndDateFilter] = useState('');
 
   // Batch Date filter (quick selector)
-  const [batchDateFilter, setBatchDateFilter] = useState('This Month');
+  const [batchDateFilter, setBatchDateFilter] = useState('Today');
 
   // Activity score filters
   const [activitySearchQuery, setActivitySearchQuery] = useState('');
@@ -213,7 +213,7 @@ const AdminDashboard = () => {
   const [activityTypeFilter, setActivityTypeFilter] = useState('');
   const [activityScoreMin, setActivityScoreMin] = useState('');
   const [activityScoreMax, setActivityScoreMax] = useState('');
-  const [activityDateFilter, setActivityDateFilter] = useState('This Month');
+  const [activityDateFilter, setActivityDateFilter] = useState('Today');
   const [activityStartDateFilter, setActivityStartDateFilter] = useState('');
   const [activityEndDateFilter, setActivityEndDateFilter] = useState('');
 
@@ -222,7 +222,7 @@ const AdminDashboard = () => {
   const [attCourseFilter, setAttCourseFilter] = useState('');
   const [attBatchFilter, setAttBatchFilter] = useState('');
   const [attStatusFilter, setAttStatusFilter] = useState('');
-  const [attDateFilter, setAttDateFilter] = useState('This Month');
+  const [attDateFilter, setAttDateFilter] = useState('Today');
   const [attStartDateFilter, setAttStartDateFilter] = useState('');
   const [attEndDateFilter, setAttEndDateFilter] = useState('');
 
@@ -231,7 +231,7 @@ const AdminDashboard = () => {
   const [annCourseFilter, setAnnCourseFilter] = useState('');
   const [annBatchFilter, setAnnBatchFilter] = useState('');
   const [annAudienceFilter, setAnnAudienceFilter] = useState('');
-  const [annDateFilter, setAnnDateFilter] = useState('This Month');
+  const [annDateFilter, setAnnDateFilter] = useState('Today');
   const [annStartDateFilter, setAnnStartDateFilter] = useState('');
   const [annEndDateFilter, setAnnEndDateFilter] = useState('');
 
@@ -283,6 +283,10 @@ const AdminDashboard = () => {
   const [showRecordedClassModal, setShowRecordedClassModal] = useState(false);
   const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
   const [showActivityScoreModal, setShowActivityScoreModal] = useState(false);
+  const [activityPresets, setActivityPresets] = useState([]);
+  const [showPresetManager, setShowPresetManager] = useState(false);
+  const [newPresetLabel, setNewPresetLabel] = useState('');
+  const [newPresetPoints, setNewPresetPoints] = useState('');
 
   // Export State and Functions
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
@@ -702,53 +706,11 @@ const AdminDashboard = () => {
   };
 
   const getFilteredLiveClasses = () => {
-    const getDummyClasses = () => {
-      const todayStr = '2026-07-10';
-      const tomorrowStr = '2026-07-11';
-      const yesterdayStr = '2026-07-09';
-      
-      return [
-        {
-          _id: 'dummy-1',
-          title: 'Python Basics',
-          batch_name: 'Full Stack Batch A',
-          instructor: 'Sri',
-          date: todayStr,
-          time: '7:00 PM - 8:00 PM',
-          status: 'Live',
-          students_joined: 32,
-          meet_link: 'https://meet.google.com/abc-defg-hij'
-        },
-        {
-          _id: 'dummy-2',
-          title: 'React Components',
-          batch_name: 'Batch B',
-          instructor: 'Rahul',
-          date: tomorrowStr,
-          time: '6:00 PM - 7:00 PM',
-          status: 'Upcoming',
-          students_joined: 0,
-          meet_link: 'https://meet.google.com/abc-defg-hij'
-        },
-        {
-          _id: 'dummy-3',
-          title: 'Java OOP',
-          batch_name: 'Batch C',
-          instructor: 'Kavya',
-          date: yesterdayStr,
-          time: '5:00 PM - 6:30 PM',
-          status: 'Completed',
-          students_joined: 45,
-          meet_link: 'https://meet.google.com/abc-defg-hij'
-        }
-      ];
-    };
-
-    const allAvailableClasses = [...liveClasses.map(c => ({
+    const allAvailableClasses = liveClasses.map(c => ({
       ...c,
       batch_name: batches.find(b => b.id === c.batch_id)?.name || 'General Batch',
       students_joined: c.students_joined || 0
-    })), ...getDummyClasses()];
+    }));
 
     return allAvailableClasses.filter(c => {
       const query = sessionSearch.toLowerCase();
@@ -1190,9 +1152,9 @@ const AdminDashboard = () => {
     const rows = filteredStudentsForFees.map(s => [
       `"${s.rollNumber || ''}"`,
       `"${s.name || ''}"`,
-      s.feesTotal || 1500,
+      s.feesTotal || 20000,
       s.feesPaidAmount || 0,
-      s.feesRemainingAmount ?? (s.feesTotal || 1500),
+      s.feesRemainingAmount ?? (s.feesTotal || 20000),
       `"${s.feesStatus || 'Pending'}"`,
       `"${s.feesPaymentDate || 'N/A'}"`
     ]);
@@ -1212,9 +1174,9 @@ const AdminDashboard = () => {
     const rows = filteredStudentsForFees.map(s => [
       s.rollNumber || '',
       s.name || '',
-      s.feesTotal || 1500,
+      s.feesTotal || 20000,
       s.feesPaidAmount || 0,
-      s.feesRemainingAmount ?? (s.feesTotal || 1500),
+      s.feesRemainingAmount ?? (s.feesTotal || 20000),
       s.feesStatus || 'Pending',
       s.feesPaymentDate || 'N/A'
     ]);
@@ -1237,9 +1199,9 @@ const AdminDashboard = () => {
         <tr>
           <td>${s.rollNumber || ''}</td>
           <td>${s.name || ''}</td>
-          <td>$${s.feesTotal || 1500}</td>
-          <td>$${s.feesPaidAmount || 0}</td>
-          <td>$${s.feesRemainingAmount ?? (s.feesTotal || 1500)}</td>
+          <td>₹${s.feesTotal || 20000}</td>
+          <td>₹${s.feesPaidAmount || 0}</td>
+          <td>₹${s.feesRemainingAmount ?? (s.feesTotal || 20000)}</td>
           <td>${s.feesStatus || 'Pending'}</td>
           <td>${s.feesPaymentDate || 'N/A'}</td>
         </tr>
@@ -1509,6 +1471,7 @@ const AdminDashboard = () => {
   const [actDate, setActDate] = useState(new Date().toISOString().substring(0, 10));
   const [actMeeting, setActMeeting] = useState('');
   const [actType, setActType] = useState('+10 Answered Questions');
+  const [isCustomAct, setIsCustomAct] = useState(false);
   const [actPoints, setActPoints] = useState(10);
   const [actRemarks, setActRemarks] = useState('');
   const [batchStudents, setBatchStudents] = useState([]);
@@ -1812,6 +1775,66 @@ const AdminDashboard = () => {
     }
   };
 
+  const fetchActivityPresets = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/admin/activity-presets`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setActivityPresets(data || []);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleCreatePreset = async () => {
+    if (!newPresetLabel || newPresetPoints === '') {
+      showModal("Warning", "Please enter preset label and points.", "warning");
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE}/admin/activity-presets`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ label: newPresetLabel, points: parseInt(newPresetPoints) })
+      });
+      if (response.ok) {
+        showModal("Success", "Preset created successfully!", "success");
+        setNewPresetLabel('');
+        setNewPresetPoints('');
+        fetchActivityPresets();
+      } else {
+        const err = await response.json();
+        showModal("Error", err.message || "Failed to create preset", "error");
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleDeletePreset = async (presetId) => {
+    try {
+      const response = await fetch(`${API_BASE}/admin/activity-presets/${presetId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        showModal("Success", "Preset deleted successfully!", "success");
+        fetchActivityPresets();
+      } else {
+        const err = await response.json();
+        showModal("Error", err.message || "Failed to delete preset", "error");
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   // Notification Modals
   const [modalOpen, setModalOpen] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
@@ -2099,6 +2122,7 @@ const AdminDashboard = () => {
     } else if (activeTab === 'activity-score') {
       fetchBatches();
       fetchActivityLogs();
+      fetchActivityPresets();
     }
   }, [activeTab, currentPage, attendancePage, feesPage, searchQuery, statusFilter, feesFilter, courseFilter, batchFilter, feesSearchQuery, feesStatusFilter, feesCourseFilter, feesBatchFilter, studentDateFilter, studentStartDateFilter, studentEndDateFilter]);
 
@@ -2460,7 +2484,7 @@ const AdminDashboard = () => {
 
   const handleEditFeesClick = (student) => {
     setEditingFeesStudent(student);
-    setEditTotal(student.feesTotal || 1500);
+    setEditTotal(student.feesTotal || 20000);
     setEditPaid(student.feesPaidAmount || 0);
     setEditStatus(student.feesStatus || 'Pending');
     setEditPayDate(student.feesPaymentDate || '');
@@ -4483,27 +4507,36 @@ const AdminDashboard = () => {
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      {paginatedAnn.map((item, idx) => (
-                        <div key={idx} className="feed-item-premium" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                              <span className="badge-status paid" style={{ fontSize: '9px' }}>{item.priority}</span>
-                              {item.is_pinned && <span style={{ fontSize: '10px', color: 'var(--primary-color)', fontWeight: '700' }}>📌 Pinned</span>}
+                      {paginatedAnn.map((item, idx) => {
+                        const associatedBatch = batches.find(b => b.id === item.batch_id);
+                        return (
+                          <div key={idx} className="feed-item-premium" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                <span className="badge-status paid" style={{ fontSize: '9px' }}>{item.priority}</span>
+                                {item.is_pinned && <span style={{ fontSize: '10px', color: 'var(--primary-color)', fontWeight: '700' }}>📌 Pinned</span>}
+                              </div>
+                              <div style={{ display: 'flex', gap: '4px' }}>
+                                <button type="button" className="btn btn-outline" style={{ padding: '6px', height: '28px' }} onClick={() => handleEditAnnClick(item)}>
+                                  <Pencil size={12} />
+                                </button>
+                                <button type="button" className="btn btn-danger" style={{ padding: '6px', height: '28px', backgroundColor: 'var(--danger-color)', color: 'white' }} onClick={() => deleteAnnouncement(item._id)}>
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
                             </div>
-                            <div style={{ display: 'flex', gap: '4px' }}>
-                              <button type="button" className="btn btn-outline" style={{ padding: '6px', height: '28px' }} onClick={() => handleEditAnnClick(item)}>
-                                <Pencil size={12} />
-                              </button>
-                              <button type="button" className="btn btn-danger" style={{ padding: '6px', height: '28px', backgroundColor: 'var(--danger-color)', color: 'white' }} onClick={() => deleteAnnouncement(item._id)}>
-                                <Trash2 size={12} />
-                              </button>
+                            <h5 style={{ fontWeight: '700', fontSize: '14.5px', margin: 0 }}>{item.title}</h5>
+                            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>{item.content}</p>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginTop: '4px' }}>
+                              <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Broadcasted: {item.date}</span>
+                              <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>•</span>
+                              <span style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--primary-color)' }}>
+                                Batch: {associatedBatch ? `${associatedBatch.name} (${associatedBatch.course_name})` : 'All Batches'}
+                              </span>
                             </div>
                           </div>
-                          <h5 style={{ fontWeight: '700', fontSize: '14.5px', margin: 0 }}>{item.title}</h5>
-                          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>{item.content}</p>
-                          <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Broadcasted: {item.date}</span>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
 
                     {/* Pagination */}
@@ -4592,9 +4625,9 @@ const AdminDashboard = () => {
                     <tr key={student.id}>
                       <td><strong>{student.rollNumber}</strong></td>
                       <td>{student.name}</td>
-                      <td>${student.feesTotal || 1500}</td>
-                      <td style={{ color: 'var(--success-color)' }}>${student.feesPaidAmount || 0}</td>
-                      <td style={{ color: 'var(--danger-color)' }}>${student.feesRemainingAmount ?? (student.feesTotal || 1500)}</td>
+                      <td>₹{student.feesTotal || 20000}</td>
+                      <td style={{ color: 'var(--success-color)' }}>₹{student.feesPaidAmount || 0}</td>
+                      <td style={{ color: 'var(--danger-color)' }}>₹{student.feesRemainingAmount ?? (student.feesTotal || 20000)}</td>
                       <td>
                         <span className={`badge-status ${student.feesStatus === 'Paid' ? 'paid' : 'unpaid'}`}>
                           {student.feesStatus || 'Pending'}
@@ -4684,7 +4717,7 @@ const AdminDashboard = () => {
               onExportExcel={exportActivityToExcel}
               onExportPDF={exportActivityToPDF}
               actionLabel="+ Add Activity Score"
-              onActionClick={() => setShowActivityScoreModal(true)}
+              onActionClick={() => { setShowActivityScoreModal(true); fetchActivityPresets(); }}
             />
 
             <div className="dashboard-card-section" style={{ display: 'flex', flexDirection: 'column', minHeight: '500px', width: '100%' }}>
@@ -5606,7 +5639,7 @@ const AdminDashboard = () => {
           <div className="modal-content modal-lg">
             <div className="modal-header">
               <h3 className="modal-title">
-                {editingRecordedClass ? '✏️ Edit Lesson' : '➕ Upload New Lesson'}
+                {editingRecordedClass ? 'Edit Lesson' : 'Upload New Lesson'}
               </h3>
               <button className="modal-close-red" onClick={() => {
                 setShowRecordedClassModal(false);
@@ -5930,29 +5963,109 @@ const AdminDashboard = () => {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label" htmlFor="actPreset">Activity Preset Type</label>
-                    <select 
-                      id="actPreset" 
-                      className="form-select" 
-                      value={actType} 
-                      onChange={(e) => {
-                        const type = e.target.value;
-                        setActType(type);
-                        if (type.includes("+10")) setActPoints(10);
-                        else if (type.includes("+5")) setActPoints(5);
-                        else if (type.includes("+3")) setActPoints(3);
-                        else if (type.includes("+2")) setActPoints(2);
-                        else if (type.includes("-5")) setActPoints(-5);
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label className="form-label">Activity Preset Type</label>
+                      {showPresetManager ? (
+                        <button 
+                          type="button" 
+                          className="text-link-btn" 
+                          style={{ fontSize: '11px', color: '#6C3CF0', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                          onClick={() => setShowPresetManager(false)}
+                        >
+                          Close Preset Manager
+                        </button>
+                      ) : (
+                        <button 
+                          type="button" 
+                          className="text-link-btn" 
+                          style={{ fontSize: '11px', color: '#6C3CF0', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                          onClick={() => setShowPresetManager(true)}
+                        >
+                          ⚙️ Manage Presets
+                        </button>
+                      )}
+                    </div>
+                    <CustomDropdown
+                      label="Activity Preset Type"
+                      value={isCustomAct ? 'Custom' : actType}
+                      onChange={(val) => {
+                        if (val === 'Custom') {
+                          setIsCustomAct(true);
+                          setActType('');
+                          setActPoints(0);
+                        } else {
+                          setIsCustomAct(false);
+                          setActType(val);
+                          const preset = activityPresets.find(p => p.label === val);
+                          if (preset) {
+                            setActPoints(preset.points);
+                          }
+                        }
                       }}
-                    >
-                      <option value="+10 Answered Questions">Answered Questions (+10 pts)</option>
-                      <option value="+5 Active Participation">Active Participation (+5 pts)</option>
-                      <option value="+3 Attendance on Time">Attendance on Time (+3 pts)</option>
-                      <option value="+5 Helped Others">Helped Others (+5 pts)</option>
-                      <option value="+2 Camera On">Camera On (+2 pts)</option>
-                      <option value="-5 Penalty/Deduction">Deduction (-5 pts)</option>
-                      <option value="Custom">Custom Activity Type</option>
-                    </select>
+                      width="100%"
+                      options={[
+                        ...activityPresets.map(p => ({
+                          value: p.label,
+                          label: `${p.label} (${p.points > 0 ? `+${p.points}` : p.points} pts)`
+                        })),
+                        { value: 'Custom', label: 'Custom Activity Type' }
+                      ]}
+                    />
+
+                    {showPresetManager && (
+                      <div className="preset-manager-inline" style={{ marginTop: '10px', padding: '12px', border: '1px solid #E5E7EB', borderRadius: '8px', backgroundColor: '#F9FAFB' }}>
+                        <h4 style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#374151', fontWeight: 600 }}>Dynamic Presets</h4>
+                        <div style={{ maxHeight: '100px', overflowY: 'auto', marginBottom: '10px', border: '1px solid #E5E7EB', borderRadius: '4px', padding: '4px', backgroundColor: '#fff' }}>
+                          {activityPresets.length === 0 ? (
+                            <div style={{ fontSize: '11px', color: '#9CA3AF', padding: '4px' }}>No presets. Seeding on load...</div>
+                          ) : (
+                            activityPresets.map(p => (
+                              <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px', fontSize: '11px', borderBottom: '1px solid #F3F4F6' }}>
+                                <span>{p.label} ({p.points > 0 ? `+${p.points}` : p.points} pts)</span>
+                                <button 
+                                  type="button" 
+                                  onClick={() => handleDeletePreset(p.id)} 
+                                  style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', padding: 0 }}
+                                  title="Delete Preset"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                        
+                        <h4 style={{ margin: '0 0 6px 0', fontSize: '11px', color: '#374151', fontWeight: 600 }}>Create Preset</h4>
+                        <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+                          <input 
+                            type="text" 
+                            className="form-input" 
+                            placeholder="e.g. Completed Extra Lab Task" 
+                            value={newPresetLabel} 
+                            onChange={(e) => setNewPresetLabel(e.target.value)} 
+                            style={{ flex: 2, height: '32px', fontSize: '11px', padding: '0 8px' }}
+                          />
+                          <input 
+                            type="number" 
+                            className="form-input" 
+                            placeholder="Pts" 
+                            value={newPresetPoints} 
+                            onChange={(e) => setNewPresetPoints(e.target.value)} 
+                            style={{ flex: 1, height: '32px', fontSize: '11px', padding: '0 8px' }}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                          <button 
+                            type="button" 
+                            className="btn btn-primary" 
+                            style={{ padding: '2px 10px', fontSize: '11px', height: '26px', lineHeight: '22px' }}
+                            onClick={handleCreatePreset}
+                          >
+                            Save
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="form-group">
@@ -5960,10 +6073,34 @@ const AdminDashboard = () => {
                     <input id="actPoints" type="number" className="form-input" value={actPoints} onChange={(e) => setActPoints(parseInt(e.target.value) || 0)} required />
                   </div>
 
-                  {actType === 'Custom' && (
+                  {isCustomAct && (
                     <div className="form-group grid-col-span-2">
                       <label className="form-label" htmlFor="customActType">Custom Activity Title</label>
-                      <input id="customActType" type="text" className="form-input" placeholder="e.g. Completed Extra Lab Task" onChange={(e) => setActType(e.target.value)} required />
+                      <div style={{ display: 'flex', gap: '10px' }}>
+                        <input 
+                          id="customActType" 
+                          type="text" 
+                          className="form-input" 
+                          placeholder="e.g. Completed Extra Lab Task" 
+                          value={actType}
+                          onChange={(e) => setActType(e.target.value)} 
+                          required 
+                          style={{ flex: 1 }}
+                        />
+                        <button 
+                          type="button" 
+                          className="btn btn-outline" 
+                          style={{ padding: '0 16px', height: '44px', fontSize: '13px' }}
+                          onClick={() => {
+                            setIsCustomAct(false);
+                            const defaultPreset = activityPresets[0];
+                            setActType(defaultPreset ? defaultPreset.label : '');
+                            setActPoints(defaultPreset ? defaultPreset.points : 0);
+                          }}
+                        >
+                          Back to Presets
+                        </button>
+                      </div>
                     </div>
                   )}
 

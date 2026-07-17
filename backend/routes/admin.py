@@ -8,7 +8,7 @@ admin_bp = Blueprint('admin', __name__)
 
 def create_notification(noti_type, title, message, student_id=None):
     doc = {
-        "type": noti_type,
+        "type": noti_type,  
         "title": title.strip(),
         "message": message.strip(),
         "created_at": datetime.datetime.utcnow().strftime("%B %d, %Y %I:%M %p")
@@ -45,7 +45,7 @@ def get_stats():
     # Fees stats
     students = list(db.users.find({"role": "student"}))
     total_collected = sum(float(s.get('feesPaidAmount', 0)) for s in students)
-    total_expected = sum(float(s.get('feesTotal', 1500)) for s in students)
+    total_expected = sum(float(s.get('feesTotal', 20000)) for s in students)
     pending_amount = sum(float(s.get('feesRemainingAmount', 0)) for s in students)
     pending_payments_count = db.users.count_documents({"role": "student", "feesStatus": {"$ne": "Paid"}})
     paid_students_count = db.users.count_documents({"role": "student", "feesStatus": "Paid"})
@@ -171,7 +171,7 @@ def get_stats():
         if s.get('feesStatus') == 'Paid' and s.get('feesPaymentDate'):
             timeline_activities.append({
                 "type": "fee",
-                "message": f"Fee received: {s.get('name')} completed payment of ${s.get('feesPaidAmount', 1500)}",
+                "message": f"Fee received: {s.get('name')} completed payment of ₹{s.get('feesPaidAmount', 20000)}",
                 "date": s.get('feesPaymentDate'),
                 "timestamp": s['_id'].generation_time
             })
@@ -463,9 +463,9 @@ def create_student():
         "permanent_address": permanent_address,
         "company": company,
         "feesPaid": False,
-        "feesTotal": 1500,
+        "feesTotal": 20000,
         "feesPaidAmount": 0,
-        "feesRemainingAmount": 1500,
+        "feesRemainingAmount": 20000,
         "feesStatus": feesStatus,
         "feesPaymentDate": "",
         "feesDueDate": "2026-08-31",
@@ -739,8 +739,9 @@ def update_student(student_id):
         if feesStatus:
             update_doc["feesStatus"] = feesStatus
             update_doc["feesPaid"] = feesStatus == 'Paid'
-            update_doc["feesPaidAmount"] = 1500 if feesStatus == 'Paid' else 0
-            update_doc["feesRemainingAmount"] = 0 if feesStatus == 'Paid' else 1500
+            total_fee = student.get('feesTotal', 20000)
+            update_doc["feesPaidAmount"] = total_fee if feesStatus == 'Paid' else 0
+            update_doc["feesRemainingAmount"] = 0 if feesStatus == 'Paid' else total_fee
             if feesStatus == 'Paid':
                 update_doc["feesPaymentDate"] = datetime.datetime.utcnow().strftime("%Y-%m-%d")
 
@@ -812,7 +813,7 @@ def toggle_student_fees(student_id):
         
         current_status = student.get('feesStatus', 'Pending')
         new_status = 'Paid' if current_status != 'Paid' else 'Pending'
-        total = student.get('feesTotal', 1500)
+        total = student.get('feesTotal', 20000)
         
         if new_status == 'Paid':
             db.users.update_one(
@@ -845,7 +846,7 @@ def toggle_student_fees(student_id):
 def update_student_fees(student_id):
     data = request.get_json() or {}
     try:
-        total = int(data.get('feesTotal', 1500))
+        total = int(data.get('feesTotal', 20000))
         paid = int(data.get('feesPaidAmount', 0))
         status = data.get('feesStatus', 'Pending')
         pay_date = data.get('feesPaymentDate', '')
@@ -986,10 +987,8 @@ def list_recorded_classes():
 @admin_bp.route('/upload', methods=['POST'])
 @token_required(allowed_roles=['admin'])
 def upload_file_api():
-    import os
-    import time
     import werkzeug.utils
-    from flask import current_app
+    import gridfs
     try:
         if 'file' not in request.files:
             return jsonify({'message': 'No file part in the request'}), 400
@@ -998,11 +997,9 @@ def upload_file_api():
             return jsonify({'message': 'No selected file'}), 400
         if file:
             filename = werkzeug.utils.secure_filename(file.filename)
-            name, ext = os.path.splitext(filename)
-            filename = f"{name}_{int(time.time())}{ext}"
-            filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
-            file.save(filepath)
-            file_url = f"http://localhost:5000/uploads/{filename}"
+            fs = gridfs.GridFS(getattr(db, "_db", db))
+            file_id = fs.put(file, filename=filename, content_type=file.content_type)
+            file_url = f"http://localhost:5000/api/files/{file_id}"
             return jsonify({'url': file_url, 'filename': filename}), 200
     except Exception as e:
         return jsonify({'message': 'Upload failed', 'error': str(e)}), 500
