@@ -6,7 +6,8 @@ import {
   LogOut, CheckCircle, Award, Percent, CalendarCheck,
   Pencil, Eye, ChevronLeft, ChevronRight, Search, Filter,
   PlayCircle, Clock3, TriangleAlert, CircleAlert, Wallet as WalletIcon, Trophy,
-  Key, RefreshCw, ChevronDown, X, Download, FileText, FileSpreadsheet
+  Key, RefreshCw, ChevronDown, X, Download, FileText, FileSpreadsheet,
+  User, Mail, Phone, Lock, EyeOff, Camera, Save, Shield, Menu
 } from 'lucide-react';
 import CustomModal from '../components/Modal';
 import FilterBar from '../components/FilterBar';
@@ -1356,6 +1357,7 @@ const AdminDashboard = () => {
 
   // Sidebar collapsible state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Modals
   const [editingStudent, setEditingStudent] = useState(null);
@@ -1464,6 +1466,35 @@ const AdminDashboard = () => {
   // Portal settings states
   const [portalName, setPortalName] = useState('Levlox Student Portal');
   const [portalLogo, setPortalLogo] = useState('');
+
+  // Admin Profile and settings states
+  const [adminProfileData, setAdminProfileData] = useState(null);
+  const [loadingAdminProfile, setLoadingAdminProfile] = useState(true);
+  const [savingAdminAccount, setSavingAdminAccount] = useState(false);
+  const [savingAdminPassword, setSavingAdminPassword] = useState(false);
+  const [adminToast, setAdminToast] = useState('');
+
+  // Admin Account Fields
+  const [adminName, setAdminName] = useState('');
+  const [adminEmail, setAdminEmail] = useState('');
+  const [adminPhone, setAdminPhone] = useState('');
+  const [adminProfilePic, setAdminProfilePic] = useState('');
+
+  // Admin Password Fields
+  const [adminCurrPassword, setAdminCurrPassword] = useState('');
+  const [adminNewPassword, setAdminNewPassword] = useState('');
+  const [adminConfirmPassword, setAdminConfirmPassword] = useState('');
+  const [showAdminCurrPassword, setShowAdminCurrPassword] = useState(false);
+  const [showAdminNewPassword, setShowAdminNewPassword] = useState(false);
+  const [showAdminConfirmPassword, setShowAdminConfirmPassword] = useState(false);
+
+  // Admin Phone Update OTP State
+  const [isAdminUpdatingPhone, setIsAdminUpdatingPhone] = useState(false);
+  const [adminTempPhone, setAdminTempPhone] = useState('');
+  const [adminPhoneOtp, setAdminPhoneOtp] = useState('');
+  const [adminPhoneOtpSent, setAdminPhoneOtpSent] = useState(false);
+  const [adminPhoneTimer, setAdminPhoneTimer] = useState(0);
+  const [verifyingAdminPhone, setVerifyingAdminPhone] = useState(false);
 
   // Activity score management states
   const [actBatchId, setActBatchId] = useState('');
@@ -1906,6 +1937,209 @@ const AdminDashboard = () => {
     reader.readAsDataURL(file);
   };
 
+  const showAdminToast = (msg) => {
+    setAdminToast(msg);
+    setTimeout(() => setAdminToast(''), 4000);
+  };
+
+  const fetchAdminProfile = async () => {
+    setLoadingAdminProfile(true);
+    try {
+      const r = await fetch(`${API_BASE}/admin/profile`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (r.ok) {
+        const d = await r.json();
+        setAdminProfileData(d);
+        setAdminName(d.name || '');
+        setAdminEmail(d.email || '');
+        setAdminPhone(d.phone || '');
+        setAdminProfilePic(d.profile_pic || '');
+      }
+    } catch (e) {
+      console.error(e);
+      showAdminToast('Error loading profile data.');
+    } finally {
+      setLoadingAdminProfile(false);
+    }
+  };
+
+  const handleSaveAdminAccount = async (e) => {
+    if (e) e.preventDefault();
+    if (!adminName.trim()) {
+      showModal('Validation Error', 'Full Name is required.', 'warning');
+      return;
+    }
+    if (!adminEmail.trim() || !/\S+@\S+\.\S+/.test(adminEmail)) {
+      showModal('Validation Error', 'Please enter a valid email address.', 'warning');
+      return;
+    }
+
+    setSavingAdminAccount(true);
+    try {
+      const r = await fetch(`${API_BASE}/admin/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: adminName.trim(),
+          email: adminEmail.trim().toLowerCase(),
+          profile_pic: adminProfilePic
+        })
+      });
+      if (r.ok) {
+        showAdminToast('Account details updated successfully ✓');
+        fetchAdminProfile();
+        // Update LocalStorage user name
+        const lu = JSON.parse(localStorage.getItem('user') || '{}');
+        lu.name = adminName.trim();
+        lu.email = adminEmail.trim();
+        localStorage.setItem('user', JSON.stringify(lu));
+      } else {
+        const err = await r.json();
+        showModal('Update Failed', err.message || 'Could not update profile details.', 'error');
+      }
+    } catch (e) {
+      console.error(e);
+      showModal('Error', 'An error occurred while saving account changes.', 'error');
+    } finally {
+      setSavingAdminAccount(false);
+    }
+  };
+
+  const handleAdminImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => setAdminProfilePic(reader.result);
+    reader.readAsDataURL(file);
+  };
+
+  const handleAdminChangePassword = async (e) => {
+    if (e) e.preventDefault();
+    if (!adminCurrPassword) {
+      showModal('Validation Error', 'Please enter your current password.', 'warning');
+      return;
+    }
+    if (adminNewPassword.length < 8) {
+      showModal('Validation Error', 'New password must be at least 8 characters long.', 'warning');
+      return;
+    }
+    if (adminNewPassword !== adminConfirmPassword) {
+      showModal('Validation Error', 'New passwords do not match.', 'warning');
+      return;
+    }
+
+    setSavingAdminPassword(true);
+    try {
+      const r = await fetch(`${API_BASE}/admin/change-password`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          current_password: adminCurrPassword,
+          new_password: adminNewPassword
+        })
+      });
+      const d = await r.json();
+      if (r.ok) {
+        showModal('Password Updated', 'Your password was changed successfully!', 'success');
+        setAdminCurrPassword('');
+        setAdminNewPassword('');
+        setAdminConfirmPassword('');
+      } else {
+        showModal('Update Failed', d.message || 'Incorrect current password.', 'error');
+      }
+    } catch (e) {
+      console.error(e);
+      showModal('Error', 'An error occurred during password change.', 'error');
+    } finally {
+      setSavingAdminPassword(false);
+    }
+  };
+
+  const requestAdminPhoneOtp = async () => {
+    if (!adminTempPhone || adminTempPhone.length !== 10 || !/^\d+$/.test(adminTempPhone)) {
+      showModal('Validation Error', 'Please enter a valid 10-digit mobile number.', 'warning');
+      return;
+    }
+    setVerifyingAdminPhone(true);
+    try {
+      const r = await fetch(`${API_BASE}/admin/update-phone/request`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ new_phone: adminTempPhone })
+      });
+      const d = await r.json();
+      if (r.ok) {
+        setAdminPhoneOtpSent(true);
+        setAdminPhoneTimer(120); // 2 minutes countdown
+        showAdminToast('OTP sent successfully ✓ Check backend logs.');
+      } else {
+        showModal('Failed to send OTP', d.message || 'Mobile number already registered.', 'error');
+      }
+    } catch (e) {
+      console.error(e);
+      showModal('Error', 'An error occurred while requesting OTP.', 'error');
+    } finally {
+      setVerifyingAdminPhone(false);
+    }
+  };
+
+  const verifyAdminPhoneOtp = async () => {
+    if (!adminPhoneOtp || adminPhoneOtp.length !== 6) {
+      showModal('Validation Error', 'Please enter a valid 6-digit OTP code.', 'warning');
+      return;
+    }
+    setVerifyingAdminPhone(true);
+    try {
+      const r = await fetch(`${API_BASE}/admin/update-phone/verify`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ new_phone: adminTempPhone, otp: adminPhoneOtp })
+      });
+      const d = await r.json();
+      if (r.ok) {
+        showModal('Verification Successful', 'Mobile number updated successfully!', 'success');
+        setAdminPhone(adminTempPhone);
+        setAdminPhoneOtp('');
+        setAdminPhoneOtpSent(false);
+        setIsAdminUpdatingPhone(false);
+        fetchAdminProfile();
+      } else {
+        showModal('Verification Failed', d.message || 'Invalid or expired OTP code.', 'error');
+      }
+    } catch (e) {
+      console.error(e);
+      showModal('Error', 'An error occurred during verification.', 'error');
+    } finally {
+      setVerifyingAdminPhone(false);
+    }
+  };
+
+  // Admin Phone Timer
+  useEffect(() => {
+    let interval = null;
+    if (adminPhoneTimer > 0) {
+      interval = setInterval(() => {
+        setAdminPhoneTimer(prev => prev - 1);
+      }, 1000);
+    } else {
+      clearInterval(interval);
+    }
+    return () => clearInterval(interval);
+  }, [adminPhoneTimer]);
+
 
 
   // ══════════════════════════════════════════════════════
@@ -2123,6 +2357,10 @@ const AdminDashboard = () => {
       fetchBatches();
       fetchActivityLogs();
       fetchActivityPresets();
+    }
+    if (activeTab === 'settings') {
+      fetchPortalSettings();
+      fetchAdminProfile();
     }
   }, [activeTab, currentPage, attendancePage, feesPage, searchQuery, statusFilter, feesFilter, courseFilter, batchFilter, feesSearchQuery, feesStatusFilter, feesCourseFilter, feesBatchFilter, studentDateFilter, studentStartDateFilter, studentEndDateFilter]);
 
@@ -3073,8 +3311,11 @@ const AdminDashboard = () => {
 
   return (
     <div className="dashboard-layout">
+      {/* Mobile Sidebar Backdrop */}
+      <div className={`sidebar-backdrop ${mobileMenuOpen ? 'show' : ''}`} onClick={() => setMobileMenuOpen(false)} />
+
       {/* Collapsible Sidebar */}
-      <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
+      <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''} ${mobileMenuOpen ? 'mobile-open' : ''}`}>
         <div className="sidebar-header" style={{ 
           display: 'flex', 
           flexDirection: sidebarCollapsed ? 'column' : 'row',
@@ -3106,53 +3347,53 @@ const AdminDashboard = () => {
 
         <nav className="sidebar-menu" style={{ overflowY: 'auto' }}>
           <span className="sidebar-section-label">Main Menu</span>
-          <button className={`sidebar-link ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>
+          <button className={`sidebar-link ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => { setActiveTab('dashboard'); setMobileMenuOpen(false); }}>
             <Clock size={18} />
             <span className="sidebar-link-text">Dashboard</span>
           </button>
           
-          <button className={`sidebar-link ${activeTab === 'students' ? 'active' : ''}`} onClick={() => { setActiveTab('students'); setCurrentPage(1); }}>
+          <button className={`sidebar-link ${activeTab === 'students' ? 'active' : ''}`} onClick={() => { setActiveTab('students'); setCurrentPage(1); setMobileMenuOpen(false); }}>
             <Users size={18} />
             <span className="sidebar-link-text">Students</span>
           </button>
 
-          <button className={`sidebar-link ${activeTab === 'batches' ? 'active' : ''}`} onClick={() => { setActiveTab('batches'); fetchBatches(); }}>
+          <button className={`sidebar-link ${activeTab === 'batches' ? 'active' : ''}`} onClick={() => { setActiveTab('batches'); fetchBatches(); setMobileMenuOpen(false); }}>
             <GraduationCap size={18} />
             <span className="sidebar-link-text">Batch Management</span>
           </button>
           
-          <button className={`sidebar-link ${activeTab === 'live-classes' ? 'active' : ''}`} onClick={() => setActiveTab('live-classes')}>
+          <button className={`sidebar-link ${activeTab === 'live-classes' ? 'active' : ''}`} onClick={() => { setActiveTab('live-classes'); setMobileMenuOpen(false); }}>
             <Video size={18} />
             <span className="sidebar-link-text">Live Classes</span>
           </button>
           
-          <button className={`sidebar-link ${activeTab === 'attendance' ? 'active' : ''}`} onClick={() => { setActiveTab('attendance'); setCurrentPage(1); }}>
+          <button className={`sidebar-link ${activeTab === 'attendance' ? 'active' : ''}`} onClick={() => { setActiveTab('attendance'); setCurrentPage(1); setMobileMenuOpen(false); }}>
             <Percent size={18} />
             <span className="sidebar-link-text">Attendance</span>
           </button>
           
-          <button className={`sidebar-link ${activeTab === 'recorded-classes' ? 'active' : ''}`} onClick={() => setActiveTab('recorded-classes')}>
+          <button className={`sidebar-link ${activeTab === 'recorded-classes' ? 'active' : ''}`} onClick={() => { setActiveTab('recorded-classes'); setMobileMenuOpen(false); }}>
             <PlayCircle size={18} />
             <span className="sidebar-link-text">Recorded Classes</span>
           </button>
 
           
-          <button className={`sidebar-link ${activeTab === 'announcements' ? 'active' : ''}`} onClick={() => setActiveTab('announcements')}>
+          <button className={`sidebar-link ${activeTab === 'announcements' ? 'active' : ''}`} onClick={() => { setActiveTab('announcements'); setMobileMenuOpen(false); }}>
             <Megaphone size={18} />
             <span className="sidebar-link-text">Announcements</span>
           </button>
           
-          <button className={`sidebar-link ${activeTab === 'fees-management' ? 'active' : ''}`} onClick={() => { setActiveTab('fees-management'); setCurrentPage(1); }}>
+          <button className={`sidebar-link ${activeTab === 'fees-management' ? 'active' : ''}`} onClick={() => { setActiveTab('fees-management'); setCurrentPage(1); setMobileMenuOpen(false); }}>
             <Wallet size={18} />
             <span className="sidebar-link-text">Fees Management</span>
           </button>
           
-          <button className={`sidebar-link ${activeTab === 'activity-score' ? 'active' : ''}`} onClick={() => setActiveTab('activity-score')}>
+          <button className={`sidebar-link ${activeTab === 'activity-score' ? 'active' : ''}`} onClick={() => { setActiveTab('activity-score'); setMobileMenuOpen(false); }}>
             <Trophy size={18} />
             <span className="sidebar-link-text">Activity Scores</span>
           </button>
           
-          <button className={`sidebar-link ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
+          <button className={`sidebar-link ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => { setActiveTab('settings'); setMobileMenuOpen(false); }}>
             <Settings size={18} />
             <span className="sidebar-link-text">Settings</span>
           </button>
@@ -3172,6 +3413,9 @@ const AdminDashboard = () => {
         
         {/* Top Navbar */}
         <header className="top-navbar">
+          <button className="drawer-toggle-btn" onClick={() => setMobileMenuOpen(true)}>
+            <Menu size={22} strokeWidth={1.75} />
+          </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <img src={leveloxIcon} alt="Levlox Logo" style={{ height: '36px', width: '36px', objectFit: 'contain', borderRadius: '8px' }} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
@@ -4788,37 +5032,391 @@ const AdminDashboard = () => {
         )}
 
         {/* Settings Tab */}
+        {/* Settings Tab */}
         {activeTab === 'settings' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '30px' }}>
-            <div className="dashboard-card-section">
-              <h3 style={{ marginBottom: '18px', fontSize: '16px', fontWeight: '700' }}>Portal Customization</h3>
-              <form onSubmit={savePortalSettings}>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="portalName">Portal Title / Institution Name</label>
-                  <input id="portalName" type="text" className="form-input" value={portalName} onChange={(e) => setPortalName(e.target.value)} required />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="portalLogo">Portal Logo URL</label>
-                  <input id="portalLogo" type="url" className="form-input" value={portalLogo} onChange={(e) => setPortalLogo(e.target.value)} placeholder="https://..." />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="portalLogoFile">Or upload Portal Logo</label>
-                  <input id="portalLogoFile" type="file" accept="image/*" className="form-input" onChange={handlePortalLogoMock} />
-                </div>
-                <button type="submit" className="btn btn-primary" style={{ padding: '10px 24px' }}>Apply Configuration</button>
-              </form>
-            </div>
-
-            <div className="dashboard-card-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
-              <h4 style={{ marginBottom: '20px', fontSize: '14.5px', fontWeight: '700' }}>Logo Preview</h4>
-              <div style={{ width: '120px', height: '120px', borderRadius: '16px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: '#f8fafc', padding: '12px' }}>
-                {portalLogo ? (
-                  <img src={portalLogo} alt="Logo preview" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                ) : (
-                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>No logo selected</span>
-                )}
+          <div style={{ padding: '4px 0' }} className="animate-fade-in">
+            {/* Admin Toast Alert */}
+            {adminToast && (
+              <div style={{
+                position: 'fixed',
+                top: 24,
+                right: 24,
+                background: '#121118',
+                color: '#fff',
+                borderRadius: 12,
+                padding: '12px 20px',
+                fontSize: 13,
+                fontWeight: 600,
+                zIndex: 2000,
+                boxShadow: '0 16px 32px rgba(0,0,0,0.2)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                animation: 'slideIn 0.3s ease'
+              }}>
+                <CheckCircle size={15} color="#10B981" /> {adminToast}
               </div>
-            </div>
+            )}
+
+            {loadingAdminProfile ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 350 }}>
+                <p style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Loading settings...</p>
+              </div>
+            ) : (
+              <div className="dashboard-main-grid" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 24, alignItems: 'start' }}>
+                
+                {/* Left Column: Account details & Portal customization */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                  
+                  {/* CARD 1: ACCOUNT MODULE */}
+                  <div className="clickable-card-hover" style={{
+                    background: '#FFF',
+                    border: '1.5px solid var(--border-color)',
+                    borderRadius: 20,
+                    padding: 28,
+                    boxShadow: 'var(--shadow-card)',
+                    display: 'flex',
+                    flexDirection: 'column'
+                  }}>
+                    <h3 style={{ fontSize: 16, fontWeight: 800, margin: '0 0 20px', display: 'flex', alignItems: 'center', gap: 8, color: '#121118' }}>
+                      <User size={18} color="var(--primary-color)" /> Account Details
+                    </h3>
+
+                    <form onSubmit={handleSaveAdminAccount}>
+                      {/* Profile Photo */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 28, paddingBottom: 20, borderBottom: '1px solid var(--border-color)' }}>
+                        <div style={{ position: 'relative', width: 90, height: 90 }}>
+                          <div style={{
+                            width: 90,
+                            height: 90,
+                            borderRadius: '50%',
+                            overflow: 'hidden',
+                            background: 'var(--primary-light)',
+                            border: '3.5px solid white',
+                            boxShadow: '0 4px 14px rgba(0,0,0,0.06)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}>
+                            {adminProfilePic ? (
+                              <img src={adminProfilePic} alt="profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            ) : (
+                              <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, var(--primary-color) 0%, #4c22bc 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, fontWeight: 800, color: '#fff' }}>
+                                {(adminName || 'A')[0].toUpperCase()}
+                              </div>
+                            )}
+                          </div>
+                          <label style={{
+                            position: 'absolute',
+                            bottom: 0,
+                            right: 0,
+                            width: 28,
+                            height: 28,
+                            background: 'var(--primary-color)',
+                            borderRadius: '50%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#fff',
+                            cursor: 'pointer',
+                            border: '2px solid #fff',
+                            boxShadow: '0 4px 10px rgba(0,0,0,0.15)',
+                            transition: 'background 0.2s'
+                          }}
+                          className="photo-upload-badge"
+                          >
+                            <Camera size={12} />
+                            <input type="file" accept="image/*" onChange={handleAdminImageUpload} style={{ display: 'none' }} />
+                          </label>
+                        </div>
+                        <div>
+                          <h4 style={{ margin: 0, fontSize: 14.5, fontWeight: 800, color: 'var(--text-primary)' }}>Profile Photo</h4>
+                          <p style={{ margin: '4px 0 0', fontSize: 11.5, color: 'var(--text-secondary)' }}>
+                            Upload a square picture. Click the camera icon.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Editable Fields */}
+                      <div style={{ display: 'flex', gap: 18, marginBottom: 24, flexDirection: 'column' }}>
+                        
+                        {/* Full Name */}
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label">Full Name</label>
+                          <div style={{ position: 'relative' }}>
+                            <input
+                              type="text"
+                              className="form-input"
+                              value={adminName}
+                              onChange={e => setAdminName(e.target.value)}
+                              placeholder="Enter your full name"
+                              style={{ paddingLeft: 42 }}
+                            />
+                            <User size={16} color="var(--text-secondary)" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }} />
+                          </div>
+                        </div>
+
+                        {/* Email Address */}
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label">Email Address</label>
+                          <div style={{ position: 'relative' }}>
+                            <input
+                              type="email"
+                              className="form-input"
+                              value={adminEmail}
+                              onChange={e => setAdminEmail(e.target.value)}
+                              placeholder="admin@example.com"
+                              style={{ paddingLeft: 42 }}
+                            />
+                            <Mail size={16} color="var(--text-secondary)" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }} />
+                          </div>
+                        </div>
+
+                        {/* Mobile Number Block (Requires OTP) */}
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label">Mobile Number (Requires OTP verification to update)</label>
+                          
+                          {!isAdminUpdatingPhone ? (
+                            <div style={{ display: 'flex', gap: 10 }}>
+                              <div style={{ position: 'relative', flex: 1 }}>
+                                <input
+                                  type="text"
+                                  className="form-input"
+                                  value={adminPhone}
+                                  readOnly
+                                  style={{ paddingLeft: 42, background: 'var(--surface-alt)', opacity: 0.95, cursor: 'default' }}
+                                />
+                                <Phone size={16} color="var(--text-secondary)" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }} />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => { setAdminTempPhone(adminPhone); setIsAdminUpdatingPhone(true); }}
+                                className="btn btn-secondary btn-sm"
+                                style={{ height: '46px', alignSelf: 'flex-end' }}
+                              >
+                                Update Number
+                              </button>
+                            </div>
+                          ) : (
+                            <div style={{ background: 'var(--surface-alt)', border: '1.5px solid var(--border-color)', borderRadius: 14, padding: 18, marginTop: 4 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--primary-color)' }}>UPDATE MOBILE NUMBER</span>
+                                <button
+                                  type="button"
+                                  onClick={() => { setIsAdminUpdatingPhone(false); setAdminPhoneOtpSent(false); }}
+                                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                                >
+                                  <X size={16} />
+                                </button>
+                              </div>
+
+                              {!adminPhoneOtpSent ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                  <div style={{ position: 'relative' }}>
+                                    <input
+                                      type="text"
+                                      className="form-input"
+                                      value={adminTempPhone}
+                                      onChange={e => setAdminTempPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                                      placeholder="Enter 10-digit new number"
+                                      style={{ paddingLeft: 42 }}
+                                      disabled={verifyingAdminPhone}
+                                    />
+                                    <Phone size={16} color="var(--text-secondary)" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }} />
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={requestAdminPhoneOtp}
+                                    disabled={verifyingAdminPhone || adminTempPhone.length !== 10}
+                                    className="btn btn-primary btn-block"
+                                    style={{ height: 40, fontSize: 13 }}
+                                  >
+                                    {verifyingAdminPhone ? 'Requesting...' : 'Send Verification OTP'}
+                                  </button>
+                                </div>
+                              ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                  <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)' }}>
+                                    An OTP code has been generated to verify <strong>+91 {adminTempPhone}</strong>.
+                                  </p>
+                                  <input
+                                    type="text"
+                                    className="form-input"
+                                    value={adminPhoneOtp}
+                                    onChange={e => setAdminPhoneOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                    placeholder="Enter 6-digit OTP"
+                                    style={{ letterSpacing: 3, textAlign: 'center', fontWeight: 'bold' }}
+                                    disabled={verifyingAdminPhone}
+                                  />
+
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>
+                                      {adminPhoneTimer > 0 ? (
+                                        <span>Expires in: <strong>{Math.floor(adminPhoneTimer / 60)}:{String(adminPhoneTimer % 60).padStart(2, '0')}</strong></span>
+                                      ) : (
+                                        <span style={{ color: 'var(--danger-color)', fontWeight: 600 }}>OTP Expired</span>
+                                      )}
+                                    </span>
+                                    
+                                    <button
+                                      type="button"
+                                      onClick={requestAdminPhoneOtp}
+                                      disabled={adminPhoneTimer > 0 || verifyingAdminPhone}
+                                      style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        color: adminPhoneTimer > 0 ? 'var(--text-muted)' : 'var(--primary-color)',
+                                        cursor: adminPhoneTimer > 0 ? 'not-allowed' : 'pointer',
+                                        fontSize: 12,
+                                        fontWeight: 700,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 4
+                                      }}
+                                    >
+                                      <RefreshCw size={11} /> Resend OTP
+                                    </button>
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={verifyAdminPhoneOtp}
+                                    disabled={verifyingAdminPhone || adminPhoneOtp.length !== 6}
+                                    className="btn btn-primary btn-block"
+                                    style={{ height: 40, fontSize: 13 }}
+                                  >
+                                    {verifyingAdminPhone ? 'Verifying...' : 'Verify & Change Number'}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                      </div>
+
+                      {/* Save Profile Button */}
+                      <button
+                        type="submit"
+                        disabled={savingAdminAccount || isAdminUpdatingPhone}
+                        className="btn btn-primary btn-block"
+                        style={{ height: 46 }}
+                      >
+                        <Save size={16} /> {savingAdminAccount ? 'Saving Profile...' : 'Save Profile Changes'}
+                      </button>
+                    </form>
+                  </div>
+
+                </div>
+
+                {/* Right Column: Password & Security */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                  
+                  {/* CARD 3: PASSWORD & SECURITY MODULE */}
+                  <div className="clickable-card-hover" style={{
+                    background: '#FFF',
+                    border: '1.5px solid var(--border-color)',
+                    borderRadius: 20,
+                    padding: 28,
+                    boxShadow: 'var(--shadow-card)',
+                    display: 'flex',
+                    flexDirection: 'column'
+                  }}>
+                    <h3 style={{ fontSize: 16, fontWeight: 800, margin: '0 0 20px', display: 'flex', alignItems: 'center', gap: 8, color: '#121118' }}>
+                      <Lock size={18} color="var(--primary-color)" /> Password & Security
+                    </h3>
+
+                    <form onSubmit={handleAdminChangePassword}>
+                      {/* Current Password */}
+                      <div className="form-group">
+                        <label className="form-label">Current Password</label>
+                        <div style={{ position: 'relative' }}>
+                          <input
+                            type={showAdminCurrPassword ? 'text' : 'password'}
+                            className="form-input"
+                            value={adminCurrPassword}
+                            onChange={e => setAdminCurrPassword(e.target.value)}
+                            placeholder="••••••••"
+                            style={{ paddingLeft: 42, paddingRight: 42 }}
+                          />
+                          <Lock size={16} color="var(--text-secondary)" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }} />
+                          <button
+                            type="button"
+                            onClick={() => setShowAdminCurrPassword(!showAdminCurrPassword)}
+                            style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                          >
+                            {showAdminCurrPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* New Password */}
+                      <div className="form-group" style={{ marginBottom: 12 }}>
+                        <label className="form-label">New Password</label>
+                        <div style={{ position: 'relative' }}>
+                          <input
+                            type={showAdminNewPassword ? 'text' : 'password'}
+                            className="form-input"
+                            value={adminNewPassword}
+                            onChange={e => setAdminNewPassword(e.target.value)}
+                            placeholder="Min. 8 characters"
+                            style={{ paddingLeft: 42, paddingRight: 42 }}
+                          />
+                          <Lock size={16} color="var(--text-secondary)" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }} />
+                          <button
+                            type="button"
+                            onClick={() => setShowAdminNewPassword(!showAdminNewPassword)}
+                            style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                          >
+                            {showAdminNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Confirm Password */}
+                      <div className="form-group" style={{ marginBottom: 20 }}>
+                        <label className="form-label">Confirm Password</label>
+                        <div style={{ position: 'relative' }}>
+                          <input
+                            type={showAdminConfirmPassword ? 'text' : 'password'}
+                            className="form-input"
+                            value={adminConfirmPassword}
+                            onChange={e => setAdminConfirmPassword(e.target.value)}
+                            placeholder="••••••••"
+                            style={{ paddingLeft: 42, paddingRight: 42 }}
+                          />
+                          <Lock size={16} color="var(--text-secondary)" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }} />
+                          <button
+                            type="button"
+                            onClick={() => setShowAdminConfirmPassword(!showAdminConfirmPassword)}
+                            style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                          >
+                            {showAdminConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                          </button>
+                        </div>
+                        {adminConfirmPassword && adminNewPassword !== adminConfirmPassword && (
+                          <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--danger-color)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <CircleAlert size={12} /> Passwords do not match.
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Action Buttons */}
+                      <button
+                        type="submit"
+                        disabled={savingAdminPassword || (adminNewPassword && adminNewPassword !== adminConfirmPassword)}
+                        className="btn btn-primary btn-block"
+                        style={{ height: 44, marginBottom: 12 }}
+                      >
+                        <Key size={15} /> {savingAdminPassword ? 'Changing Password...' : 'Change Password'}
+                      </button>
+                    </form>
+                  </div>
+
+                </div>
+
+              </div>
+            )}
           </div>
         )}
       </main>

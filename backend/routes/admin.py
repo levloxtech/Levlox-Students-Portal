@@ -1741,3 +1741,184 @@ def get_live_class_activity_logs():
         return jsonify({'message': 'Error retrieving activity logs', 'error': str(e)}), 400
 
 
+# Admin Profile & Password Actions
+@admin_bp.route('/profile', methods=['GET'])
+@token_required(allowed_roles=['admin'])
+def get_admin_profile():
+    try:
+        user = db.users.find_one({"_id": ObjectId(g.user_id)})
+        if not user:
+            return jsonify({'message': 'Admin not found'}), 404
+        
+        profile_data = {
+            "name": user.get('name'),
+            "email": user.get('email'),
+            "phone": user.get('phone', ''),
+            "profile_pic": user.get('profile_pic', ''),
+            "role": user.get('role', 'admin')
+        }
+        return jsonify(profile_data), 200
+    except Exception as e:
+        return jsonify({'message': 'Error retrieving profile', 'error': str(e)}), 400
+
+
+@admin_bp.route('/profile', methods=['PUT'])
+@token_required(allowed_roles=['admin'])
+def update_admin_profile():
+    data = request.get_json() or {}
+    name = data.get('name')
+    email = data.get('email', '')
+    profile_pic = data.get('profile_pic', '')
+
+    if not name:
+        return jsonify({'message': 'Name is required'}), 400
+
+    try:
+        if email:
+            existing = db.users.find_one({"email": email.strip().lower(), "_id": {"$ne": ObjectId(g.user_id)}})
+            if existing:
+                return jsonify({'message': 'Email already in use by another account'}), 400
+
+        update_data = {
+            "name": name.strip(),
+            "profile_pic": profile_pic.strip()
+        }
+        if email:
+            update_data["email"] = email.strip().lower()
+
+        db.users.update_one(
+            {"_id": ObjectId(g.user_id)},
+            {"$set": update_data}
+        )
+        return jsonify({'message': 'Profile updated successfully!'}), 200
+    except Exception as e:
+        return jsonify({'message': 'Error updating profile', 'error': str(e)}), 400
+
+
+@admin_bp.route('/change-password', methods=['PUT'])
+@token_required(allowed_roles=['admin'])
+def change_admin_password():
+    import bcrypt
+    data = request.get_json() or {}
+    current_password = data.get('current_password')
+    new_password = data.get('new_password')
+
+    if not current_password or not new_password:
+        return jsonify({'message': 'Missing password inputs'}), 400
+
+    try:
+        user = db.users.find_one({"_id": ObjectId(g.user_id)})
+        if not user:
+            return jsonify({'message': 'Admin not found'}), 404
+
+        # Validate current password
+        if not bcrypt.checkpw(current_password.encode('utf-8'), user['password']):
+            return jsonify({'message': 'Invalid current password!'}), 400
+
+        # Hash and update new password
+        hashed = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
+        db.users.update_one(
+            {"_id": ObjectId(g.user_id)},
+            {"$set": {"password": hashed}}
+        )
+        return jsonify({'message': 'Password changed successfully!'}), 200
+    except Exception as e:
+        return jsonify({'message': 'Error changing password', 'error': str(e)}), 400
+
+
+@admin_bp.route('/update-phone/request', methods=['POST'])
+@token_required(allowed_roles=['admin'])
+def update_admin_phone_request():
+    import random
+    import bcrypt
+    data = request.get_json() or {}
+    new_phone = data.get('new_phone')
+
+    if not new_phone or len(new_phone) != 10 or not new_phone.isdigit():
+        return jsonify({'message': 'Please provide a valid 10-digit mobile number.'}), 400
+
+    new_phone = new_phone.strip()
+    
+    # Check if this phone is already taken by another user
+    existing = db.users.find_one({"phone": new_phone, "_id": {"$ne": ObjectId(g.user_id)}})
+    if existing:
+        return jsonify({'message': 'This mobile number is already in use by another account.'}), 400
+
+    # Generate secure 6-digit OTP
+    otp = "".join([str(random.randint(0, 9)) for _ in range(6)])
+    print(f"[SECURITY MOCK] SMS to {new_phone}: Your OTP code for phone update is {otp}")
+
+    # Invalidate existing active OTPs for this phone number
+    db.otps.update_many({"phone": new_phone, "status": "active"}, {"$set": {"status": "invalidated"}})
+
+    # Hash the OTP
+    otp_hash = bcrypt.hashpw(otp.encode('utf-8'), bcrypt.gensalt())
+    now = datetime.datetime.utcnow()
+    expires_at = now + datetime.timedelta(minutes=5)
+
+    db.otps.insert_one({
+        "phone": new_phone,
+        "otp_hash": otp_hash,
+        "created_at": now,
+        "expires_at": expires_at,
+        "attempts": 0,
+        "status": "active",
+        "user_id": ObjectId(g.user_id)
+    })
+
+    return jsonify({'message': 'A verification OTP has been sent to your new mobile number.'}), 200
+
+
+@admin_bp.route('/update-phone/verify', methods=['POST'])
+@token_required(allowed_roles=['admin'])
+def update_admin_phone_verify():
+    import bcrypt
+    data = request.get_json() or {}
+    new_phone = data.get('new_phone')
+    otp = data.get('otp')
+
+    if not new_phone or not otp or len(otp) != 6:
+        return jsonify({'message': 'Mobile number and 6-digit OTP are required.'}), 400
+
+    new_phone = new_phone.strip()
+    otp = otp.strip()
+
+    otp_doc = db.otps.find_one({"phone": new_phone, "status": "active", "user_id": ObjectId(g.user_id)})
+    if not otp_doc:
+        return jsonify({'message': 'No active OTP found or it has already been used/invalidated.'}), 400
+
+    now = datetime.datetime.utcnow()
+    expires_at = otp_doc["expires_at"]
+    if isinstance(expires_at, str):
+        expires_at = datetime.datetime.fromisoformat(expires_at)
+
+    if now > expires_at:
+        db.otps.update_one({"_id": otp_doc["_id"]}, {"$set": {"status": "expired"}})
+        return jsonify({'message': 'OTP has expired.'}), 400
+
+    attempts = otp_doc.get('attempts', 0) + 1
+    db.otps.update_one({"_id": otp_doc["_id"]}, {"$set": {"attempts": attempts}})
+
+    if attempts > 5:
+        db.otps.update_one({"_id": otp_doc["_id"]}, {"$set": {"status": "invalidated"}})
+        return jsonify({'message': 'Maximum verification attempts exceeded. Please request a new OTP.'}), 400
+
+    if not bcrypt.checkpw(otp.encode('utf-8'), otp_doc["otp_hash"]):
+        if attempts >= 5:
+            db.otps.update_one({"_id": otp_doc["_id"]}, {"$set": {"status": "invalidated"}})
+            return jsonify({'message': 'Incorrect OTP. Maximum verification attempts reached. This OTP is now invalid.'}), 400
+        return jsonify({'message': f'Incorrect OTP. Remaining attempts: {5 - attempts}.'}), 400
+
+    # OTP is correct and verified
+    db.otps.update_one({"_id": otp_doc["_id"]}, {"$set": {"status": "used"}})
+
+    # Update phone number in database
+    db.users.update_one(
+        {"_id": ObjectId(g.user_id)},
+        {"$set": {"phone": new_phone}}
+    )
+
+    return jsonify({'message': 'Mobile number updated successfully!'}), 200
+
+
+
