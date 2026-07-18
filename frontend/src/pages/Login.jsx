@@ -5,6 +5,8 @@ import {
   ShieldCheck, KeyRound, ArrowLeft, AlertTriangle,
   Shield, Loader2, GraduationCap, Sparkles
 } from 'lucide-react';
+import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
+import { auth } from "../firebase";
 import CustomModal from '../components/Modal';
 
 const COUNTRIES = [
@@ -35,6 +37,12 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+
+  /* ─── Firebase OTP states ─── */
+  const [loginTab, setLoginTab] = useState('student'); // 'student' | 'admin'
+  const [otpStep, setOtpStep] = useState('phone'); // 'phone' | 'otp'
+  const [confirmResult, setConfirmResult] = useState(null);
+  const [studentOtpFields, setStudentOtpFields] = useState(['', '', '', '', '', '']);
 
   /* ─── Country selector state ─── */
   const [selectedCountry, setSelectedCountry] = useState(COUNTRIES[0]);
@@ -242,6 +250,144 @@ const Login = () => {
       showToast('Authentication Failed', err.message, 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const isMockFirebase = !import.meta.env.VITE_FIREBASE_API_KEY || import.meta.env.VITE_FIREBASE_API_KEY === "PLACEHOLDER_API_KEY";
+
+  const setupRecaptcha = () => {
+    if (!window.recaptchaVerifier) {
+      window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
+        size: "invisible",
+        callback: () => {}
+      });
+    }
+  };
+
+  const handleSendOtp = async (e) => {
+    e?.preventDefault();
+    setPhoneError('');
+    const countryLength = selectedCountry.length;
+    if (phone.length !== countryLength || isNaN(phone)) {
+      setPhoneError(`Enter a valid ${countryLength}-digit mobile number`);
+      return;
+    } else if (selectedCountry.pattern && !selectedCountry.pattern.test(phone)) {
+      setPhoneError(`Invalid phone number format for ${selectedCountry.name}`);
+      return;
+    }
+
+    setLoading(true);
+    if (isMockFirebase) {
+      setTimeout(() => {
+        setLoading(false);
+        setOtpStep('otp');
+        setStudentOtpFields(['', '', '', '', '', '']);
+        showToast('SMS Mock Mode', 'Development mode. OTP code is 123456.', 'success');
+        console.log(`[FIREBASE MOCK] OTP for ${selectedCountry.dial}${phone} is 123456`);
+      }, 1000);
+      return;
+    }
+
+    try {
+      setupRecaptcha();
+      const formattedPhone = `${selectedCountry.dial}${phone}`;
+      const result = await signInWithPhoneNumber(auth, formattedPhone, window.recaptchaVerifier);
+      setConfirmResult(result);
+      setOtpStep('otp');
+      setStudentOtpFields(['', '', '', '', '', '']);
+      showToast('OTP Sent', `Verification code sent to ${formattedPhone}.`, 'success');
+    } catch (err) {
+      console.error(err);
+      showToast('OTP Failed', err.message || 'Could not send verification code.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e) => {
+    e?.preventDefault();
+    const otp = studentOtpFields.join('');
+    if (otp.length !== 6) {
+      showToast('Incomplete OTP', 'Please enter all 6 digits.', 'error');
+      return;
+    }
+
+    setLoading(true);
+    if (isMockFirebase) {
+      setTimeout(async () => {
+        try {
+          if (otp !== '123456') {
+            throw new Error('Invalid verification code. Try 123456');
+          }
+          const mockToken = `mock-token-${phone}`;
+          const res = await fetch(`${API_BASE}/auth/verify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idToken: mockToken })
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.message || 'Verification failed');
+
+          localStorage.setItem('token', data.token);
+          localStorage.setItem('user', JSON.stringify(data.user));
+          resetInactivityTimer();
+          showToast('Welcome', `Successfully signed in as ${data.user.name || 'Student'}.`, 'success');
+          navigate('/student');
+        } catch (err) {
+          showToast('Verification Failed', err.message, 'error');
+        } finally {
+          setLoading(false);
+        }
+      }, 1000);
+      return;
+    }
+
+    try {
+      const result = await confirmResult.confirm(otp);
+      const idToken = await result.user.getIdToken();
+
+      const res = await fetch(`${API_BASE}/auth/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Verification failed');
+
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      resetInactivityTimer();
+      navigate('/student');
+    } catch (err) {
+      console.error(err);
+      showToast('Verification Failed', err.message || 'Invalid code.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStudentOtpChange = (e, index) => {
+    const val = e.target.value;
+    if (val && isNaN(val)) return;
+    const next = [...studentOtpFields]; next[index] = val.slice(-1);
+    setStudentOtpFields(next);
+    if (val && index < 5) document.getElementById(`student-otp-${index + 1}`)?.focus();
+  };
+
+  const handleStudentOtpKeyDown = (e, index) => {
+    if (e.key === 'Backspace' && !studentOtpFields[index] && index > 0) {
+      const prev = [...studentOtpFields]; prev[index - 1] = '';
+      setStudentOtpFields(prev);
+      document.getElementById(`student-otp-${index - 1}`)?.focus();
+    }
+  };
+
+  const handleStudentOtpPaste = (e) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text');
+    if (pasted.length === 6 && !isNaN(pasted)) {
+      setStudentOtpFields(pasted.split(''));
+      document.getElementById('student-otp-5')?.focus();
     }
   };
 

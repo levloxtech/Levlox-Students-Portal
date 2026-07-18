@@ -999,7 +999,7 @@ def upload_file_api():
             filename = werkzeug.utils.secure_filename(file.filename)
             fs = gridfs.GridFS(getattr(db, "_db", db))
             file_id = fs.put(file, filename=filename, content_type=file.content_type)
-            file_url = f"http://localhost:5000/api/files/{file_id}"
+            file_url = f"{request.url_root.rstrip('/')}/api/files/uploads/{file_id}/{filename}"
             return jsonify({'url': file_url, 'filename': filename}), 200
     except Exception as e:
         return jsonify({'message': 'Upload failed', 'error': str(e)}), 500
@@ -1103,11 +1103,40 @@ def update_recorded_class(class_id):
 @admin_bp.route('/recorded-classes/<class_id>', methods=['DELETE'])
 @token_required(allowed_roles=['admin'])
 def delete_recorded_class(class_id):
+    import re
+    import gridfs
     try:
-        result = db.recorded_classes.delete_one({"_id": ObjectId(class_id)})
-        if result.deleted_count == 0:
+        recorded_class = db.recorded_classes.find_one({"_id": ObjectId(class_id)})
+        if not recorded_class:
             return jsonify({'message': 'Recorded class not found'}), 404
-        return jsonify({'message': 'Recorded class deleted successfully'}), 200
+
+        # Extract file links and delete from GridFS
+        fs = gridfs.GridFS(getattr(db, "_db", db))
+        oid_pattern = re.compile(r'/api/files/(?:uploads/)?([0-9a-fA-F]{24})')
+        
+        urls_to_check = []
+        if recorded_class.get('video_url'):
+            urls_to_check.append(recorded_class.get('video_url'))
+        if recorded_class.get('notes_url'):
+            urls_to_check.append(recorded_class.get('notes_url'))
+        for material in recorded_class.get('study_materials', []):
+            if isinstance(material, dict) and material.get('url'):
+                urls_to_check.append(material.get('url'))
+        if recorded_class.get('thumbnail'):
+            urls_to_check.append(recorded_class.get('thumbnail'))
+
+        for url in urls_to_check:
+            match = oid_pattern.search(url)
+            if match:
+                try:
+                    file_oid = ObjectId(match.group(1))
+                    if fs.exists(file_oid):
+                        fs.delete(file_oid)
+                except Exception as ex:
+                    print(f"Error deleting file {match.group(1)} from GridFS: {ex}")
+
+        db.recorded_classes.delete_one({"_id": ObjectId(class_id)})
+        return jsonify({'message': 'Recorded class and associated files deleted successfully'}), 200
     except Exception as e:
         return jsonify({'message': 'Error deleting recorded class', 'error': str(e)}), 400
 

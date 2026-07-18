@@ -1,6 +1,7 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
 from config import Config
+import firebase_init
 from routes.auth import auth_bp
 from routes.courses import courses_bp
 from routes.assignments import assignments_bp

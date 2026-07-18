@@ -4,3 +4,4 @@ pymongo[srv]
 pyjwt
 bcrypt
 python-dotenv
+firebase-admin

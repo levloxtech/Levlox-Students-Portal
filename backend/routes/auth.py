@@ -4,6 +4,7 @@ import bcrypt
 import random
 import re
 import hashlib
+import firebase_init
 from flask import Blueprint, request, jsonify, g
 from db import db
 from config import Config
@@ -300,3 +301,123 @@ def forgot_password_reset():
         return jsonify({'message': 'User profile not found.'}), 404
 
     return jsonify({'message': 'Password changed successfully! Please login with your new password.'}), 200
+
+@auth_bp.route('/verify', methods=['POST'])
+def verify_firebase_login():
+    data = request.get_json(force=True) or {}
+    id_token = data.get("idToken")
+    if not id_token:
+        return jsonify({"error": "Missing idToken"}), 400
+
+    firebase_uid = None
+    phone_number = None
+
+    if firebase_init.firebase_initialized:
+        try:
+            from firebase_admin import auth as firebase_auth
+            decoded = firebase_auth.verify_id_token(id_token)
+            firebase_uid = decoded["uid"]
+            phone_number = decoded.get("phone_number")
+        except Exception as e:
+            return jsonify({"error": "Invalid Firebase token", "detail": str(e)}), 401
+    else:
+        # Development mock fallback verification
+        # Expecting idToken as a mock value like "mock-token-9876543210" or similar
+        print(f"[SECURITY MOCK] Verifying mock token: {id_token}")
+        if id_token.startswith("mock-token-"):
+            phone_number = id_token.split("mock-token-")[-1]
+            if not phone_number.startswith("+"):
+                phone_number = "+91" + phone_number
+            firebase_uid = f"mock-uid-{phone_number}"
+        else:
+            phone_number = "+919876543210"
+            firebase_uid = "mock-uid-default"
+
+    # Normalize phone: extract last 10 digits
+    normalized_phone = phone_number
+    if phone_number and len(phone_number) > 10:
+        normalized_phone = phone_number[-10:]
+
+    # Search for student by firebase_uid or normalized phone
+    student = None
+    if firebase_uid:
+        student = db.users.find_one({"firebase_uid": firebase_uid, "role": "student"})
+    
+    if not student and normalized_phone:
+        student = db.users.find_one({"phone": normalized_phone, "role": "student"})
+        if student and firebase_uid:
+            # Link Firebase UID to existing record
+            db.users.update_one({"_id": student["_id"]}, {"$set": {"firebase_uid": firebase_uid}})
+
+    if not student:
+        # Create a new bare student document on first login
+        new_doc = {
+            "phone": normalized_phone if normalized_phone else "",
+            "email": f"{normalized_phone}@lsp.com" if normalized_phone else "",
+            "name": "",
+            "role": "student",
+            "status": "pending",
+            "firebase_uid": firebase_uid,
+            "created_at": datetime.datetime.utcnow(),
+            "feesPaid": False,
+            "feesTotal": 20000,
+            "feesPaidAmount": 0,
+            "feesRemainingAmount": 20000,
+            "feesStatus": "Pending",
+            "feesPaymentDate": "",
+            "feesDueDate": "2026-08-31",
+            "rollNumber": f"LSP-2026-{random.randint(1000, 9999)}",
+            "college": "Levlox Technical Institute",
+            "course": "Fullstack Engineering",
+            "profile_pic": "",
+            "join_date": datetime.datetime.utcnow().strftime("%B %d, %Y"),
+            "attendance": {
+                "percentage": 92,
+                "present": 46,
+                "absent": 4
+            },
+            "attendance_history": [
+                {"date": "2026-07-07", "status": "Present"},
+                {"date": "2026-07-06", "status": "Present"},
+                {"date": "2026-07-05", "status": "Present"},
+                {"date": "2026-07-04", "status": "Absent"},
+                {"date": "2026-07-03", "status": "Present"}
+            ]
+        }
+        # users VirtualCollection routes insert to students
+        result = db.users.insert_one(new_doc)
+        new_doc["_id"] = str(result.inserted_id)
+        student = new_doc
+    else:
+        student["_id"] = str(student["_id"])
+
+    if student.get('status') == 'inactive':
+        return jsonify({'message': 'Your account is deactivated. Please contact administration.'}), 403
+
+    # Reset lockout if there is any cached attempt
+    db.users.update_one(
+        {"_id": ObjectId(student["_id"])},
+        {"$set": {"failed_login_attempts": 0, "lockout_until": None}}
+    )
+
+    # Generate JWT App token
+    token_payload = {
+        'user_id': student['_id'],
+        'role': 'student',
+        'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+    }
+    app_token = jwt.encode(token_payload, Config.JWT_SECRET_KEY, algorithm='HS256')
+
+    student.pop("password", None)
+    return jsonify({
+        "token": app_token,
+        "user": {
+            "id": student["_id"],
+            "phone": student.get("phone", ""),
+            "email": student.get("email", ""),
+            "name": student.get("name", ""),
+            "role": "student",
+            "feesStatus": student.get("feesStatus", "Pending")
+        }
+    }), 200
+
