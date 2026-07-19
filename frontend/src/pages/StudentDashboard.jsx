@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   BookOpen, FileText, Bookmark, LogOut, GraduationCap,
   ClipboardList, Lock, Video, Megaphone, User, DollarSign,
@@ -199,14 +200,65 @@ const StudentDashboard = () => {
   const initialUser = JSON.parse(localStorage.getItem('user') || '{}');
   const [mustChangePassword, setMustChangePassword] = useState(initialUser.must_change_password || false);
   const [activeTab, setActiveTab] = useState(initialUser.must_change_password ? 'settings' : 'dashboard');
-  const [dashboardData, setDashboardData] = useState(null);
-  const [courses, setCourses] = useState([]);
-  const [enrolledCourses, setEnrolledCourses] = useState([]);
+  const queryClient = useQueryClient();
+
+  const { data: dashboardData = null, refetch: fetchDashboard } = useQuery({
+    queryKey: ['studentDashboard'],
+    queryFn: async () => {
+      const r = await apiFetch(`${API_BASE}/student/dashboard`, { headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json();
+      const lu = JSON.parse(localStorage.getItem('user') || '{}');
+      lu.feesPaid = d.student.feesPaid;
+      localStorage.setItem('user', JSON.stringify(lu));
+      return d;
+    }
+  });
+
+  const { data: courses = [], refetch: fetchCourses, isFetching: loadingCourses } = useQuery({
+    queryKey: ['courses'],
+    queryFn: async () => {
+      const r = await apiFetch(`${API_BASE}/courses`, { headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json();
+      return d.courses || [];
+    }
+  });
+
+  const { data: enrolledCourses = [], refetch: fetchEnrolledCourses } = useQuery({
+    queryKey: ['enrolledCourses'],
+    queryFn: async () => {
+      const r = await apiFetch(`${API_BASE}/courses/enrolled`, { headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json();
+      return d.courses || [];
+    }
+  });
+
   const [selectedCourse, setSelectedCourse] = useState(null);
-  const [assignments, setAssignments] = useState([]);
-  const [submissions, setSubmissions] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [paying, setPaying] = useState(false);
+
+  const { data: assignments = [], isFetching: loadingAssignments } = useQuery({
+    queryKey: ['assignments', selectedCourse?._id],
+    queryFn: async () => {
+      const r = await apiFetch(`${API_BASE}/assignments/course/${selectedCourse._id}`, { headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json();
+      return d.assignments || [];
+    },
+    enabled: !!selectedCourse?._id
+  });
+
+  const selectCourse = (course) => {
+    setSelectedCourse(course);
+  };
+
+  const loading = loadingCourses || loadingAssignments;
+
+  const { data: submissions = [], refetch: fetchMySubmissions } = useQuery({
+    queryKey: ['mySubmissions'],
+    queryFn: async () => {
+      const r = await apiFetch(`${API_BASE}/assignments/student/submissions`, { headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json();
+      return d.submissions || [];
+    }
+  });
+
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState('');
@@ -215,35 +267,133 @@ const StudentDashboard = () => {
   const [vidQuery, setVidQuery] = useState('');
   const [vidCourse, setVidCourse] = useState('');
   const [matQuery, setMatQuery] = useState('');
-  const [profileData, setProfileData] = useState(null);
+
   const [profileName, setProfileName] = useState('');
   const [profilePhone, setProfilePhone] = useState('');
   const [profileCollege, setProfileCollege] = useState('');
   const [profileCourse, setProfileCourse] = useState('');
   const [profilePic, setProfilePic] = useState('');
+
+  const { data: profileData = null, refetch: fetchProfile } = useQuery({
+    queryKey: ['studentProfile'],
+    queryFn: async () => {
+      const r = await apiFetch(`${API_BASE}/student/profile`, { headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json();
+      setProfileName(d.name || '');
+      setProfilePhone(d.phone || '');
+      setProfileCollege(d.college || '');
+      setProfileCourse(d.course || '');
+      setProfilePic(d.profile_pic || '');
+      return d;
+    },
+    enabled: activeTab === 'profile'
+  });
+
   const [currPassword, setCurrPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [portalName, setPortalName] = useState('Levlox');
-  const [portalLogo, setPortalLogo] = useState('');
-  const [notifications, setNotifications] = useState([]);
+
+  const { data: portalSettings = { name: 'Levlox', logo: '' } } = useQuery({
+    queryKey: ['portalSettings'],
+    queryFn: async () => {
+      const r = await fetch(`${API_BASE}/portal-settings`);
+      if (r.ok) {
+        const d = await r.json();
+        return { name: d.portal_name || 'Levlox', logo: d.portal_logo || '' };
+      }
+      return { name: 'Levlox', logo: '' };
+    }
+  });
+  const portalName = portalSettings.name;
+  const portalLogo = portalSettings.logo;
+  const fetchPortalSettings = () => {};
+
+  const { data: notifications = [], refetch: fetchNotifications } = useQuery({
+    queryKey: ['studentNotifications'],
+    queryFn: async () => {
+      const r = await apiFetch(`${API_BASE}/student/notifications`, { headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json();
+      return d || [];
+    }
+  });
+
   const [showNotiCenter, setShowNotiCenter] = useState(false);
-  const [liveClassesList, setLiveClassesList] = useState([]);
+
+  const { data: liveClassesList = [], refetch: fetchLiveClasses } = useQuery({
+    queryKey: ['studentLiveClasses'],
+    queryFn: async () => {
+      const r = await apiFetch(`${API_BASE}/student/live-classes`, { headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json();
+      return d.liveClasses || [];
+    }
+  });
+
   const [showLockModal, setShowLockModal] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalText, setModalText] = useState('');
   const [modalType, setModalType] = useState('info');
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
-  const [analytics, setAnalytics] = useState(null);
-  const [overallLeaderboard, setOverallLeaderboard] = useState([]);
-  const [mockLeaderboard, setMockLeaderboard] = useState([]);
-  const [taskLeaderboard, setTaskLeaderboard] = useState([]);
-  const [learningRanking, setLearningRanking] = useState(null);
-  // Latest Replays from dedicated API
-  const [latestReplays, setLatestReplays] = useState([]);
-  const [replaysLoading, setReplaysLoading] = useState(false);
-  // Deep-link: when user clicks a replay card, store target and navigate to player
+
+  const { data: analytics = null, refetch: fetchAnalytics } = useQuery({
+    queryKey: ['studentAnalytics'],
+    queryFn: async () => {
+      const r = await apiFetch(`${API_BASE}/student/analytics`, { headers: { Authorization: `Bearer ${token}` } });
+      return await r.json();
+    }
+  });
+
+  const { data: overallLeaderboard = [] } = useQuery({
+    queryKey: ['leaderboard', 'overall'],
+    queryFn: async () => {
+      const r = await apiFetch(`${API_BASE}/student/leaderboard/overall`, { headers: { Authorization: `Bearer ${token}` } });
+      return await r.json();
+    }
+  });
+
+  const { data: mockLeaderboard = [] } = useQuery({
+    queryKey: ['leaderboard', 'mock'],
+    queryFn: async () => {
+      const r = await apiFetch(`${API_BASE}/student/leaderboard/mock`, { headers: { Authorization: `Bearer ${token}` } });
+      return await r.json();
+    }
+  });
+
+  const { data: taskLeaderboard = [] } = useQuery({
+    queryKey: ['leaderboard', 'tasks'],
+    queryFn: async () => {
+      const r = await apiFetch(`${API_BASE}/student/leaderboard/tasks`, { headers: { Authorization: `Bearer ${token}` } });
+      return await r.json();
+    }
+  });
+
+  const fetchLeaderboards = () => {
+    queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
+  };
+
+  const { data: learningRanking = null, refetch: fetchLearningRanking } = useQuery({
+    queryKey: ['learningRanking'],
+    queryFn: async () => {
+      const r = await apiFetch(`${API_BASE}/student/learning-ranking`, { headers: { Authorization: `Bearer ${token}` } });
+      if (r.ok) {
+        return await r.json();
+      }
+      return null;
+    }
+  });
+
+  const { data: latestReplays = [], refetch: fetchLatestReplays, isFetching: replaysLoading } = useQuery({
+    queryKey: ['latestReplays'],
+    queryFn: async () => {
+      const r = await fetch(`${API_BASE}/student/latest-replays`, { headers: { Authorization: `Bearer ${token}` } });
+      if (r.ok) {
+        const d = await r.json();
+        return d.replays || [];
+      }
+      return [];
+    }
+  });
+
   const [replayTarget, setReplayTarget] = useState(null); // { courseId, lessonId }
   const notiRef = useRef(null);
   const profileRef = useRef(null);
@@ -271,19 +421,7 @@ const StudentDashboard = () => {
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const activeAnalytics = analytics && analytics.has_data ? analytics : defaultDummyAnalytics;
 
-  useEffect(() => {
-    fetchDashboard();
-    fetchCourses();
-    fetchEnrolledCourses();
-    fetchMySubmissions();
-    fetchPortalSettings();
-    fetchNotifications();
-    fetchLiveClasses();
-    fetchAnalytics();
-    fetchLatestReplays();
-    fetchLearningRanking();
-  }, []);
-
+  // Let react-query do the initial fetch automatically. We only run tab specific fetches as needed.
   useEffect(() => {
     if (activeTab === 'profile') fetchProfile();
   }, [activeTab]);
@@ -299,13 +437,6 @@ const StudentDashboard = () => {
   }, []);
 
   const handleLogout = () => { localStorage.clear(); navigate('/login'); };
-
-  const fetchPortalSettings = async () => {
-    try {
-      const r = await fetch(`${API_BASE}/portal-settings`);
-      if (r.ok) { const d = await r.json(); setPortalName(d.portal_name || 'Levlox'); setPortalLogo(d.portal_logo || ''); }
-    } catch (e) { console.error(e); }
-  };
 
   const apiFetch = async (url, options = {}) => {
     try {
@@ -336,60 +467,6 @@ const StudentDashboard = () => {
     }
   };
 
-  const fetchLeaderboards = async () => {
-    try {
-      const headers = { Authorization: `Bearer ${token}` };
-      const [rOverall, rMock, rTask] = await Promise.all([
-        apiFetch(`${API_BASE}/student/leaderboard/overall`, { headers }),
-        apiFetch(`${API_BASE}/student/leaderboard/mock`, { headers }),
-        apiFetch(`${API_BASE}/student/leaderboard/tasks`, { headers })
-      ]);
-      if (rOverall.ok) setOverallLeaderboard(await rOverall.json());
-      if (rMock.ok) setMockLeaderboard(await rMock.json());
-      if (rTask.ok) setTaskLeaderboard(await rTask.json());
-    } catch (e) {
-      console.error('Error fetching leaderboards:', e);
-    }
-  };
-
-  const fetchAnalytics = async () => {
-    try {
-      const r = await apiFetch(`${API_BASE}/student/analytics`, { headers: { Authorization: `Bearer ${token}` } });
-      const d = await r.json();
-      setAnalytics(d);
-    } catch (e) { console.error(e); }
-    fetchLeaderboards();
-  };
-
-  const fetchLearningRanking = async () => {
-    try {
-      const r = await apiFetch(`${API_BASE}/student/learning-ranking`, { headers: { Authorization: `Bearer ${token}` } });
-      if (r.ok) {
-        const d = await r.json();
-        setLearningRanking(d);
-      }
-    } catch (e) {
-      console.error('Error fetching learning ranking:', e);
-    }
-  };
-
-  const fetchNotifications = async () => {
-    try {
-      const r = await apiFetch(`${API_BASE}/student/notifications`, { headers: { Authorization: `Bearer ${token}` } });
-      const d = await r.json();
-      setNotifications(d || []);
-    } catch (e) { console.error(e); }
-  };
-
-  const fetchProfile = async () => {
-    try {
-      const r = await apiFetch(`${API_BASE}/student/profile`, { headers: { Authorization: `Bearer ${token}` } });
-      const d = await r.json();
-      setProfileData(d); setProfileName(d.name || ''); setProfilePhone(d.phone || '');
-      setProfileCollege(d.college || ''); setProfileCourse(d.course || ''); setProfilePic(d.profile_pic || '');
-    } catch (e) { console.error(e); }
-  };
-
   const handleProfileUpdate = (updatedProfile) => {
     if (updatedProfile) {
       if (updatedProfile.name !== undefined) setProfileName(updatedProfile.name);
@@ -400,19 +477,35 @@ const StudentDashboard = () => {
     }
   };
 
-  const saveProfile = async (e) => {
-    e.preventDefault();
-    try {
-      const r = await apiFetch(`${API_BASE}/student/profile`, {
+  const saveProfileMutation = useMutation({
+    mutationFn: async ({ name, phone, college, course, profile_pic }) => {
+      return await apiFetch(`${API_BASE}/student/profile`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ name: profileName, phone: profilePhone, college: profileCollege, course: profileCourse, profile_pic: profilePic })
+        body: JSON.stringify({ name, phone, college, course, profile_pic })
       });
+    },
+    onSuccess: async (r) => {
       if (r.ok) {
-        showModal('Success', 'Profile updated successfully!', 'success'); fetchProfile();
-        const lu = JSON.parse(localStorage.getItem('user') || '{}'); lu.name = profileName; localStorage.setItem('user', JSON.stringify(lu));
-      } else { const err = await r.json(); showModal('Error', err.message || 'Failed to update profile.', 'error'); }
-    } catch (e) { console.error(e); }
+        showModal('Success', 'Profile updated successfully!', 'success');
+        fetchProfile();
+        const lu = JSON.parse(localStorage.getItem('user') || '{}');
+        lu.name = profileName;
+        localStorage.setItem('user', JSON.stringify(lu));
+        queryClient.invalidateQueries({ queryKey: ['studentProfile'] });
+        queryClient.invalidateQueries({ queryKey: ['studentDashboard'] });
+        queryClient.invalidateQueries({ queryKey: ['learningRanking'] });
+        queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
+      } else {
+        const err = await r.json();
+        showModal('Error', err.message || 'Failed to update profile.', 'error');
+      }
+    }
+  });
+
+  const saveProfile = (e) => {
+    e.preventDefault();
+    saveProfileMutation.mutate({ name: profileName, phone: profilePhone, college: profileCollege, course: profileCourse, profile_pic: profilePic });
   };
 
   const handlePasswordAlter = async (e) => {
@@ -435,14 +528,6 @@ const StudentDashboard = () => {
     const reader = new FileReader();
     reader.onloadend = () => setProfilePic(reader.result);
     reader.readAsDataURL(file);
-  };
-
-  const fetchLiveClasses = async () => {
-    try {
-      const r = await apiFetch(`${API_BASE}/student/live-classes`, { headers: { Authorization: `Bearer ${token}` } });
-      const d = await r.json();
-      setLiveClassesList(d.liveClasses || []);
-    } catch (e) { console.error(e); }
   };
 
   const handleJoinLiveClass = async (classId) => {
@@ -483,22 +568,6 @@ const StudentDashboard = () => {
     }
   };
 
-  const fetchDashboard = async () => {
-    try {
-      const r = await apiFetch(`${API_BASE}/student/dashboard`, { headers: { Authorization: `Bearer ${token}` } });
-      const d = await r.json(); setDashboardData(d);
-      const lu = JSON.parse(localStorage.getItem('user') || '{}'); lu.feesPaid = d.student.feesPaid; localStorage.setItem('user', JSON.stringify(lu));
-    } catch (e) { console.error(e); }
-  };
-
-  const fetchLatestReplays = async () => {
-    setReplaysLoading(true);
-    try {
-      const r = await fetch(`${API_BASE}/student/latest-replays`, { headers: { Authorization: `Bearer ${token}` } });
-      if (r.ok) { const d = await r.json(); setLatestReplays(d.replays || []); }
-    } catch (e) { console.error(e); } finally { setReplaysLoading(false); }
-  };
-
   // Open Course Player for a specific lesson from the Dashboard
   const openReplayInPlayer = (replay) => {
     if (!replay.access) return; // locked — handled in UI
@@ -506,61 +575,50 @@ const StudentDashboard = () => {
     setActiveTab('recorded-classes-tab');
   };
 
-  const payFees = async () => {
-    setPaying(true);
-    try {
-      const r = await apiFetch(`${API_BASE}/student/pay-fees`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
-      if (r.ok) await fetchDashboard();
-    } catch (e) { console.error(e); } finally { setPaying(false); }
-  };
+  const payFeesMutation = useMutation({
+    mutationFn: async () => {
+      return await apiFetch(`${API_BASE}/student/pay-fees`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+    },
+    onSuccess: () => {
+      fetchDashboard();
+      queryClient.invalidateQueries({ queryKey: ['studentDashboard'] });
+    }
+  });
 
-  const fetchCourses = async () => {
-    setLoading(true);
-    try {
-      const r = await apiFetch(`${API_BASE}/courses`, { headers: { Authorization: `Bearer ${token}` } });
-      const d = await r.json(); setCourses(d.courses || []);
-    } catch (e) { console.error(e); } finally { setLoading(false); }
-  };
+  const payFees = () => payFeesMutation.mutate();
+  const paying = payFeesMutation.isPending;
 
-  const fetchEnrolledCourses = async () => {
-    try {
-      const r = await apiFetch(`${API_BASE}/courses/enrolled`, { headers: { Authorization: `Bearer ${token}` } });
-      const d = await r.json(); setEnrolledCourses(d.courses || []);
-    } catch (e) { console.error(e); }
-  };
+  const enrollInCourseMutation = useMutation({
+    mutationFn: async (courseId) => {
+      return await apiFetch(`${API_BASE}/courses/${courseId}/enroll`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courses'] });
+      queryClient.invalidateQueries({ queryKey: ['enrolledCourses'] });
+      queryClient.invalidateQueries({ queryKey: ['studentDashboard'] });
+    }
+  });
 
-  const fetchMySubmissions = async () => {
-    try {
-      const r = await apiFetch(`${API_BASE}/assignments/student/submissions`, { headers: { Authorization: `Bearer ${token}` } });
-      const d = await r.json(); setSubmissions(d.submissions || []);
-    } catch (e) { console.error(e); }
-  };
+  const enrollInCourse = (courseId) => enrollInCourseMutation.mutate(courseId);
 
-  const enrollInCourse = async (courseId) => {
-    try {
-      const r = await apiFetch(`${API_BASE}/courses/${courseId}/enroll`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
-      if (r.ok) { fetchCourses(); fetchEnrolledCourses(); fetchDashboard(); }
-    } catch (e) { console.error(e); }
-  };
-
-  const selectCourse = async (course) => {
-    setSelectedCourse(course); setLoading(true);
-    try {
-      const r = await apiFetch(`${API_BASE}/assignments/course/${course._id}`, { headers: { Authorization: `Bearer ${token}` } });
-      const d = await r.json(); setAssignments(d.assignments || []);
-    } catch (e) { console.error(e); } finally { setLoading(false); }
-  };
-
-  const submitAssignment = async (e) => {
-    e.preventDefault();
-    try {
-      const r = await apiFetch(`${API_BASE}/assignments/${submitModalAssignment._id}/submit`, {
+  const submitAssignmentMutation = useMutation({
+    mutationFn: async ({ assignmentId, submissionText }) => {
+      return await apiFetch(`${API_BASE}/assignments/${assignmentId}/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ submission_text: submissionText })
       });
-      if (r.ok) { setSubmitModalAssignment(null); setSubmissionText(''); fetchMySubmissions(); }
-    } catch (e) { console.error(e); }
+    },
+    onSuccess: () => {
+      setSubmitModalAssignment(null);
+      setSubmissionText('');
+      queryClient.invalidateQueries({ queryKey: ['mySubmissions'] });
+    }
+  });
+
+  const submitAssignment = (e) => {
+    e.preventDefault();
+    submitAssignmentMutation.mutate({ assignmentId: submitModalAssignment._id, submissionText });
   };
 
   const getSubmissionStatus = (id) => submissions.find(s => s.assignment_id === id) || null;

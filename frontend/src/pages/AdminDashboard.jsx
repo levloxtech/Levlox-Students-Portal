@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   GraduationCap, Users, Video, Clock, BookOpen, 
   Megaphone, Wallet, Settings, Trash2, Plus, 
@@ -128,22 +129,87 @@ const ExportDropdown = ({ onExportCSV, onExportExcel, onExportPDF }) => {
 };
 
 const AdminDashboard = () => {
+  const navigate = useNavigate();
+  const token = localStorage.getItem('token');
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const queryClient = useQueryClient();
+
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [stats, setStats] = useState(null);
   const [students, setStudents] = useState([]);
-  const [liveClasses, setLiveClasses] = useState([]);
   const [sessionSearch, setSessionSearch] = useState('');
   const [dateFilter, setDateFilter] = useState('Today');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
-  const [recordedClasses, setRecordedClasses] = useState([]);
   const [notes, setNotes] = useState([]);
-  const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // Batch Management states
-  const [batches, setBatches] = useState([]);
-  const [courses, setCourses] = useState([]);
+  // Queries using React Query
+  const { data: stats = null } = useQuery({
+    queryKey: ['adminStats'],
+    queryFn: async () => {
+      const response = await fetch(`${API_BASE}/admin/stats`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      return response.ok ? await response.json() : null;
+    }
+  });
+
+  const { data: liveClasses = [] } = useQuery({
+    queryKey: ['adminLiveClasses'],
+    queryFn: async () => {
+      const res = await fetch(`${API_BASE}/student/dashboard`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const combined = [];
+        if (data.todayLiveClass) combined.push(data.todayLiveClass);
+        if (data.upcomingLiveClasses) combined.push(...data.upcomingLiveClasses);
+        return combined;
+      }
+      return [];
+    }
+  });
+
+  const { data: recordedClasses = [] } = useQuery({
+    queryKey: ['adminRecordedClasses'],
+    queryFn: async () => {
+      const res = await fetch(`${API_BASE}/admin/recorded-classes`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      return res.ok ? (await res.json()).recorded_classes || [] : [];
+    }
+  });
+
+  const { data: announcements = [] } = useQuery({
+    queryKey: ['adminAnnouncements'],
+    queryFn: async () => {
+      const res = await fetch(`${API_BASE}/admin/announcements`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      return res.ok ? (await res.json()).announcements || [] : [];
+    }
+  });
+
+  const { data: batches = [] } = useQuery({
+    queryKey: ['adminBatches'],
+    queryFn: async () => {
+      const response = await fetch(`${API_BASE}/admin/batches`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      return response.ok ? await response.json() : [];
+    }
+  });
+
+  const { data: courses = [] } = useQuery({
+    queryKey: ['adminCourses'],
+    queryFn: async () => {
+      const response = await fetch(`${API_BASE}/admin/course-titles`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      return response.ok ? (await response.json()).courses || [] : [];
+    }
+  });
   const [selectedBatchId, setSelectedBatchId] = useState('');
   const [batchName, setBatchName] = useState('');
   const [batchCourseName, setBatchCourseName] = useState('');
@@ -1879,9 +1945,7 @@ const AdminDashboard = () => {
     setModalOpen(true);
   };
 
-  const navigate = useNavigate();
-  const token = localStorage.getItem('token');
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+
 
   useEffect(() => {
     fetchStats();
@@ -2145,32 +2209,12 @@ const AdminDashboard = () => {
   // ══════════════════════════════════════════════════════
   // BATCH MANAGEMENT EVENT HANDLERS
   // ══════════════════════════════════════════════════════
-  const fetchCourses = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/admin/course-titles`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setCourses(data.courses || []);
-      }
-    } catch (error) {
-      console.error("Error fetching courses:", error);
-    }
+  const fetchCourses = () => {
+    queryClient.invalidateQueries({ queryKey: ['adminCourses'] });
   };
 
-  const fetchBatches = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/admin/batches`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setBatches(data || []);
-      }
-    } catch (error) {
-      console.error("Error fetching batches:", error);
-    }
+  const fetchBatches = () => {
+    queryClient.invalidateQueries({ queryKey: ['adminBatches'] });
   };
 
   const fetchAllStudentsForAssign = async () => {
@@ -2379,18 +2423,8 @@ const AdminDashboard = () => {
     navigate('/login');
   };
 
-  const fetchStats = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/admin/stats`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setStats(data);
-      }
-    } catch (error) {
-      console.error("Error fetching stats:", error);
-    }
+  const fetchStats = () => {
+    queryClient.invalidateQueries({ queryKey: ['adminStats'] });
   };
 
   const fetchStudents = async (pageToUse = null) => {
@@ -2455,59 +2489,16 @@ const AdminDashboard = () => {
     }
   };
 
-  const fetchLiveClasses = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/student/dashboard`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const combined = [];
-        if (data.todayLiveClass) combined.push(data.todayLiveClass);
-        if (data.upcomingLiveClasses) combined.push(...data.upcomingLiveClasses);
-        setLiveClasses(combined);
-      }
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
+  const fetchLiveClasses = () => {
+    queryClient.invalidateQueries({ queryKey: ['adminLiveClasses'] });
   };
 
-  const fetchRecordedClasses = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/admin/recorded-classes`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setRecordedClasses(data.recorded_classes || data || []);
-      }
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
+  const fetchRecordedClasses = () => {
+    queryClient.invalidateQueries({ queryKey: ['adminRecordedClasses'] });
   };
 
-
-  const fetchAnnouncements = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/admin/announcements`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setAnnouncements(data.announcements || []);
-      }
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
+  const fetchAnnouncements = () => {
+    queryClient.invalidateQueries({ queryKey: ['adminAnnouncements'] });
   };
 
   const toggleFees = async (studentId) => {

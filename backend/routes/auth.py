@@ -6,6 +6,7 @@ import re
 import hashlib
 import firebase_init
 from flask import Blueprint, request, jsonify, g
+from bson import ObjectId
 from db import db
 from config import Config
 from auth_middleware import token_required

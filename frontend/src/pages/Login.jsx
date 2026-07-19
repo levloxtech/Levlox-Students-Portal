@@ -304,7 +304,7 @@ const Login = () => {
     }
   };
 
-  const handleVerifyOtp = async (e) => {
+  const handleStudentLoginVerifyOtp = async (e) => {
     e?.preventDefault();
     const otp = studentOtpFields.join('');
     if (otp.length !== 6) {
@@ -628,11 +628,65 @@ const Login = () => {
             </div>
           )}
 
-          {/* ══════════ FORMS ══════════ */}
+          {/* Tab Selector */}
           {view === 'login' && (
-            <form onSubmit={handleLoginSubmit} noValidate className="animated-form">
+            <div style={{
+              display: 'flex',
+              background: 'rgba(255, 255, 255, 0.03)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: '14px',
+              padding: '4px',
+              marginBottom: '28px',
+              gap: '4px'
+            }}>
+              <button
+                type="button"
+                onClick={() => { setLoginTab('student'); setOtpStep('phone'); setPhoneError(''); setPassError(''); }}
+                style={{
+                  flex: 1,
+                  padding: '10px 0',
+                  borderRadius: '10px',
+                  border: 'none',
+                  fontSize: '13.5px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  transition: 'all 0.2s',
+                  background: loginTab === 'student' ? 'rgba(108,60,240,0.15)' : 'transparent',
+                  color: loginTab === 'student' ? '#C4B5FD' : 'rgba(255,255,255,0.4)',
+                  boxShadow: loginTab === 'student' ? 'inset 0 1px 0 rgba(255,255,255,0.06)' : 'none'
+                }}
+              >
+                Student Portal
+              </button>
+              <button
+                type="button"
+                onClick={() => { setLoginTab('admin'); setPhoneError(''); setPassError(''); }}
+                style={{
+                  flex: 1,
+                  padding: '10px 0',
+                  borderRadius: '10px',
+                  border: 'none',
+                  fontSize: '13.5px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  transition: 'all 0.2s',
+                  background: loginTab === 'admin' ? 'rgba(108,60,240,0.15)' : 'transparent',
+                  color: loginTab === 'admin' ? '#C4B5FD' : 'rgba(255,255,255,0.4)',
+                  boxShadow: loginTab === 'admin' ? 'inset 0 1px 0 rgba(255,255,255,0.06)' : 'none'
+                }}
+              >
+                Admin Portal
+              </button>
+            </div>
+          )}
+
+          {/* ══════════ FORMS ══════════ */}
+          {view === 'login' && loginTab === 'student' && otpStep === 'phone' && (
+            <form onSubmit={handleSendOtp} noValidate className="animated-form">
               {/* ─── Mobile Number ─── */}
-              <div style={{ marginBottom: phoneError ? 10 : 20 }}>
+              <div style={{ marginBottom: phoneError ? 10 : 24 }}>
                 <label style={labelStyle} htmlFor="phone">Mobile Number</label>
                 <div className={`input-group-relative ${phoneError ? 'error-border' : phone.length === selectedCountry.length ? 'success-border' : ''}`}>
                   <button
@@ -802,20 +856,129 @@ const Login = () => {
                 {phoneError && <p style={errorStyle}>{phoneError}</p>}
               </div>
 
-              {/* ─── Password ─── */}
-              <div style={{ marginBottom: passError ? 10 : 12 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
-                  <label style={{ ...labelStyle, marginBottom: 0 }} htmlFor="password">Password</label>
-                  <button
-                    type="button"
-                    onClick={() => { setView('forgot-step1'); setForgotPhone(''); setForgotPhoneError(''); }}
-                    style={{ background: 'none', border: 'none', color: '#A78BFA', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 0, transition: 'color 0.15s' }}
-                    onMouseEnter={e => e.currentTarget.style.color = '#C4B5FD'}
-                    onMouseLeave={e => e.currentTarget.style.color = '#A78BFA'}
-                  >
-                    Forgot Password?
-                  </button>
+              {/* ─── SEND OTP BUTTON ─── */}
+              <button
+                type="submit"
+                disabled={loading || isLocked}
+                style={{
+                  width: '100%', height: 52, borderRadius: 14, border: 'none',
+                  background: isLocked
+                    ? 'rgba(108,60,240,0.2)'
+                    : 'linear-gradient(135deg, #6C3CF0 0%, #4c22bc 100%)',
+                  color: isLocked ? 'rgba(255,255,255,0.3)' : 'white',
+                  fontSize: 15, fontWeight: 800, cursor: isLocked ? 'not-allowed' : 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                  fontFamily: 'inherit', letterSpacing: -0.2,
+                  boxShadow: isLocked ? 'none' : '0 8px 24px rgba(108,60,240,0.35), inset 0 1px 0 rgba(255,255,255,0.12)',
+                  transition: 'all 0.22s',
+                }}
+                onMouseEnter={e => { if (!isLocked && !loading) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 14px 32px rgba(108,60,240,0.45), inset 0 1px 0 rgba(255,255,255,0.12)'; } }}
+                onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = isLocked ? 'none' : '0 8px 24px rgba(108,60,240,0.35), inset 0 1px 0 rgba(255,255,255,0.12)'; }}
+              >
+                {loading ? (
+                  <>
+                    <span style={{ width: 18, height: 18, border: '2px solid rgba(255,255,255,0.25)', borderTopColor: 'white', borderRadius: '50%', display: 'inline-block', animation: 'loginSpin 0.75s linear infinite' }} />
+                    Sending Code…
+                  </>
+                ) : (
+                  <>
+                    <KeyRound size={17} strokeWidth={1.75} /> Send OTP
+                  </>
+                )}
+              </button>
+            </form>
+          )}
+
+          {/* Student Verify OTP step */}
+          {view === 'login' && loginTab === 'student' && otpStep === 'otp' && (
+            <form onSubmit={handleStudentLoginVerifyOtp} className="animated-form" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }} onPaste={handleStudentOtpPaste}>
+                {studentOtpFields.map((val, i) => (
+                  <input
+                    key={i}
+                    id={`student-otp-${i}`}
+                    type="text"
+                    maxLength={1}
+                    value={val}
+                    onChange={e => handleStudentOtpChange(e, i)}
+                    onKeyDown={e => handleStudentOtpKeyDown(e, i)}
+                    autoFocus={i === 0}
+                    style={{
+                      width: 44, height: 52, textAlign: 'center', fontSize: 20, fontWeight: 800,
+                      border: `1.5px solid ${val ? '#8B5CF6' : 'rgba(255,255,255,0.1)'}`,
+                      borderRadius: 10, background: val ? 'rgba(108,60,240,0.08)' : 'rgba(255,255,255,0.03)',
+                      outline: 'none', fontFamily: 'inherit', color: 'white',
+                      boxShadow: val ? '0 0 12px rgba(139,92,246,0.2)' : 'none',
+                      transition: 'all 0.15s'
+                    }}
+                  />
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button
+                  type="button"
+                  onClick={() => setOtpStep('phone')}
+                  style={{
+                    height: 52, width: 56, borderRadius: 14, border: '1px solid rgba(255,255,255,0.1)',
+                    background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.7)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#FFFFFF'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.color = 'rgba(255,255,255,0.7)'; }}
+                >
+                  <ArrowLeft size={18} />
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{
+                    flex: 1, height: 52, borderRadius: 14, border: 'none',
+                    background: 'linear-gradient(135deg, #6C3CF0 0%, #4c22bc 100%)',
+                    color: 'white', fontSize: 15, fontWeight: 800, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    boxShadow: '0 8px 24px rgba(108,60,240,0.35), inset 0 1px 0 rgba(255,255,255,0.12)',
+                    transition: 'all 0.22s'
+                  }}
+                  onMouseEnter={e => { if (!loading) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 14px 32px rgba(108,60,240,0.45), inset 0 1px 0 rgba(255,255,255,0.12)'; } }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 8px 24px rgba(108,60,240,0.35), inset 0 1px 0 rgba(255,255,255,0.12)'; }}
+                >
+                  {loading ? 'Verifying…' : 'Verify & Login'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Admin Login page (password based) */}
+          {view === 'login' && loginTab === 'admin' && (
+            <form onSubmit={handleLoginSubmit} noValidate className="animated-form">
+              {/* ─── Username / Mobile / Email ─── */}
+              <div style={{ marginBottom: phoneError ? 10 : 20 }}>
+                <label style={labelStyle} htmlFor="admin-phone">Admin Username / Email / Mobile</label>
+                <div className={`input-group-relative ${phoneError ? 'error-border' : ''}`}>
+                  <div className="input-icon-left">
+                    <User size={16} />
+                  </div>
+                  <input
+                    id="admin-phone"
+                    className="premium-input"
+                    style={{ cursor: isLocked ? 'not-allowed' : 'text', paddingLeft: 42 }}
+                    type="text"
+                    placeholder="Enter credentials"
+                    value={phone}
+                    onChange={e => { setPhone(e.target.value); setPhoneError(''); }}
+                    disabled={isLocked}
+                    autoComplete="off"
+                    required
+                  />
                 </div>
+                {phoneError && <p style={errorStyle}>{phoneError}</p>}
+              </div>
+
+              {/* ─── Password ─── */}
+              <div style={{ marginBottom: passError ? 10 : 24 }}>
+                <label style={labelStyle} htmlFor="password">Password</label>
                 <div className={`input-group-relative ${passError ? 'error-border' : ''}`}>
                   <div className="input-icon-left">
                     <Lock size={16} />
@@ -825,7 +988,7 @@ const Login = () => {
                     className="premium-input"
                     style={{ cursor: isLocked ? 'not-allowed' : 'text' }}
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="Enter your password"
+                    placeholder="Enter password"
                     value={password}
                     onChange={e => { setPassword(e.target.value); setPassError(''); }}
                     disabled={isLocked}
@@ -844,28 +1007,6 @@ const Login = () => {
                 {passError && <p style={errorStyle}>{passError}</p>}
               </div>
 
-              {/* ─── Remember Me ─── */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24, marginTop: 4 }}>
-                <div
-                  onClick={() => setRememberMe(p => !p)}
-                  style={{
-                    width: 18, height: 18, borderRadius: 5,
-                    border: `1.5px solid ${rememberMe ? '#6C3CF0' : 'rgba(255,255,255,0.2)'}`,
-                    background: rememberMe ? '#6C3CF0' : 'transparent',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s',
-                  }}
-                >
-                  {rememberMe && <Check size={11} color="white" strokeWidth={2.5} />}
-                </div>
-                <label
-                  onClick={() => setRememberMe(p => !p)}
-                  style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontWeight: 500, userSelect: 'none' }}
-                >
-                  Remember me on this device
-                </label>
-              </div>
-
               {/* ─── SUBMIT BUTTON ─── */}
               <button
                 type="submit"
@@ -881,7 +1022,6 @@ const Login = () => {
                   fontFamily: 'inherit', letterSpacing: -0.2,
                   boxShadow: isLocked ? 'none' : '0 8px 24px rgba(108,60,240,0.35), inset 0 1px 0 rgba(255,255,255,0.12)',
                   transition: 'all 0.22s',
-                  position: 'relative', overflow: 'hidden',
                 }}
                 onMouseEnter={e => { if (!isLocked && !loading) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 14px 32px rgba(108,60,240,0.45), inset 0 1px 0 rgba(255,255,255,0.12)'; } }}
                 onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = isLocked ? 'none' : '0 8px 24px rgba(108,60,240,0.35), inset 0 1px 0 rgba(255,255,255,0.12)'; }}
@@ -1322,6 +1462,9 @@ const Login = () => {
       >
         <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.65 }}>{modalText}</p>
       </CustomModal>
+
+      {/* Firebase reCAPTCHA Container */}
+      <div id="recaptcha-container"></div>
 
       {/* ─── Styles ─── */}
       <style>{`
