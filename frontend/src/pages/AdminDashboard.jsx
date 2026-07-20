@@ -341,6 +341,7 @@ const AdminDashboard = () => {
 
   const [selectedStudentDetails, setSelectedStudentDetails] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [studentSessions, setStudentSessions] = useState([]);
 
   const [resetCredentials, setResetCredentials] = useState(null);
 
@@ -2567,6 +2568,38 @@ const AdminDashboard = () => {
     };
   }, [studentToDelete]);
 
+  const fetchStudentSessions = async (studentId) => {
+    try {
+      const response = await fetch(`${API_BASE}/admin/students/${studentId}/sessions`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setStudentSessions(data || []);
+      }
+    } catch (e) {
+      console.error("Error fetching sessions:", e);
+    }
+  };
+
+  const revokeStudentSession = async (sessionId, studentId) => {
+    if (!window.confirm("Are you sure you want to revoke this session and force log out this device?")) return;
+    try {
+      const response = await fetch(`${API_BASE}/admin/sessions/${sessionId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        showModal("Success", "Device logged out successfully.", "success");
+        fetchStudentSessions(studentId);
+      } else {
+        showModal("Error", "Failed to revoke session", "error");
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const handleViewStudentDetails = async (studentId) => {
     try {
       const response = await fetch(`${API_BASE}/admin/students/${studentId}`, {
@@ -2575,6 +2608,7 @@ const AdminDashboard = () => {
       if (response.ok) {
         const data = await response.json();
         setSelectedStudentDetails(data);
+        fetchStudentSessions(studentId);
         setShowDetailsModal(true);
       } else {
         showModal("Error", "Failed to retrieve student details", "error");
@@ -5918,6 +5952,36 @@ const AdminDashboard = () => {
                         {selectedStudentDetails.feesStatus || 'Pending'}
                       </span>
                     </div>
+                  </div>
+
+                  <div style={{ width: '100%', borderTop: '1px solid var(--border-color)', paddingTop: '14px', textAlign: 'left', marginTop: '14px' }}>
+                    <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 700, display: 'block', marginBottom: '8px' }}>Active Devices</span>
+                    {studentSessions.length === 0 ? (
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>No active devices</span>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {studentSessions.map(session => (
+                          <div key={session._id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 8px', background: 'var(--surface)', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                {session.device_type === 'mobile' ? '📱 ' : '💻 '}
+                                {session.device_label || 'Unknown Device'}
+                              </span>
+                              <span style={{ fontSize: '9px', color: 'var(--text-tertiary)' }}>
+                                Active: {new Date(session.last_active).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                            <button 
+                              type="button" 
+                              onClick={() => revokeStudentSession(session._id, selectedStudentDetails.id)}
+                              style={{ border: 'none', background: 'rgba(239, 68, 68, 0.1)', color: '#EF4444', fontSize: '9.5px', fontWeight: 800, padding: '4px 8px', borderRadius: '6px', cursor: 'pointer' }}
+                            >
+                              Revoke
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 

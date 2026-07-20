@@ -22,9 +22,26 @@ def token_required(allowed_roles=None):
             try:
                 data = jwt.decode(token, Config.JWT_SECRET_KEY, algorithms=["HS256"])
                 user_id = data.get('user_id')
+                device_id = data.get('device_id')
                 if not user_id:
                     return jsonify({'message': 'Invalid token payload!'}), 401
                 
+                # Check active session if device_id is present
+                if device_id:
+                    session = db._db.sessions.find_one({
+                        "user_id": user_id,
+                        "device_id": device_id,
+                        "token": token
+                    })
+                    if not session:
+                        return jsonify({"error": "session_revoked", "message": "This session was logged out. Please log in again."}), 401
+                    
+                    import datetime
+                    db._db.sessions.update_one(
+                        {"_id": session["_id"]},
+                        {"$set": {"last_active": datetime.datetime.utcnow()}}
+                    )
+
                 # Fetch user details from database
                 user = db.users.find_one({"_id": ObjectId(user_id)})
                 if not user:
@@ -32,6 +49,7 @@ def token_required(allowed_roles=None):
                 
                 # Remove password hash for safety
                 user.pop('password', None)
+                user.pop('password_hash', None)
                 user['id'] = str(user['_id'])
                 user['_id'] = str(user['_id'])
                 
@@ -42,6 +60,8 @@ def token_required(allowed_roles=None):
                 # Store user object in Flask globals
                 g.current_user = user
                 g.user_id = user_id
+                g.device_id = device_id
+                g.user_role = user.get('role')
                 
             except jwt.ExpiredSignatureError:
                 return jsonify({'message': 'Token has expired!'}), 401

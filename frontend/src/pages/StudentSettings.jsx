@@ -46,10 +46,44 @@ const StudentSettings = ({ token, user, showModal, onPasswordChanged }) => {
   const [forgotTimer, setForgotTimer] = useState(0);
   const [showForgotNewPassword, setShowForgotNewPassword] = useState(false);
   const [showForgotConfirmPassword, setShowForgotConfirmPassword] = useState(false);
+  const [mySessions, setMySessions] = useState([]);
 
   useEffect(() => {
     fetchProfile();
+    fetchMySessions();
   }, []);
+
+  const fetchMySessions = async () => {
+    try {
+      const r = await fetch(`${API_BASE}/auth/my-sessions`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (r.ok) {
+        const d = await r.json();
+        setMySessions(d || []);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleRemoveMySession = async (sessionId) => {
+    if (!window.confirm("Are you sure you want to log out from this device?")) return;
+    try {
+      const r = await fetch(`${API_BASE}/auth/my-sessions/${sessionId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (r.ok) {
+        showToast('Logged out from device ✓');
+        fetchMySessions();
+      } else {
+        showModal('Error', 'Failed to log out device', 'error');
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   // Timer intervals
   useEffect(() => {
@@ -1010,6 +1044,55 @@ const StudentSettings = ({ token, user, showModal, onPasswordChanged }) => {
               )}
             </div>
           )}
+
+          {/* MY DEVICES CARD */}
+          <div className="clickable-card-hover" style={{
+            background: '#FFF',
+            border: '1.5px solid var(--border-color)',
+            borderRadius: 20,
+            padding: 28,
+            boxShadow: 'var(--shadow-card)',
+            display: 'flex',
+            flexDirection: 'column'
+          }}>
+            <h3 style={{ fontSize: 16, fontWeight: 800, margin: '0 0 20px', display: 'flex', alignItems: 'center', gap: 8, color: '#121118' }}>
+              📱 My Active Devices
+            </h3>
+            <p style={{ margin: '0 0 16px', fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              You can be logged in on maximum 2 devices (1 mobile + 1 desktop). Manage your active sessions below:
+            </p>
+            
+            {mySessions.length === 0 ? (
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>No active devices found.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {mySessions.map(session => (
+                  <div key={session._id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: 'var(--surface-alt)', border: '1px solid var(--border-color)', borderRadius: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <span style={{ fontSize: 20 }}>{session.device_type === 'mobile' ? '📱' : '💻'}</span>
+                      <div>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', display: 'block' }}>
+                          {session.device_label || 'Unknown Device'}
+                        </span>
+                        <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                          Last active: {new Date(session.last_active).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveMySession(session._id)}
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '6px 12px', height: 'auto', fontSize: 12 }}
+                    >
+                      Log Out
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
         </div>
 
       </div>

@@ -23,6 +23,11 @@ def setup_indexes():
     db._db.admins.create_index("firebase_uid", unique=True, sparse=True)
     db._db.admins.create_index("phone")
 
+    # sessions
+    print("Indexing sessions...")
+    db._db.sessions.create_index([("user_id", 1), ("device_type", 1)])
+    db._db.sessions.create_index("device_id")
+
     # batches
     print("Indexing batches...")
     db._db.batches.create_index("created_by")

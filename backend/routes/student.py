@@ -323,14 +323,15 @@ def change_password():
             return jsonify({'message': 'Student not found'}), 404
 
         # Validate current password
-        if not bcrypt.checkpw(current_password.encode('utf-8'), user['password']):
+        hashed_pw = user.get('password_hash') or user.get('password')
+        if not hashed_pw or not bcrypt.checkpw(current_password.encode('utf-8'), hashed_pw):
             return jsonify({'message': 'Invalid current password!'}), 400
 
         # Hash and update new password
         hashed = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
         db.users.update_one(
             {"_id": ObjectId(g.user_id)},
-            {"$set": {"password": hashed, "must_change_password": False}}
+            {"$set": {"password_hash": hashed, "must_change_password": False}}
         )
         return jsonify({'message': 'Password changed successfully!'}), 200
     except Exception as e:

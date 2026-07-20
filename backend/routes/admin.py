@@ -417,9 +417,9 @@ def create_student():
     phone = phone.strip()
 
     # Check if user already exists
-    if db.users.find_one({"phone": phone}):
+    if db._db.admins.find_one({"phone": phone}) or db._db.students.find_one({"phone": phone}):
         return jsonify({'message': 'Mobile number already registered'}), 400
-    if db.users.find_one({"email": email}):
+    if db._db.admins.find_one({"email": email}) or db._db.students.find_one({"email": email}):
         return jsonify({'message': 'Email already registered'}), 400
 
     # Auto generate sequence-based rollNumber (LSP-2026-XXXX)
@@ -451,7 +451,7 @@ def create_student():
         "phone": phone,
         "role": "student",
         "status": status,
-        "password": hashed_password,
+        "password_hash": hashed_password,
         "must_change_password": True,
         "rollNumber": rollNumber,
         "course": course or "Fullstack Engineering",
@@ -648,7 +648,7 @@ def reset_student_password(student_id):
         db.users.update_one(
             {"_id": ObjectId(student_id)},
             {"$set": {
-                "password": hashed_password,
+                "password_hash": hashed_password,
                 "must_change_password": True
             }}
         )
@@ -682,11 +682,11 @@ def update_student(student_id):
 
     try:
         # Check uniqueness
-        existing_email = db.users.find_one({"email": email.strip().lower(), "_id": {"$ne": ObjectId(student_id)}})
+        existing_email = db._db.admins.find_one({"email": email.strip().lower(), "_id": {"$ne": ObjectId(student_id)}}) or db._db.students.find_one({"email": email.strip().lower(), "_id": {"$ne": ObjectId(student_id)}})
         if existing_email:
             return jsonify({'message': 'Email already registered to another account'}), 400
         
-        existing_phone = db.users.find_one({"phone": phone.strip(), "_id": {"$ne": ObjectId(student_id)}})
+        existing_phone = db._db.admins.find_one({"phone": phone.strip(), "_id": {"$ne": ObjectId(student_id)}}) or db._db.students.find_one({"phone": phone.strip(), "_id": {"$ne": ObjectId(student_id)}})
         if existing_phone:
             return jsonify({'message': 'Mobile number already registered to another account'}), 400
 
@@ -1948,6 +1948,59 @@ def update_admin_phone_verify():
     )
 
     return jsonify({'message': 'Mobile number updated successfully!'}), 200
+
+@admin_bp.route("/create-admin", methods=["POST"])
+@token_required(allowed_roles=["admin"])
+def create_admin():
+    import bcrypt
+    data = request.get_json(force=True) or {}
+    name = data.get("name")
+    phone = data.get("phone")
+    email = data.get("email", "")
+    password = data.get("password")
+
+    if not name or not phone or not password:
+        return jsonify({"error": "Name, phone, and password are required"}), 400
+
+    name = name.strip()
+    phone = phone.strip()
+    email = email.strip().lower()
+
+    if db._db.admins.find_one({"phone": phone}) or db._db.students.find_one({"phone": phone}):
+        return jsonify({"error": "Phone already in use"}), 409
+
+    if email and (db._db.admins.find_one({"email": email}) or db._db.students.find_one({"email": email})):
+        return jsonify({"error": "Email already in use"}), 409
+
+    password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+    doc = {
+        "name": name,
+        "phone": phone,
+        "email": email,
+        "password_hash": password_hash,
+        "role": "admin",
+        "created_by": g.user_id,
+        "created_at": datetime.datetime.utcnow()
+    }
+    db._db.admins.insert_one(doc)
+    return jsonify({"message": "Admin created successfully!"}), 201
+
+@admin_bp.route("/students/<student_id>/sessions", methods=["GET"])
+@token_required(allowed_roles=["admin"])
+def get_student_sessions(student_id):
+    sessions = list(db._db.sessions.find({"user_id": student_id}))
+    for s in sessions:
+        s["_id"] = str(s["_id"])
+        s.pop("token", None)
+    return jsonify(sessions), 200
+
+@admin_bp.route("/sessions/<session_id>", methods=["DELETE"])
+@token_required(allowed_roles=["admin"])
+def remove_session(session_id):
+    result = db._db.sessions.delete_one({"_id": ObjectId(session_id)})
+    if result.deleted_count == 0:
+        return jsonify({"error": "Not found"}), 404
+    return jsonify({"message": "Device logged out successfully"}), 200
 
 
 

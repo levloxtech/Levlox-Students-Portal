@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import leveloxLogo from '../assets/levelox-icon-transparent.png';
 import {
   Eye, EyeOff, Lock, Phone, User, Check, X,
   ShieldCheck, KeyRound, ArrowLeft, AlertTriangle,
@@ -8,6 +9,7 @@ import {
 import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
 import { auth } from "../firebase";
 import CustomModal from '../components/Modal';
+import { getDeviceId, getDeviceType, getDeviceLabel } from "../utils/deviceId";
 
 const COUNTRIES = [
   { name: 'India', code: 'IN', dial: '+91', flag: '🇮🇳', length: 10, pattern: /^[6789]\d{9}$/ },
@@ -20,36 +22,31 @@ const COUNTRIES = [
 ];
 
 const API_BASE = 'http://localhost:5000/api';
-
-/* ─── Rate limiter config ───────────────────────────── */
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_SECONDS = 30;
+const INACTIVITY_TIMEOUT = 15 * 60 * 1000;
 
-/* ─── Inactivity timeout (ms) ──────────────────────── */
-const INACTIVITY_TIMEOUT = 15 * 60 * 1000; // 15 minutes
-
-/* ══════════════════════════════════════════════════════
-   LOGIN PAGE
-══════════════════════════════════════════════════════ */
 const Login = () => {
-  /* ─── Form state ─── */
+  /* ─── Form states ─── */
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
 
-  /* ─── Firebase OTP states ─── */
-  const [loginTab, setLoginTab] = useState('student'); // 'student' | 'admin'
-  const [otpStep, setOtpStep] = useState('phone'); // 'phone' | 'otp'
-  const [confirmResult, setConfirmResult] = useState(null);
-  const [studentOtpFields, setStudentOtpFields] = useState(['', '', '', '', '', '']);
+  /* ─── Student Registration states ─── */
+  const [regName, setRegName] = useState('');
+  const [regPhone, setRegPhone] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regConfirmPassword, setRegConfirmPassword] = useState('');
+  const [showRegPassword, setShowRegPassword] = useState(false);
 
   /* ─── Country selector state ─── */
   const [selectedCountry, setSelectedCountry] = useState(COUNTRIES[0]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  /* ─── View State: 'login', 'forgot-step1', 'forgot-step2', 'forgot-step3' ─── */
+  /* ─── View State: 'login', 'register', 'forgot-step1', 'forgot-step2', 'forgot-step3' ─── */
   const [view, setView] = useState('login');
 
   /* ─── Loading & Modals ─── */
@@ -68,6 +65,7 @@ const Login = () => {
   /* ─── Forgot Password Flow ─── */
   const [forgotPhone, setForgotPhone] = useState('');
   const [otpFields, setOtpFields] = useState(['', '', '', '', '', '']);
+  const [confirmResult, setConfirmResult] = useState(null);
   const [resetToken, setResetToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -92,7 +90,6 @@ const Login = () => {
     const saved = localStorage.getItem('rememberedPhone');
     if (saved) { setPhone(saved); setRememberMe(true); }
 
-    // Restore lockout state from sessionStorage
     const savedLockout = sessionStorage.getItem('loginLockoutEnd');
     if (savedLockout) {
       const endTime = parseInt(savedLockout, 10);
@@ -105,6 +102,25 @@ const Login = () => {
         sessionStorage.removeItem('loginLockoutEnd');
         sessionStorage.removeItem('loginAttempts');
       }
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const reason = params.get('reason');
+    if (reason === 'session_revoked') {
+      setModalTitle('Session Revoked');
+      setModalText('You have been logged out because this session was revoked or you logged in from another device.');
+      setModalType('warning');
+      setModalOpen(true);
+    } else if (reason === 'session_expired') {
+      setModalTitle('Session Expired');
+      setModalText('Your session has expired. Please sign in again.');
+      setModalType('info');
+      setModalOpen(true);
+    } else if (reason === 'inactivity') {
+      setModalTitle('Session Inactivity');
+      setModalText('You have been logged out due to 30 minutes of inactivity.');
+      setModalType('info');
+      setModalOpen(true);
     }
   }, []);
 
@@ -177,9 +193,20 @@ const Login = () => {
     setFailedAttempts(newCount);
     if (newCount >= MAX_ATTEMPTS) {
       triggerLockout();
-      return true; // locked
+      return true;
     }
     return false;
+  };
+
+  const isMockFirebase = !import.meta.env.VITE_FIREBASE_API_KEY || import.meta.env.VITE_FIREBASE_API_KEY === "PLACEHOLDER_API_KEY";
+
+  const setupRecaptcha = () => {
+    if (!window.recaptchaVerifier) {
+      window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
+        size: "invisible",
+        callback: () => { }
+      });
+    }
   };
 
   /* ════ LOGIN SUBMIT ════ */
@@ -189,10 +216,9 @@ const Login = () => {
 
     if (isLocked) return;
 
-    // Validate
     let valid = true;
     const countryLength = selectedCountry.length;
-    
+
     if (phone.length !== countryLength || isNaN(phone)) {
       setPhoneError(`Enter a valid ${countryLength}-digit mobile number`);
       valid = false;
@@ -209,7 +235,14 @@ const Login = () => {
     setLoading(true);
     try {
       const url = `${API_BASE}/auth/login`;
-      const payload = { phone, password };
+      const formattedPhone = `${selectedCountry.dial}${phone}`;
+      const payload = {
+        phone: formattedPhone,
+        password,
+        device_id: getDeviceId(),
+        device_type: getDeviceType(),
+        device_label: getDeviceLabel()
+      };
 
       const res = await fetch(url, {
         method: 'POST',
@@ -233,7 +266,6 @@ const Login = () => {
         throw new Error(`${data.message || 'Invalid credentials'}${remaining > 0 ? ` (${remaining} attempt${remaining > 1 ? 's' : ''} remaining)` : ''}`);
       }
 
-      // Successful login
       setFailedAttempts(0);
       sessionStorage.removeItem('loginAttempts');
       sessionStorage.removeItem('loginLockoutEnd');
@@ -253,141 +285,52 @@ const Login = () => {
     }
   };
 
-  const isMockFirebase = !import.meta.env.VITE_FIREBASE_API_KEY || import.meta.env.VITE_FIREBASE_API_KEY === "PLACEHOLDER_API_KEY";
-
-  const setupRecaptcha = () => {
-    if (!window.recaptchaVerifier) {
-      window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
-        size: "invisible",
-        callback: () => {}
-      });
+  /* ════ STUDENT SELF-REGISTRATION ════ */
+  const handleRegisterSubmit = async (e) => {
+    e.preventDefault();
+    let valid = true;
+    if (!regName.trim()) {
+      showToast('Validation Error', 'Name is required', 'error');
+      valid = false;
     }
-  };
-
-  const handleSendOtp = async (e) => {
-    e?.preventDefault();
-    setPhoneError('');
     const countryLength = selectedCountry.length;
-    if (phone.length !== countryLength || isNaN(phone)) {
-      setPhoneError(`Enter a valid ${countryLength}-digit mobile number`);
-      return;
-    } else if (selectedCountry.pattern && !selectedCountry.pattern.test(phone)) {
-      setPhoneError(`Invalid phone number format for ${selectedCountry.name}`);
-      return;
+    if (regPhone.length !== countryLength || isNaN(regPhone)) {
+      showToast('Validation Error', `Enter a valid ${countryLength}-digit mobile number`, 'error');
+      valid = false;
     }
+    if (regPassword.length < 8) {
+      showToast('Validation Error', 'Password must be at least 8 characters', 'error');
+      valid = false;
+    }
+    if (regPassword !== regConfirmPassword) {
+      showToast('Validation Error', 'Passwords do not match', 'error');
+      valid = false;
+    }
+    if (!valid) return;
 
     setLoading(true);
-    if (isMockFirebase) {
-      setTimeout(() => {
-        setLoading(false);
-        setOtpStep('otp');
-        setStudentOtpFields(['', '', '', '', '', '']);
-        showToast('SMS Mock Mode', 'Development mode. OTP code is 123456.', 'success');
-        console.log(`[FIREBASE MOCK] OTP for ${selectedCountry.dial}${phone} is 123456`);
-      }, 1000);
-      return;
-    }
-
     try {
-      setupRecaptcha();
-      const formattedPhone = `${selectedCountry.dial}${phone}`;
-      const result = await signInWithPhoneNumber(auth, formattedPhone, window.recaptchaVerifier);
-      setConfirmResult(result);
-      setOtpStep('otp');
-      setStudentOtpFields(['', '', '', '', '', '']);
-      showToast('OTP Sent', `Verification code sent to ${formattedPhone}.`, 'success');
-    } catch (err) {
-      console.error(err);
-      showToast('OTP Failed', err.message || 'Could not send verification code.', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleStudentLoginVerifyOtp = async (e) => {
-    e?.preventDefault();
-    const otp = studentOtpFields.join('');
-    if (otp.length !== 6) {
-      showToast('Incomplete OTP', 'Please enter all 6 digits.', 'error');
-      return;
-    }
-
-    setLoading(true);
-    if (isMockFirebase) {
-      setTimeout(async () => {
-        try {
-          if (otp !== '123456') {
-            throw new Error('Invalid verification code. Try 123456');
-          }
-          const mockToken = `mock-token-${phone}`;
-          const res = await fetch(`${API_BASE}/auth/verify`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ idToken: mockToken })
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.message || 'Verification failed');
-
-          localStorage.setItem('token', data.token);
-          localStorage.setItem('user', JSON.stringify(data.user));
-          resetInactivityTimer();
-          showToast('Welcome', `Successfully signed in as ${data.user.name || 'Student'}.`, 'success');
-          navigate('/student');
-        } catch (err) {
-          showToast('Verification Failed', err.message, 'error');
-        } finally {
-          setLoading(false);
-        }
-      }, 1000);
-      return;
-    }
-
-    try {
-      const result = await confirmResult.confirm(otp);
-      const idToken = await result.user.getIdToken();
-
-      const res = await fetch(`${API_BASE}/auth/verify`, {
+      const formattedPhone = `${selectedCountry.dial}${regPhone}`;
+      const res = await fetch(`${API_BASE}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken })
+        body: JSON.stringify({
+          name: regName,
+          phone: formattedPhone,
+          email: regEmail,
+          password: regPassword
+        })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Verification failed');
-
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.user));
-      resetInactivityTimer();
-      navigate('/student');
+      if (!res.ok) throw new Error(data.message || 'Registration failed');
+      showToast('Success', 'Registration successful! Please login with your password.', 'success');
+      setView('login');
+      setPhone(regPhone);
+      setRegName(''); setRegPhone(''); setRegEmail(''); setRegPassword(''); setRegConfirmPassword('');
     } catch (err) {
-      console.error(err);
-      showToast('Verification Failed', err.message || 'Invalid code.', 'error');
+      showToast('Registration Failed', err.message, 'error');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleStudentOtpChange = (e, index) => {
-    const val = e.target.value;
-    if (val && isNaN(val)) return;
-    const next = [...studentOtpFields]; next[index] = val.slice(-1);
-    setStudentOtpFields(next);
-    if (val && index < 5) document.getElementById(`student-otp-${index + 1}`)?.focus();
-  };
-
-  const handleStudentOtpKeyDown = (e, index) => {
-    if (e.key === 'Backspace' && !studentOtpFields[index] && index > 0) {
-      const prev = [...studentOtpFields]; prev[index - 1] = '';
-      setStudentOtpFields(prev);
-      document.getElementById(`student-otp-${index - 1}`)?.focus();
-    }
-  };
-
-  const handleStudentOtpPaste = (e) => {
-    e.preventDefault();
-    const pasted = e.clipboardData.getData('text');
-    if (pasted.length === 6 && !isNaN(pasted)) {
-      setStudentOtpFields(pasted.split(''));
-      document.getElementById('student-otp-5')?.focus();
     }
   };
 
@@ -405,18 +348,39 @@ const Login = () => {
     }
     setLoading(true);
     try {
+      const formattedPhone = `${selectedCountry.dial}${forgotPhone}`;
+
       const res = await fetch(`${API_BASE}/auth/forgot-password/request`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: forgotPhone })
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: formattedPhone })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'OTP request failed');
-      setOtpExpiryTime(300); setResendCooldown(30);
-      setOtpFields(['', '', '', '', '', '']);
-      setView('forgot-step2');
-      showToast('OTP Sent', 'A 6-digit verification code has been generated.', 'success');
-    } catch (err) { showToast('Error', err.message, 'error'); }
-    finally { setLoading(false); }
+      if (!res.ok) throw new Error(data.message || 'Phone check failed');
+
+      if (isMockFirebase) {
+        setOtpStep => { };
+        setOtpFields(['', '', '', '', '', '']);
+        setOtpExpiryTime(300);
+        setResendCooldown(30);
+        setView('forgot-step2');
+        showToast('SMS Mock Mode', 'Development mode. OTP code is 123456.', 'success');
+        console.log(`[FIREBASE MOCK] OTP for ${formattedPhone} is 123456`);
+      } else {
+        setupRecaptcha();
+        const result = await signInWithPhoneNumber(auth, formattedPhone, window.recaptchaVerifier);
+        setConfirmResult(result);
+        setOtpFields(['', '', '', '', '', '']);
+        setOtpExpiryTime(300);
+        setResendCooldown(30);
+        setView('forgot-step2');
+        showToast('OTP Sent', `Verification code sent to ${formattedPhone}.`, 'success');
+      }
+    } catch (err) {
+      showToast('Error', err.message || 'Could not request OTP.', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   /* ════ FORGOT PASSWORD — STEP 2: VERIFY OTP ════ */
@@ -426,16 +390,23 @@ const Login = () => {
     if (otp.length !== 6) { showToast('Incomplete OTP', 'Enter all 6 digits.', 'error'); return; }
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/auth/forgot-password/verify`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: forgotPhone, otp })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Verification failed');
-      setResetToken(data.reset_token);
+      let idToken = '';
+      if (isMockFirebase) {
+        if (otp !== '123456') {
+          throw new Error('Invalid verification code. Try 123456');
+        }
+        idToken = `mock-token-${selectedCountry.dial}${forgotPhone}`;
+      } else {
+        const result = await confirmResult.confirm(otp);
+        idToken = await result.user.getIdToken();
+      }
+      setResetToken(idToken);
       setView('forgot-step3');
-    } catch (err) { showToast('Failed', err.message, 'error'); }
-    finally { setLoading(false); }
+    } catch (err) {
+      showToast('Failed', err.message || 'Verification failed.', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   /* ════ FORGOT PASSWORD — STEP 3: RESET ════ */
@@ -455,17 +426,21 @@ const Login = () => {
     if (!valid) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/auth/forgot-password/reset`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reset_token: resetToken, new_password: newPassword })
+      const res = await fetch(`${API_BASE}/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken: resetToken, newPassword: newPassword })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Reset failed');
+      if (!res.ok) throw new Error(data.message || data.error || 'Reset failed');
       setView('login');
       setNewPassword(''); setConfirmPassword('');
       showToast('Password Reset', 'Your password has been updated. Please sign in.', 'success');
-    } catch (err) { showToast('Reset Failed', err.message, 'error'); }
-    finally { setLoading(false); }
+    } catch (err) {
+      showToast('Reset Failed', err.message || 'Could not reset password.', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   /* ─── OTP input handlers ─── */
@@ -512,12 +487,8 @@ const Login = () => {
   const strengthColor = strength >= 5 ? '#10B981' : strength >= 3 ? '#F59E0B' : '#EF4444';
   const strengthLabel = strength >= 5 ? 'Very Strong' : strength >= 3 ? 'Medium' : 'Weak';
 
-  /* ════════════════════════════════════════════════════
-     RENDER
-  ════════════════════════════════════════════════════ */
   return (
     <>
-      {/* ── Full-page dark gradient background ── */}
       <div style={{
         minHeight: '100vh',
         background: 'linear-gradient(135deg, #050308 0%, #0D0A1A 30%, #110C24 55%, #0A0814 80%, #070510 100%)',
@@ -530,21 +501,18 @@ const Login = () => {
         fontFamily: "'Plus Jakarta Sans', 'Inter', sans-serif",
       }}>
 
-        {/* ── Decorative orbs ── */}
+        {/* Decorative orbs */}
         <div style={{ position: 'absolute', top: '-15%', left: '-10%', width: 520, height: 520, borderRadius: '50%', background: 'radial-gradient(circle, rgba(108,60,240,0.14) 0%, transparent 65%)', pointerEvents: 'none' }} />
         <div style={{ position: 'absolute', bottom: '-20%', right: '-8%', width: 600, height: 600, borderRadius: '50%', background: 'radial-gradient(circle, rgba(76,34,188,0.10) 0%, transparent 65%)', pointerEvents: 'none' }} />
         <div style={{ position: 'absolute', top: '40%', right: '15%', width: 280, height: 280, borderRadius: '50%', background: 'radial-gradient(circle, rgba(167,139,250,0.06) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
-        {/* ── Subtle grid texture ── */}
+        {/* Subtle grid texture */}
         <div style={{
           position: 'absolute', inset: 0, pointerEvents: 'none',
           backgroundImage: 'linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px)',
           backgroundSize: '60px 60px',
         }} />
 
-        {/* ══════════════════════════════════════
-            GLASSMORPHISM CARD
-        ══════════════════════════════════════ */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', maxWidth: 440, zIndex: 1 }}>
           <div style={{
             width: '100%',
@@ -559,899 +527,873 @@ const Login = () => {
             animation: 'cardFadeIn 0.5s cubic-bezier(0.4,0,0.2,1)',
           }}>
 
-          {/* ── Card top accent line ── */}
-          <div style={{
-            position: 'absolute', top: 0, left: '10%', right: '10%', height: 1,
-            background: 'linear-gradient(90deg, transparent, rgba(108,60,240,0.6), rgba(167,139,250,0.4), transparent)',
-            borderRadius: '0 0 4px 4px',
-          }} />
-
-          {/* ── LOGO ── */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 32 }}>
             <div style={{
-              width: 60, height: 60, borderRadius: 16,
-              background: 'linear-gradient(135deg, #6C3CF0 0%, #4c22bc 100%)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 8px 24px rgba(108,60,240,0.4), 0 0 0 1px rgba(108,60,240,0.3)',
-              marginBottom: 18,
-            }}>
-              <GraduationCap size={28} color="white" strokeWidth={1.75} />
-            </div>
+              position: 'absolute', top: 0, left: '10%', right: '10%', height: 1,
+              background: 'linear-gradient(90deg, transparent, rgba(108,60,240,0.6), rgba(167,139,250,0.4), transparent)',
+              borderRadius: '0 0 4px 4px',
+            }} />
 
-            <h1 style={{
-              fontSize: 22, fontWeight: 800, color: '#FFFFFF',
-              letterSpacing: -0.5, margin: '0 0 6px', textAlign: 'center',
-            }}>
-              {view === 'login' && <>Welcome Back to <span style={{ color: '#A78BFA' }}>Levlox</span></>}
-              {view === 'forgot-step1' && <>Recover <span style={{ color: '#A78BFA' }}>Password</span></>}
-              {view === 'forgot-step2' && <>Verify <span style={{ color: '#A78BFA' }}>OTP Code</span></>}
-              {view === 'forgot-step3' && <>Create New <span style={{ color: '#A78BFA' }}>Password</span></>}
-            </h1>
-            <p style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.38)', margin: 0, textAlign: 'center', fontWeight: 500 }}>
-              {view === 'login' && 'Sign in to access your dashboard'}
-              {view === 'forgot-step1' && "Enter your registered mobile number below"}
-              {view === 'forgot-step2' && 'Enter the 6-digit code sent to your number'}
-              {view === 'forgot-step3' && 'Set a strong password for your account'}
-            </p>
-          </div>
+            {/* LOGO */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 32 }}>
+              <img 
+                src={leveloxLogo} 
+                alt="Levlox Logo" 
+                style={{
+                  width: 84,
+                  height: 84,
+                  objectFit: 'contain',
+                  marginBottom: 18,
+                  filter: 'drop-shadow(0 0 20px rgba(139, 92, 246, 0.6))',
+                }}
+              />
 
-          {/* ── LOCKOUT BANNER ── */}
-          {isLocked && (
-            <div style={{
-              background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)',
-              borderRadius: 12, padding: '14px 16px', marginBottom: 20,
-              display: 'flex', alignItems: 'center', gap: 12,
-            }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(239,68,68,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <Shield size={18} color="#F87171" strokeWidth={1.75} />
-              </div>
-              <div>
-                <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#FCA5A5' }}>Account Temporarily Locked</p>
-                <p style={{ margin: '2px 0 0', fontSize: 12, color: 'rgba(252,165,165,0.7)' }}>
-                  Too many failed attempts. Try again in <span style={{ fontWeight: 800, color: '#FCA5A5' }}>{lockoutCountdown}s</span>
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* ── ATTEMPT WARNING (3–4 attempts) ── */}
-          {!isLocked && failedAttempts >= 3 && failedAttempts < MAX_ATTEMPTS && (
-            <div style={{
-              background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)',
-              borderRadius: 10, padding: '10px 14px', marginBottom: 16,
-              display: 'flex', alignItems: 'center', gap: 10,
-            }}>
-              <AlertTriangle size={15} color="#FBBF24" strokeWidth={1.75} />
-              <p style={{ margin: 0, fontSize: 12.5, color: '#FDE68A', fontWeight: 600 }}>
-                {MAX_ATTEMPTS - failedAttempts} attempt{MAX_ATTEMPTS - failedAttempts > 1 ? 's' : ''} remaining before temporary lockout
+              <h1 style={{
+                fontSize: 22, fontWeight: 800, color: '#FFFFFF',
+                letterSpacing: -0.5, margin: '0 0 6px', textAlign: 'center',
+              }}>
+                {view === 'login' && <>Welcome Back to <span style={{ color: '#A78BFA' }}>Levlox</span></>}
+                {view === 'register' && <>Student <span style={{ color: '#A78BFA' }}>Registration</span></>}
+                {view === 'forgot-step1' && <>Recover <span style={{ color: '#A78BFA' }}>Password</span></>}
+                {view === 'forgot-step2' && <>Verify <span style={{ color: '#A78BFA' }}>OTP Code</span></>}
+                {view === 'forgot-step3' && <>Create New <span style={{ color: '#A78BFA' }}>Password</span></>}
+              </h1>
+              <p style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.38)', margin: 0, textAlign: 'center', fontWeight: 500 }}>
+                {view === 'login' && 'Sign in to access your dashboard'}
+                {view === 'register' && 'Register your details to create an account'}
+                {view === 'forgot-step1' && "Enter your registered mobile number below"}
+                {view === 'forgot-step2' && 'Enter the 6-digit code sent to your number'}
+                {view === 'forgot-step3' && 'Set a strong password for your account'}
               </p>
             </div>
-          )}
 
-          {/* Tab Selector */}
-          {view === 'login' && (
-            <div style={{
-              display: 'flex',
-              background: 'rgba(255, 255, 255, 0.03)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              borderRadius: '14px',
-              padding: '4px',
-              marginBottom: '28px',
-              gap: '4px'
-            }}>
-              <button
-                type="button"
-                onClick={() => { setLoginTab('student'); setOtpStep('phone'); setPhoneError(''); setPassError(''); }}
-                style={{
-                  flex: 1,
-                  padding: '10px 0',
-                  borderRadius: '10px',
-                  border: 'none',
-                  fontSize: '13.5px',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                  transition: 'all 0.2s',
-                  background: loginTab === 'student' ? 'rgba(108,60,240,0.15)' : 'transparent',
-                  color: loginTab === 'student' ? '#C4B5FD' : 'rgba(255,255,255,0.4)',
-                  boxShadow: loginTab === 'student' ? 'inset 0 1px 0 rgba(255,255,255,0.06)' : 'none'
-                }}
-              >
-                Student Portal
-              </button>
-              <button
-                type="button"
-                onClick={() => { setLoginTab('admin'); setPhoneError(''); setPassError(''); }}
-                style={{
-                  flex: 1,
-                  padding: '10px 0',
-                  borderRadius: '10px',
-                  border: 'none',
-                  fontSize: '13.5px',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                  transition: 'all 0.2s',
-                  background: loginTab === 'admin' ? 'rgba(108,60,240,0.15)' : 'transparent',
-                  color: loginTab === 'admin' ? '#C4B5FD' : 'rgba(255,255,255,0.4)',
-                  boxShadow: loginTab === 'admin' ? 'inset 0 1px 0 rgba(255,255,255,0.06)' : 'none'
-                }}
-              >
-                Admin Portal
-              </button>
-            </div>
-          )}
+            {/* LOCKOUT BANNER */}
+            {isLocked && (
+              <div style={{
+                background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)',
+                borderRadius: 12, padding: '14px 16px', marginBottom: 20,
+                display: 'flex', alignItems: 'center', gap: 12,
+              }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(239,68,68,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Shield size={18} color="#F87171" strokeWidth={1.75} />
+                </div>
+                <div>
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#FCA5A5' }}>Account Temporarily Locked</p>
+                  <p style={{ margin: '2px 0 0', fontSize: 12, color: 'rgba(252,165,165,0.7)' }}>
+                    Too many failed attempts. Try again in <span style={{ fontWeight: 800, color: '#FCA5A5' }}>{lockoutCountdown}s</span>
+                  </p>
+                </div>
+              </div>
+            )}
 
-          {/* ══════════ FORMS ══════════ */}
-          {view === 'login' && loginTab === 'student' && otpStep === 'phone' && (
-            <form onSubmit={handleSendOtp} noValidate className="animated-form">
-              {/* ─── Mobile Number ─── */}
-              <div style={{ marginBottom: phoneError ? 10 : 24 }}>
-                <label style={labelStyle} htmlFor="phone">Mobile Number</label>
-                <div className={`input-group-relative ${phoneError ? 'error-border' : phone.length === selectedCountry.length ? 'success-border' : ''}`}>
-                  <button
-                    type="button"
-                    onClick={() => setDropdownOpen(!dropdownOpen)}
-                    style={{
+            {/* ATTEMPT WARNING */}
+            {!isLocked && failedAttempts >= 3 && failedAttempts < MAX_ATTEMPTS && (
+              <div style={{
+                background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)',
+                borderRadius: 10, padding: '10px 14px', marginBottom: 16,
+                display: 'flex', alignItems: 'center', gap: 10,
+              }}>
+                <AlertTriangle size={15} color="#FBBF24" strokeWidth={1.75} />
+                <p style={{ margin: 0, fontSize: 12.5, color: '#FDE68A', fontWeight: 600 }}>
+                  {MAX_ATTEMPTS - failedAttempts} attempt{MAX_ATTEMPTS - failedAttempts > 1 ? 's' : ''} remaining before temporary lockout
+                </p>
+              </div>
+            )}
+
+            {/* ══════════ FORMS ══════════ */}
+
+            {/* Unified Login Form */}
+            {view === 'login' && (
+              <form onSubmit={handleLoginSubmit} noValidate className="animated-form">
+                {/* Phone Number */}
+                <div style={{ marginBottom: phoneError ? 10 : 20 }}>
+                  <label style={labelStyle} htmlFor="phone">Mobile Number</label>
+                  <div className={`input-group-relative ${phoneError ? 'error-border' : phone.length === selectedCountry.length ? 'success-border' : ''}`}>
+                    <button
+                      type="button"
+                      onClick={() => setDropdownOpen(!dropdownOpen)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'rgba(255, 255, 255, 0.9)',
+                        fontSize: '15px',
+                        paddingLeft: 16,
+                        paddingRight: 10,
+                        height: '100%',
+                        cursor: 'pointer',
+                        outline: 'none',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <span style={{
+                        background: 'rgba(139, 92, 246, 0.15)',
+                        border: '1px solid rgba(139, 92, 246, 0.3)',
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        fontSize: '11px',
+                        fontWeight: '800',
+                        color: '#C4B5FD',
+                        letterSpacing: '0.5px',
+                        textTransform: 'uppercase'
+                      }}>
+                        {selectedCountry.code}
+                      </span>
+                      <span style={{ fontSize: 9, opacity: 0.5 }}>▼</span>
+                    </button>
+
+                    <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.12)', flexShrink: 0 }} />
+
+                    <div style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 6,
-                      background: 'transparent',
-                      border: 'none',
-                      color: 'rgba(255, 255, 255, 0.9)',
-                      fontSize: '15px',
-                      paddingLeft: 16,
-                      paddingRight: 10,
-                      height: '100%',
-                      cursor: 'pointer',
-                      outline: 'none',
+                      paddingLeft: 12,
+                      paddingRight: 12,
+                      color: '#FFFFFF',
+                      fontWeight: 600,
+                      fontSize: '14.5px',
                       flexShrink: 0,
-                    }}
-                  >
-                    <span style={{
-                      background: 'rgba(139, 92, 246, 0.15)',
-                      border: '1px solid rgba(139, 92, 246, 0.3)',
-                      padding: '3px 8px',
-                      borderRadius: '6px',
-                      fontSize: '11px',
-                      fontWeight: '800',
-                      color: '#C4B5FD',
-                      letterSpacing: '0.5px',
-                      textTransform: 'uppercase'
+                      userSelect: 'none',
                     }}>
-                      {selectedCountry.code}
-                    </span>
-                    <span style={{ fontSize: 9, opacity: 0.5 }}>▼</span>
-                  </button>
-
-                  <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.12)', flexShrink: 0 }} />
-
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    paddingLeft: 12,
-                    paddingRight: 12,
-                    color: '#FFFFFF',
-                    fontWeight: 600,
-                    fontSize: '14.5px',
-                    flexShrink: 0,
-                    userSelect: 'none',
-                  }}>
-                    {selectedCountry.dial}
-                  </div>
-
-                  <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.12)', flexShrink: 0 }} />
-
-                  <input
-                    id="phone"
-                    className="premium-input phone-input-field"
-                    style={{ cursor: isLocked ? 'not-allowed' : 'text' }}
-                    type="text"
-                    placeholder="Enter mobile number"
-                    value={phone}
-                    maxLength={selectedCountry.length}
-                    onChange={e => { setPhone(e.target.value.replace(/\D/g, '')); setPhoneError(''); }}
-                    disabled={isLocked}
-                    autoComplete="off"
-                    required
-                  />
-
-                  {phone.length === selectedCountry.length && !phoneError && (
-                    <div style={{ paddingRight: 18, display: 'flex', alignItems: 'center', color: '#10B981', flexShrink: 0 }}>
-                      <Check size={15} />
+                      {selectedCountry.dial}
                     </div>
-                  )}
 
-                  {dropdownOpen && (
-                    <div style={{
-                      position: 'absolute',
-                      top: '62px',
-                      left: 0,
-                      width: '100%',
-                      background: '#0d0a1b',
-                      border: '1px solid rgba(255, 255, 255, 0.12)',
-                      borderRadius: '14px',
-                      boxShadow: '0 12px 36px rgba(0, 0, 0, 0.6)',
-                      zIndex: 100,
-                      padding: '8px',
-                      boxSizing: 'border-box',
-                      animation: 'formFadeIn 0.2s ease',
-                    }}>
-                      <input
-                        type="text"
-                        placeholder="Search country..."
-                        value={searchQuery}
-                        onChange={e => setSearchQuery(e.target.value)}
-                        autoFocus
-                        autoComplete="off"
-                        style={{
-                          width: '100%',
-                          height: '38px',
-                          background: 'rgba(255, 255, 255, 0.05)',
-                          border: '1px solid rgba(255, 255, 255, 0.08)',
-                          borderRadius: '8px',
-                          padding: '0 12px',
-                          color: '#FFFFFF',
-                          fontSize: '13px',
-                          outline: 'none',
-                          boxSizing: 'border-box',
-                          marginBottom: '8px',
-                        }}
-                      />
-                      <div style={{ maxHeight: '210px', overflowY: 'auto' }}>
-                        {COUNTRIES.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()) || c.dial.includes(searchQuery))
-                          .map(c => {
-                            const isSelected = selectedCountry.code === c.code;
-                            return (
-                              <div
-                                key={c.code}
-                                onClick={() => {
-                                  setSelectedCountry(c);
-                                  setPhone('');
-                                  setPhoneError('');
-                                  setDropdownOpen(false);
-                                  setSearchQuery('');
-                                }}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'space-between',
-                                  padding: '10px 12px',
-                                  borderRadius: '10px',
-                                  cursor: 'pointer',
-                                  fontSize: '13.5px',
-                                  color: isSelected ? '#FFFFFF' : 'rgba(255,255,255,0.7)',
-                                  background: isSelected ? '#6C3CF0' : 'transparent',
-                                  transition: 'all 0.15s',
-                                  marginBottom: '2px',
-                                }}
-                                onMouseEnter={e => {
-                                  if (!isSelected) e.currentTarget.style.background = 'rgba(108, 60, 240, 0.15)';
-                                }}
-                                onMouseLeave={e => {
-                                  if (!isSelected) e.currentTarget.style.background = 'transparent';
-                                }}
-                              >
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                  <span style={{
-                                    background: isSelected ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.08)',
-                                    padding: '2px 6px',
-                                    borderRadius: '4px',
-                                    fontSize: '10px',
-                                    fontWeight: '800',
-                                    color: isSelected ? '#FFFFFF' : '#C4B5FD',
-                                  }}>
-                                    {c.code}
-                                  </span>
-                                  <span style={{ fontWeight: isSelected ? '700' : '500' }}>{c.name}</span>
-                                </div>
-                                <span style={{ fontWeight: 600, opacity: isSelected ? 0.9 : 0.4 }}>{c.dial}</span>
-                              </div>
-                            );
-                          })}
+                    <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.12)', flexShrink: 0 }} />
+
+                    <input
+                      id="phone"
+                      className="premium-input phone-input-field"
+                      style={{ cursor: isLocked ? 'not-allowed' : 'text' }}
+                      type="text"
+                      placeholder="Enter mobile number"
+                      value={phone}
+                      maxLength={selectedCountry.length}
+                      onChange={e => { setPhone(e.target.value.replace(/\D/g, '')); setPhoneError(''); }}
+                      disabled={isLocked}
+                      autoComplete="new-password"
+                      required
+                    />
+
+                    {phone.length === selectedCountry.length && !phoneError && (
+                      <div style={{ paddingRight: 18, display: 'flex', alignItems: 'center', color: '#10B981', flexShrink: 0 }}>
+                        <Check size={15} />
                       </div>
-                    </div>
-                  )}
+                    )}
+
+                    {dropdownOpen && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '62px',
+                        left: 0,
+                        width: '100%',
+                        background: '#0d0a1b',
+                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                        borderRadius: '14px',
+                        boxShadow: '0 12px 36px rgba(0, 0, 0, 0.6)',
+                        zIndex: 100,
+                        padding: '8px',
+                        boxSizing: 'border-box',
+                        animation: 'formFadeIn 0.2s ease',
+                      }}>
+                        <input
+                          type="text"
+                          placeholder="Search country..."
+                          value={searchQuery}
+                          onChange={e => setSearchQuery(e.target.value)}
+                          autoFocus
+                          autoComplete="off"
+                          style={{
+                            width: '100%',
+                            height: '38px',
+                            background: 'rgba(255, 255, 255, 0.05)',
+                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                            borderRadius: '8px',
+                            padding: '0 12px',
+                            color: '#FFFFFF',
+                            fontSize: '13px',
+                            outline: 'none',
+                            boxSizing: 'border-box',
+                            marginBottom: '8px',
+                          }}
+                        />
+                        <div style={{ maxHeight: '210px', overflowY: 'auto' }}>
+                          {COUNTRIES.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()) || c.dial.includes(searchQuery))
+                            .map(c => {
+                              const isSelected = selectedCountry.code === c.code;
+                              return (
+                                <div
+                                  key={c.code}
+                                  onClick={() => {
+                                    setSelectedCountry(c);
+                                    setPhone('');
+                                    setPhoneError('');
+                                    setDropdownOpen(false);
+                                    setSearchQuery('');
+                                  }}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    padding: '10px 12px',
+                                    borderRadius: '10px',
+                                    cursor: 'pointer',
+                                    fontSize: '13.5px',
+                                    color: isSelected ? '#FFFFFF' : 'rgba(255,255,255,0.7)',
+                                    background: isSelected ? '#6C3CF0' : 'transparent',
+                                    transition: 'all 0.15s',
+                                    marginBottom: '2px',
+                                  }}
+                                  onMouseEnter={e => {
+                                    if (!isSelected) e.currentTarget.style.background = 'rgba(108, 60, 240, 0.15)';
+                                  }}
+                                  onMouseLeave={e => {
+                                    if (!isSelected) e.currentTarget.style.background = 'transparent';
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                    <span style={{
+                                      background: isSelected ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.08)',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      fontSize: '10px',
+                                      fontWeight: '800',
+                                      color: isSelected ? '#FFFFFF' : '#C4B5FD',
+                                    }}>
+                                      {c.code}
+                                    </span>
+                                    <span style={{ fontWeight: isSelected ? '700' : '500' }}>{c.name}</span>
+                                  </div>
+                                  <span style={{ fontWeight: 600, opacity: isSelected ? 0.9 : 0.4 }}>{c.dial}</span>
+                                </div>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {phoneError && <p style={errorStyle}>{phoneError}</p>}
                 </div>
-                {phoneError && <p style={errorStyle}>{phoneError}</p>}
-              </div>
 
-              {/* ─── SEND OTP BUTTON ─── */}
-              <button
-                type="submit"
-                disabled={loading || isLocked}
-                style={{
-                  width: '100%', height: 52, borderRadius: 14, border: 'none',
-                  background: isLocked
-                    ? 'rgba(108,60,240,0.2)'
-                    : 'linear-gradient(135deg, #6C3CF0 0%, #4c22bc 100%)',
-                  color: isLocked ? 'rgba(255,255,255,0.3)' : 'white',
-                  fontSize: 15, fontWeight: 800, cursor: isLocked ? 'not-allowed' : 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-                  fontFamily: 'inherit', letterSpacing: -0.2,
-                  boxShadow: isLocked ? 'none' : '0 8px 24px rgba(108,60,240,0.35), inset 0 1px 0 rgba(255,255,255,0.12)',
-                  transition: 'all 0.22s',
-                }}
-                onMouseEnter={e => { if (!isLocked && !loading) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 14px 32px rgba(108,60,240,0.45), inset 0 1px 0 rgba(255,255,255,0.12)'; } }}
-                onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = isLocked ? 'none' : '0 8px 24px rgba(108,60,240,0.35), inset 0 1px 0 rgba(255,255,255,0.12)'; }}
-              >
-                {loading ? (
-                  <>
-                    <span style={{ width: 18, height: 18, border: '2px solid rgba(255,255,255,0.25)', borderTopColor: 'white', borderRadius: '50%', display: 'inline-block', animation: 'loginSpin 0.75s linear infinite' }} />
-                    Sending Code…
-                  </>
-                ) : (
-                  <>
-                    <KeyRound size={17} strokeWidth={1.75} /> Send OTP
-                  </>
-                )}
-              </button>
-            </form>
-          )}
+                {/* Password */}
+                <div style={{ marginBottom: passError ? 10 : 24 }}>
+                  <label style={labelStyle} htmlFor="password">Password</label>
+                  <div className={`input-group-relative ${passError ? 'error-border' : ''}`}>
+                    <div className="input-icon-left">
+                      <Lock size={16} />
+                    </div>
+                    <input
+                      id="password"
+                      className="premium-input"
+                      style={{ cursor: isLocked ? 'not-allowed' : 'text' }}
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="Enter password"
+                      value={password}
+                      onChange={e => { setPassword(e.target.value); setPassError(''); }}
+                      disabled={isLocked}
+                      autoComplete="new-password"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(p => !p)}
+                      className="input-icon-right"
+                      tabIndex={-1}
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  {passError && <p style={errorStyle}>{passError}</p>}
+                </div>
 
-          {/* Student Verify OTP step */}
-          {view === 'login' && loginTab === 'student' && otpStep === 'otp' && (
-            <form onSubmit={handleStudentLoginVerifyOtp} className="animated-form" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }} onPaste={handleStudentOtpPaste}>
-                {studentOtpFields.map((val, i) => (
-                  <input
-                    key={i}
-                    id={`student-otp-${i}`}
-                    type="text"
-                    maxLength={1}
-                    value={val}
-                    onChange={e => handleStudentOtpChange(e, i)}
-                    onKeyDown={e => handleStudentOtpKeyDown(e, i)}
-                    autoFocus={i === 0}
-                    style={{
-                      width: 44, height: 52, textAlign: 'center', fontSize: 20, fontWeight: 800,
-                      border: `1.5px solid ${val ? '#8B5CF6' : 'rgba(255,255,255,0.1)'}`,
-                      borderRadius: 10, background: val ? 'rgba(108,60,240,0.08)' : 'rgba(255,255,255,0.03)',
-                      outline: 'none', fontFamily: 'inherit', color: 'white',
-                      boxShadow: val ? '0 0 12px rgba(139,92,246,0.2)' : 'none',
-                      transition: 'all 0.15s'
-                    }}
-                  />
-                ))}
-              </div>
-
-              <div style={{ display: 'flex', gap: 12 }}>
-                <button
-                  type="button"
-                  onClick={() => setOtpStep('phone')}
-                  style={{
-                    height: 52, width: 56, borderRadius: 14, border: '1px solid rgba(255,255,255,0.1)',
-                    background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.7)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                    transition: 'all 0.2s'
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#FFFFFF'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.color = 'rgba(255,255,255,0.7)'; }}
-                >
-                  <ArrowLeft size={18} />
-                </button>
+                {/* Submit Button */}
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || isLocked}
                   style={{
-                    flex: 1, height: 52, borderRadius: 14, border: 'none',
-                    background: 'linear-gradient(135deg, #6C3CF0 0%, #4c22bc 100%)',
-                    color: 'white', fontSize: 15, fontWeight: 800, cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    boxShadow: '0 8px 24px rgba(108,60,240,0.35), inset 0 1px 0 rgba(255,255,255,0.12)',
-                    transition: 'all 0.22s'
+                    width: '100%', height: 52, borderRadius: 14, border: 'none',
+                    background: isLocked
+                      ? 'rgba(108,60,240,0.2)'
+                      : 'linear-gradient(135deg, #6C3CF0 0%, #4c22bc 100%)',
+                    color: isLocked ? 'rgba(255,255,255,0.3)' : 'white',
+                    fontSize: 15, fontWeight: 800, cursor: isLocked ? 'not-allowed' : 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                    fontFamily: 'inherit', letterSpacing: -0.2,
+                    boxShadow: isLocked ? 'none' : '0 8px 24px rgba(108,60,240,0.35), inset 0 1px 0 rgba(255,255,255,0.12)',
+                    transition: 'all 0.22s',
+                    marginBottom: 16,
                   }}
-                  onMouseEnter={e => { if (!loading) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 14px 32px rgba(108,60,240,0.45), inset 0 1px 0 rgba(255,255,255,0.12)'; } }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 8px 24px rgba(108,60,240,0.35), inset 0 1px 0 rgba(255,255,255,0.12)'; }}
+                  onMouseEnter={e => { if (!isLocked && !loading) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 14px 32px rgba(108,60,240,0.45), inset 0 1px 0 rgba(255,255,255,0.12)'; } }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = isLocked ? 'none' : '0 8px 24px rgba(108,60,240,0.35), inset 0 1px 0 rgba(255,255,255,0.12)'; }}
                 >
-                  {loading ? 'Verifying…' : 'Verify & Login'}
+                  {loading ? (
+                    <>
+                      <span style={{ width: 18, height: 18, border: '2px solid rgba(255,255,255,0.25)', borderTopColor: 'white', borderRadius: '50%', display: 'inline-block', animation: 'loginSpin 0.75s linear infinite' }} />
+                      Authenticating…
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck size={17} strokeWidth={1.75} /> Secure Login
+                    </>
+                  )}
                 </button>
-              </div>
-            </form>
-          )}
 
-          {/* Admin Login page (password based) */}
-          {view === 'login' && loginTab === 'admin' && (
-            <form onSubmit={handleLoginSubmit} noValidate className="animated-form">
-              {/* ─── Username / Mobile / Email ─── */}
-              <div style={{ marginBottom: phoneError ? 10 : 20 }}>
-                <label style={labelStyle} htmlFor="admin-phone">Admin Username / Email / Mobile</label>
-                <div className={`input-group-relative ${phoneError ? 'error-border' : ''}`}>
-                  <div className="input-icon-left">
-                    <User size={16} />
-                  </div>
-                  <input
-                    id="admin-phone"
-                    className="premium-input"
-                    style={{ cursor: isLocked ? 'not-allowed' : 'text', paddingLeft: 42 }}
-                    type="text"
-                    placeholder="Enter credentials"
-                    value={phone}
-                    onChange={e => { setPhone(e.target.value); setPhoneError(''); }}
-                    disabled={isLocked}
-                    autoComplete="off"
-                    required
-                  />
-                </div>
-                {phoneError && <p style={errorStyle}>{phoneError}</p>}
-              </div>
-
-              {/* ─── Password ─── */}
-              <div style={{ marginBottom: passError ? 10 : 24 }}>
-                <label style={labelStyle} htmlFor="password">Password</label>
-                <div className={`input-group-relative ${passError ? 'error-border' : ''}`}>
-                  <div className="input-icon-left">
-                    <Lock size={16} />
-                  </div>
-                  <input
-                    id="password"
-                    className="premium-input"
-                    style={{ cursor: isLocked ? 'not-allowed' : 'text' }}
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Enter password"
-                    value={password}
-                    onChange={e => { setPassword(e.target.value); setPassError(''); }}
-                    disabled={isLocked}
-                    autoComplete="new-password"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(p => !p)}
-                    className="input-icon-right"
-                    tabIndex={-1}
+                {/* Sub-form Navigation links */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', fontSize: 13, marginTop: 12 }}>
+                  <a
+                    href="#forgot"
+                    onClick={(e) => { e.preventDefault(); setForgotPhone(phone); setView('forgot-step1'); }}
+                    style={{ color: '#A78BFA', fontWeight: 600, textDecoration: 'none' }}
                   >
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
+                    Forgot password?
+                  </a>
+                  <a
+                    href="#register"
+                    onClick={(e) => { e.preventDefault(); setView('register'); }}
+                    style={{ color: '#A78BFA', fontWeight: 600, textDecoration: 'none' }}
+                  >
+                    Register as Student
+                  </a>
                 </div>
-                {passError && <p style={errorStyle}>{passError}</p>}
-              </div>
+              </form>
+            )}
 
-              {/* ─── SUBMIT BUTTON ─── */}
-              <button
-                type="submit"
-                disabled={loading || isLocked}
-                style={{
-                  width: '100%', height: 52, borderRadius: 14, border: 'none',
-                  background: isLocked
-                    ? 'rgba(108,60,240,0.2)'
-                    : 'linear-gradient(135deg, #6C3CF0 0%, #4c22bc 100%)',
-                  color: isLocked ? 'rgba(255,255,255,0.3)' : 'white',
-                  fontSize: 15, fontWeight: 800, cursor: isLocked ? 'not-allowed' : 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-                  fontFamily: 'inherit', letterSpacing: -0.2,
-                  boxShadow: isLocked ? 'none' : '0 8px 24px rgba(108,60,240,0.35), inset 0 1px 0 rgba(255,255,255,0.12)',
-                  transition: 'all 0.22s',
-                }}
-                onMouseEnter={e => { if (!isLocked && !loading) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 14px 32px rgba(108,60,240,0.45), inset 0 1px 0 rgba(255,255,255,0.12)'; } }}
-                onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = isLocked ? 'none' : '0 8px 24px rgba(108,60,240,0.35), inset 0 1px 0 rgba(255,255,255,0.12)'; }}
-              >
-                {loading ? (
-                  <>
-                    <span style={{ width: 18, height: 18, border: '2px solid rgba(255,255,255,0.25)', borderTopColor: 'white', borderRadius: '50%', display: 'inline-block', animation: 'loginSpin 0.75s linear infinite' }} />
-                    Authenticating…
-                  </>
-                ) : isLocked ? (
-                  <>
-                    <Shield size={17} strokeWidth={1.75} /> Locked · {lockoutCountdown}s
-                  </>
-                ) : (
-                  <>
-                    <ShieldCheck size={17} strokeWidth={1.75} /> Secure Login
-                  </>
-                )}
-              </button>
-            </form>
-          )}
+            {/* Student Registration Form */}
+            {view === 'register' && (
+              <form onSubmit={handleRegisterSubmit} noValidate className="animated-form" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {/* Full Name */}
+                <div>
+                  <label style={labelStyle} htmlFor="reg-name">Full Name</label>
+                  <div className="input-group-relative">
+                    <div className="input-icon-left">
+                      <User size={16} />
+                    </div>
+                    <input
+                      id="reg-name"
+                      className="premium-input"
+                      style={{ paddingLeft: 42 }}
+                      type="text"
+                      placeholder="Enter full name"
+                      value={regName}
+                      onChange={e => setRegName(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
 
-          {/* FORGOT PASSWORD — STEP 1 */}
-          {view === 'forgot-step1' && (
-            <form onSubmit={handleRequestOtp} className="animated-form" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              <div>
-                <label style={labelStyle} htmlFor="forgot-phone">Mobile Number</label>
-                <div className={`input-group-relative ${forgotPhoneError ? 'error-border' : ''}`}>
-                  <button
-                    type="button"
-                    onClick={() => setDropdownOpen(!dropdownOpen)}
-                    style={{
+                {/* Mobile Number */}
+                <div>
+                  <label style={labelStyle} htmlFor="reg-phone">Mobile Number</label>
+                  <div className="input-group-relative">
+                    <div style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 6,
-                      background: 'transparent',
-                      border: 'none',
-                      color: 'rgba(255, 255, 255, 0.9)',
-                      fontSize: '15px',
                       paddingLeft: 16,
-                      paddingRight: 10,
-                      height: '100%',
-                      cursor: 'pointer',
-                      outline: 'none',
+                      paddingRight: 12,
+                      color: '#C4B5FD',
+                      fontWeight: 800,
+                      fontSize: '13px',
                       flexShrink: 0,
+                      userSelect: 'none',
+                    }}>
+                      {selectedCountry.dial}
+                    </div>
+                    <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.12)', flexShrink: 0 }} />
+                    <input
+                      id="reg-phone"
+                      className="premium-input phone-input-field"
+                      type="text"
+                      placeholder="Enter mobile number"
+                      value={regPhone}
+                      maxLength={selectedCountry.length}
+                      onChange={e => setRegPhone(e.target.value.replace(/\D/g, ''))}
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Email (Optional) */}
+                <div>
+                  <label style={labelStyle} htmlFor="reg-email">Email Address (Optional)</label>
+                  <div className="input-group-relative">
+                    <input
+                      id="reg-email"
+                      className="premium-input"
+                      style={{ paddingLeft: 18 }}
+                      type="email"
+                      placeholder="Enter email address"
+                      value={regEmail}
+                      onChange={e => setRegEmail(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* Password */}
+                <div>
+                  <label style={labelStyle} htmlFor="reg-password">Password</label>
+                  <div className="input-group-relative">
+                    <div className="input-icon-left">
+                      <Lock size={16} />
+                    </div>
+                    <input
+                      id="reg-password"
+                      className="premium-input"
+                      type={showRegPassword ? 'text' : 'password'}
+                      placeholder="Set password"
+                      value={regPassword}
+                      onChange={e => setRegPassword(e.target.value)}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowRegPassword(p => !p)}
+                      className="input-icon-right"
+                      tabIndex={-1}
+                    >
+                      {showRegPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Confirm Password */}
+                <div>
+                  <label style={labelStyle} htmlFor="reg-confirm">Confirm Password</label>
+                  <div className="input-group-relative">
+                    <div className="input-icon-left">
+                      <Lock size={16} />
+                    </div>
+                    <input
+                      id="reg-confirm"
+                      className="premium-input"
+                      type={showRegPassword ? 'text' : 'password'}
+                      placeholder="Confirm password"
+                      value={regConfirmPassword}
+                      onChange={e => setRegConfirmPassword(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => setView('login')}
+                    style={{
+                      height: 52, width: 56, borderRadius: 14, border: '1px solid rgba(255,255,255,0.1)',
+                      background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.7)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                      transition: 'all 0.2s'
                     }}
                   >
-                    <span style={{
-                      background: 'rgba(139, 92, 246, 0.15)',
-                      border: '1px solid rgba(139, 92, 246, 0.3)',
-                      padding: '3px 8px',
-                      borderRadius: '6px',
-                      fontSize: '11px',
-                      fontWeight: '800',
-                      color: '#C4B5FD',
-                      letterSpacing: '0.5px',
-                      textTransform: 'uppercase'
-                    }}>
-                      {selectedCountry.code}
-                    </span>
-                    <span style={{ fontSize: 9, opacity: 0.5 }}>▼</span>
+                    <ArrowLeft size={18} />
                   </button>
-
-                  <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.12)', flexShrink: 0 }} />
-
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    paddingLeft: 12,
-                    paddingRight: 12,
-                    color: '#FFFFFF',
-                    fontWeight: 600,
-                    fontSize: '14.5px',
-                    flexShrink: 0,
-                    userSelect: 'none',
-                  }}>
-                    {selectedCountry.dial}
-                  </div>
-
-                  <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.12)', flexShrink: 0 }} />
-
-                  <input
-                    id="forgot-phone"
-                    className="premium-input phone-input-field"
-                    type="tel"
-                    maxLength={selectedCountry.length}
-                    placeholder="Enter your mobile number"
-                    value={forgotPhone}
-                    onChange={e => { setForgotPhone(e.target.value.replace(/\D/g, '')); setForgotPhoneError(''); }}
-                    autoComplete="off"
-                    required
-                  />
-
-                  {dropdownOpen && (
-                    <div style={{
-                      position: 'absolute',
-                      top: '62px',
-                      left: 0,
-                      width: '100%',
-                      background: '#0d0a1b',
-                      border: '1px solid rgba(255, 255, 255, 0.12)',
-                      borderRadius: '14px',
-                      boxShadow: '0 12px 36px rgba(0, 0, 0, 0.6)',
-                      zIndex: 100,
-                      padding: '8px',
-                      boxSizing: 'border-box',
-                      animation: 'formFadeIn 0.2s ease',
-                    }}>
-                      <input
-                        type="text"
-                        placeholder="Search country..."
-                        value={searchQuery}
-                        onChange={e => setSearchQuery(e.target.value)}
-                        autoFocus
-                        autoComplete="off"
-                        style={{
-                          width: '100%',
-                          height: '38px',
-                          background: 'rgba(255, 255, 255, 0.05)',
-                          border: '1px solid rgba(255, 255, 255, 0.08)',
-                          borderRadius: '8px',
-                          padding: '0 12px',
-                          color: '#FFFFFF',
-                          fontSize: '13px',
-                          outline: 'none',
-                          boxSizing: 'border-box',
-                          marginBottom: '8px',
-                        }}
-                      />
-                      <div style={{ maxHeight: '210px', overflowY: 'auto' }}>
-                        {COUNTRIES.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()) || c.dial.includes(searchQuery))
-                          .map(c => {
-                            const isSelected = selectedCountry.code === c.code;
-                            return (
-                              <div
-                                key={c.code}
-                                onClick={() => {
-                                  setSelectedCountry(c);
-                                  setForgotPhone('');
-                                  setForgotPhoneError('');
-                                  setDropdownOpen(false);
-                                  setSearchQuery('');
-                                }}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'space-between',
-                                  padding: '10px 12px',
-                                  borderRadius: '10px',
-                                  cursor: 'pointer',
-                                  fontSize: '13.5px',
-                                  color: isSelected ? '#FFFFFF' : 'rgba(255,255,255,0.7)',
-                                  background: isSelected ? '#6C3CF0' : 'transparent',
-                                  transition: 'all 0.15s',
-                                  marginBottom: '2px',
-                                }}
-                                onMouseEnter={e => {
-                                  if (!isSelected) e.currentTarget.style.background = 'rgba(108, 60, 240, 0.15)';
-                                }}
-                                onMouseLeave={e => {
-                                  if (!isSelected) e.currentTarget.style.background = 'transparent';
-                                }}
-                              >
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                  <span style={{
-                                    background: isSelected ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.08)',
-                                    padding: '2px 6px',
-                                    borderRadius: '4px',
-                                    fontSize: '10px',
-                                    fontWeight: '800',
-                                    color: isSelected ? '#FFFFFF' : '#C4B5FD',
-                                  }}>
-                                    {c.code}
-                                  </span>
-                                  <span style={{ fontWeight: isSelected ? '700' : '500' }}>{c.name}</span>
-                                </div>
-                                <span style={{ fontWeight: 600, opacity: isSelected ? 0.9 : 0.4 }}>{c.dial}</span>
-                              </div>
-                            );
-                          })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                {forgotPhoneError && <p style={errorStyle}>{forgotPhoneError}</p>}
-              </div>
-
-              <div style={{ display: 'flex', gap: 12 }}>
-                <button
-                  type="button"
-                  onClick={() => setView('login')}
-                  style={{
-                    height: 52, width: 56, borderRadius: 14, border: '1px solid rgba(255,255,255,0.1)',
-                    background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.7)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                    transition: 'all 0.2s'
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#FFFFFF'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.color = 'rgba(255,255,255,0.7)'; }}
-                >
-                  <ArrowLeft size={18} />
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  style={{
-                    flex: 1, height: 52, borderRadius: 14, border: 'none',
-                    background: 'linear-gradient(135deg, #6C3CF0 0%, #4c22bc 100%)',
-                    color: 'white', fontSize: 15, fontWeight: 800, cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    boxShadow: '0 8px 24px rgba(108,60,240,0.35), inset 0 1px 0 rgba(255,255,255,0.12)',
-                    transition: 'all 0.22s'
-                  }}
-                  onMouseEnter={e => { if (!loading) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 14px 32px rgba(108,60,240,0.45), inset 0 1px 0 rgba(255,255,255,0.12)'; } }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 8px 24px rgba(108,60,240,0.35), inset 0 1px 0 rgba(255,255,255,0.12)'; }}
-                >
-                  {loading ? 'Sending Code…' : 'Send OTP'}
-                </button>
-              </div>
-            </form>
-          )}
-
-          {/* FORGOT PASSWORD — STEP 2 */}
-          {view === 'forgot-step2' && (
-            <form onSubmit={handleVerifyOtp} className="animated-form" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }} onPaste={handleOtpPaste}>
-                {otpFields.map((val, i) => (
-                  <input
-                    key={i}
-                    id={`otp-${i}`}
-                    type="text"
-                    maxLength={1}
-                    value={val}
-                    onChange={e => handleOtpChange(e, i)}
-                    onKeyDown={e => handleOtpKeyDown(e, i)}
-                    autoFocus={i === 0}
+                  <button
+                    type="submit"
+                    disabled={loading}
                     style={{
-                      width: 44, height: 52, textAlign: 'center', fontSize: 20, fontWeight: 800,
-                      border: `1.5px solid ${val ? '#8B5CF6' : 'rgba(255,255,255,0.1)'}`,
-                      borderRadius: 10, background: val ? 'rgba(108,60,240,0.08)' : 'rgba(255,255,255,0.03)',
-                      outline: 'none', fontFamily: 'inherit', color: 'white',
-                      transition: 'all 0.15s',
+                      flex: 1, height: 52, borderRadius: 14, border: 'none',
+                      background: 'linear-gradient(135deg, #6C3CF0 0%, #4c22bc 100%)',
+                      color: 'white', fontSize: 15, fontWeight: 800, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: '0 8px 24px rgba(108,60,240,0.35), inset 0 1px 0 rgba(255,255,255,0.12)',
+                      transition: 'all 0.22s'
+                    }}
+                  >
+                    {loading ? 'Creating Account…' : 'Register Now'}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* FORGOT PASSWORD — STEP 1 */}
+            {view === 'forgot-step1' && (
+              <form onSubmit={handleRequestOtp} className="animated-form" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                <div>
+                  <label style={labelStyle} htmlFor="forgot-phone">Mobile Number</label>
+                  <div className={`input-group-relative ${forgotPhoneError ? 'error-border' : ''}`}>
+                    <button
+                      type="button"
+                      onClick={() => setDropdownOpen(!dropdownOpen)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'rgba(255, 255, 255, 0.9)',
+                        fontSize: '15px',
+                        paddingLeft: 16,
+                        paddingRight: 10,
+                        height: '100%',
+                        cursor: 'pointer',
+                        outline: 'none',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <span style={{
+                        background: 'rgba(139, 92, 246, 0.15)',
+                        border: '1px solid rgba(139, 92, 246, 0.3)',
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        fontSize: '11px',
+                        fontWeight: '800',
+                        color: '#C4B5FD',
+                        letterSpacing: '0.5px',
+                        textTransform: 'uppercase'
+                      }}>
+                        {selectedCountry.code}
+                      </span>
+                      <span style={{ fontSize: 9, opacity: 0.5 }}>▼</span>
+                    </button>
+
+                    <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.12)', flexShrink: 0 }} />
+
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      paddingLeft: 12,
+                      paddingRight: 12,
+                      color: '#FFFFFF',
+                      fontWeight: 600,
+                      fontSize: '14.5px',
+                      flexShrink: 0,
+                      userSelect: 'none',
+                    }}>
+                      {selectedCountry.dial}
+                    </div>
+
+                    <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.12)', flexShrink: 0 }} />
+
+                    <input
+                      id="forgot-phone"
+                      className="premium-input phone-input-field"
+                      type="tel"
+                      maxLength={selectedCountry.length}
+                      placeholder="Enter your mobile number"
+                      value={forgotPhone}
+                      onChange={e => { setForgotPhone(e.target.value.replace(/\D/g, '')); setForgotPhoneError(''); }}
+                      autoComplete="off"
+                      required
+                    />
+
+                    {dropdownOpen && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '62px',
+                        left: 0,
+                        width: '100%',
+                        background: '#0d0a1b',
+                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                        borderRadius: '14px',
+                        boxShadow: '0 12px 36px rgba(0, 0, 0, 0.6)',
+                        zIndex: 100,
+                        padding: '8px',
+                        boxSizing: 'border-box',
+                        animation: 'formFadeIn 0.2s ease',
+                      }}>
+                        <input
+                          type="text"
+                          placeholder="Search country..."
+                          value={searchQuery}
+                          onChange={e => setSearchQuery(e.target.value)}
+                          autoFocus
+                          autoComplete="off"
+                          style={{
+                            width: '100%',
+                            height: '38px',
+                            background: 'rgba(255, 255, 255, 0.05)',
+                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                            borderRadius: '8px',
+                            padding: '0 12px',
+                            color: '#FFFFFF',
+                            fontSize: '13px',
+                            outline: 'none',
+                            boxSizing: 'border-box',
+                            marginBottom: '8px',
+                          }}
+                        />
+                        <div style={{ maxHeight: '210px', overflowY: 'auto' }}>
+                          {COUNTRIES.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()) || c.dial.includes(searchQuery))
+                            .map(c => {
+                              const isSelected = selectedCountry.code === c.code;
+                              return (
+                                <div
+                                  key={c.code}
+                                  onClick={() => {
+                                    setSelectedCountry(c);
+                                    setForgotPhone('');
+                                    setForgotPhoneError('');
+                                    setDropdownOpen(false);
+                                    setSearchQuery('');
+                                  }}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    padding: '10px 12px',
+                                    borderRadius: '10px',
+                                    cursor: 'pointer',
+                                    fontSize: '13.5px',
+                                    color: isSelected ? '#FFFFFF' : 'rgba(255,255,255,0.7)',
+                                    background: isSelected ? '#6C3CF0' : 'transparent',
+                                    transition: 'all 0.15s',
+                                    marginBottom: '2px',
+                                  }}
+                                  onMouseEnter={e => {
+                                    if (!isSelected) e.currentTarget.style.background = 'rgba(108, 60, 240, 0.15)';
+                                  }}
+                                  onMouseLeave={e => {
+                                    if (!isSelected) e.currentTarget.style.background = 'transparent';
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                    <span style={{
+                                      background: isSelected ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.08)',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      fontSize: '10px',
+                                      fontWeight: '800',
+                                      color: isSelected ? '#FFFFFF' : '#C4B5FD',
+                                    }}>
+                                      {c.code}
+                                    </span>
+                                    <span style={{ fontWeight: isSelected ? '700' : '500' }}>{c.name}</span>
+                                  </div>
+                                  <span style={{ fontWeight: 600, opacity: isSelected ? 0.9 : 0.4 }}>{c.dial}</span>
+                                </div>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {forgotPhoneError && <p style={errorStyle}>{forgotPhoneError}</p>}
+                </div>
+
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <button
+                    type="button"
+                    onClick={() => setView('login')}
+                    style={{
+                      height: 52, width: 56, borderRadius: 14, border: '1px solid rgba(255,255,255,0.1)',
+                      background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.7)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    <ArrowLeft size={18} />
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    style={{
+                      flex: 1, height: 52, borderRadius: 14, border: 'none',
+                      background: 'linear-gradient(135deg, #6C3CF0 0%, #4c22bc 100%)',
+                      color: 'white', fontSize: 15, fontWeight: 800, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: '0 8px 24px rgba(108,60,240,0.35), inset 0 1px 0 rgba(255,255,255,0.12)',
+                      transition: 'all 0.22s'
+                    }}
+                  >
+                    {loading ? 'Sending Code…' : 'Send OTP'}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* FORGOT PASSWORD — STEP 2 */}
+            {view === 'forgot-step2' && (
+              <form onSubmit={handleVerifyOtp} className="animated-form" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }} onPaste={handleOtpPaste}>
+                  {otpFields.map((val, i) => (
+                    <input
+                      key={i}
+                      id={`otp-${i}`}
+                      type="text"
+                      maxLength={1}
+                      value={val}
+                      onChange={e => handleOtpChange(e, i)}
+                      onKeyDown={e => handleOtpKeyDown(e, i)}
+                      autoFocus={i === 0}
+                      style={{
+                        width: 44, height: 52, textAlign: 'center', fontSize: 20, fontWeight: 800,
+                        border: `1.5px solid ${val ? '#8B5CF6' : 'rgba(255,255,255,0.1)'}`,
+                        borderRadius: 10, background: val ? 'rgba(108,60,240,0.08)' : 'rgba(255,255,255,0.03)',
+                        outline: 'none', fontFamily: 'inherit', color: 'white',
+                        transition: 'all 0.15s',
+                      }}
+                    />
+                  ))}
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '0 4px' }}>
+                  <span style={{ color: otpExpiryTime > 0 ? 'rgba(255,255,255,0.5)' : '#F87171', fontWeight: 600 }}>
+                    Expires in: {formatTime(otpExpiryTime)}
+                  </span>
+                  {resendCooldown > 0
+                    ? <span style={{ color: 'rgba(255,255,255,0.3)', fontWeight: 600 }}>Resend in {resendCooldown}s</span>
+                    : <button type="button" onClick={handleRequestOtp} style={{ background: 'none', border: 'none', color: '#A78BFA', fontWeight: 700, cursor: 'pointer', fontSize: 'inherit', padding: 0 }}>Resend OTP</button>
+                  }
+                </div>
+
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <button
+                    type="button"
+                    onClick={() => setView('forgot-step1')}
+                    style={{
+                      height: 52, width: 56, borderRadius: 14, border: '1px solid rgba(255,255,255,0.1)',
+                      background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.7)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    <ArrowLeft size={18} />
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading || otpExpiryTime === 0}
+                    style={{
+                      flex: 1, height: 52, borderRadius: 14, border: 'none',
+                      background: 'linear-gradient(135deg, #6C3CF0 0%, #4c22bc 100%)',
+                      color: 'white', fontSize: 15, fontWeight: 800, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: '0 8px 24px rgba(108,60,240,0.35), inset 0 1px 0 rgba(255,255,255,0.12)',
+                      transition: 'all 0.22s'
+                    }}
+                  >
+                    {loading ? 'Verifying OTP…' : 'Verify Code'}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* FORGOT PASSWORD — STEP 3 */}
+            {view === 'forgot-step3' && (
+              <form onSubmit={handleResetPassword} className="animated-form" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {/* New Password */}
+                <div>
+                  <label style={labelStyle} htmlFor="new-password">New Password</label>
+                  <div className={`input-group-relative ${newPasswordError ? 'error-border' : ''}`}>
+                    <div className="input-icon-left">
+                      <Lock size={16} />
+                    </div>
+                    <input
+                      id="new-password"
+                      className="premium-input"
+                      type={showNewPassword ? 'text' : 'password'}
+                      placeholder="Enter your password"
+                      value={newPassword}
+                      onChange={e => { setNewPassword(e.target.value); setNewPasswordError(''); }}
+                      required
+                    />
+                    <button type="button" onClick={() => setShowNewPassword(p => !p)} className="input-icon-right">
+                      {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  {newPasswordError && <p style={errorStyle}>{newPasswordError}</p>}
+                </div>
+
+                {/* Strength indicator */}
+                {newPassword && (
+                  <div style={{ marginTop: 2 }}>
+                    <div style={{ display: 'flex', gap: 4, marginBottom: 5 }}>
+                      {[1, 2, 3, 4, 5].map(i => (
+                        <div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= strength ? strengthColor : 'rgba(255,255,255,0.1)', transition: 'background 0.2s' }} />
+                      ))}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5 }}>
+                      <span style={{ color: 'rgba(255,255,255,0.45)' }}>Password strength</span>
+                      <span style={{ fontWeight: 700, color: strengthColor }}>{strengthLabel}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Confirm Password */}
+                <div>
+                  <label style={labelStyle} htmlFor="confirm-password">Confirm Password</label>
+                  <div className={`input-group-relative ${confirmPasswordError ? 'error-border' : ''}`}>
+                    <div className="input-icon-left">
+                      <Lock size={16} />
+                    </div>
+                    <input
+                      id="confirm-password"
+                      className="premium-input"
+                      type={showNewPassword ? 'text' : 'password'}
+                      placeholder="Enter your password"
+                      value={confirmPassword}
+                      onChange={e => { setConfirmPassword(e.target.value); setConfirmPasswordError(''); }}
+                      required
+                    />
+                  </div>
+                  {confirmPasswordError && <p style={errorStyle}>{confirmPasswordError}</p>}
+                </div>
+
+                {/* Password Rules */}
+                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 12, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {[
+                    { ok: newPassword.length >= 8, label: 'Minimum 8 characters' },
+                    { ok: /[A-Z]/.test(newPassword), label: 'One uppercase letter' },
+                    { ok: /[a-z]/.test(newPassword), label: 'One lowercase letter' },
+                    { ok: /[0-9]/.test(newPassword), label: 'One number' },
+                    { ok: /[^A-Za-z0-9]/.test(newPassword), label: 'One special character' },
+                  ].map((r, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: r.ok ? '#10B981' : 'rgba(255,255,255,0.3)' }}>
+                      {r.ok ? <Check size={12} /> : <X size={12} />} {r.label}
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
+                  <button
+                    type="button"
+                    onClick={() => setView('forgot-step2')}
+                    style={{
+                      height: 52, width: 56, borderRadius: 14, border: '1px solid rgba(255,255,255,0.1)',
+                      background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.7)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    <ArrowLeft size={18} />
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    style={{
+                      flex: 1, height: 52, borderRadius: 14, border: 'none',
+                      background: 'linear-gradient(135deg, #6C3CF0 0%, #4c22bc 100%)',
+                      color: 'white', fontSize: 15, fontWeight: 800, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: '0 8px 24px rgba(108,60,240,0.35), inset 0 1px 0 rgba(255,255,255,0.12)',
+                      transition: 'all 0.22s'
+                    }}
+                  >
+                    {loading ? 'Saving…' : 'Save Password'}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* Attempt dots indicator */}
+            {view === 'login' && !isLocked && failedAttempts > 0 && failedAttempts < MAX_ATTEMPTS && (
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 18 }}>
+                {Array.from({ length: MAX_ATTEMPTS }).map((_, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      width: 7, height: 7, borderRadius: '50%',
+                      background: i < failedAttempts ? '#EF4444' : 'rgba(255,255,255,0.12)',
+                      transition: 'background 0.2s',
                     }}
                   />
                 ))}
               </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '0 4px' }}>
-                <span style={{ color: otpExpiryTime > 0 ? 'rgba(255,255,255,0.5)' : '#F87171', fontWeight: 600 }}>
-                  Expires in: {formatTime(otpExpiryTime)}
-                </span>
-                {resendCooldown > 0
-                  ? <span style={{ color: 'rgba(255,255,255,0.3)', fontWeight: 600 }}>Resend in {resendCooldown}s</span>
-                  : <button type="button" onClick={handleRequestOtp} style={{ background: 'none', border: 'none', color: '#A78BFA', fontWeight: 700, cursor: 'pointer', fontSize: 'inherit', padding: 0 }}>Resend OTP</button>
-                }
-              </div>
-
-              <div style={{ display: 'flex', gap: 12 }}>
-                <button
-                  type="button"
-                  onClick={() => setView('forgot-step1')}
-                  style={{
-                    height: 52, width: 56, borderRadius: 14, border: '1px solid rgba(255,255,255,0.1)',
-                    background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.7)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                    transition: 'all 0.2s'
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#FFFFFF'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.color = 'rgba(255,255,255,0.7)'; }}
-                >
-                  <ArrowLeft size={18} />
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading || otpExpiryTime === 0}
-                  style={{
-                    flex: 1, height: 52, borderRadius: 14, border: 'none',
-                    background: 'linear-gradient(135deg, #6C3CF0 0%, #4c22bc 100%)',
-                    color: 'white', fontSize: 15, fontWeight: 800, cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    boxShadow: '0 8px 24px rgba(108,60,240,0.35), inset 0 1px 0 rgba(255,255,255,0.12)',
-                    transition: 'all 0.22s'
-                  }}
-                  onMouseEnter={e => { if (!loading && otpExpiryTime > 0) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 14px 32px rgba(108,60,240,0.45), inset 0 1px 0 rgba(255,255,255,0.12)'; } }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 8px 24px rgba(108,60,240,0.35), inset 0 1px 0 rgba(255,255,255,0.12)'; }}
-                >
-                  {loading ? 'Verifying OTP…' : 'Verify Code'}
-                </button>
-              </div>
-            </form>
-          )}
-
-          {/* FORGOT PASSWORD — STEP 3 */}
-          {view === 'forgot-step3' && (
-            <form onSubmit={handleResetPassword} className="animated-form" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* New Password */}
-              <div>
-                <label style={labelStyle} htmlFor="new-password">New Password</label>
-                <div className={`input-group-relative ${newPasswordError ? 'error-border' : ''}`}>
-                  <div className="input-icon-left">
-                    <Lock size={16} />
-                  </div>
-                  <input
-                    id="new-password"
-                    className="premium-input"
-                    type={showNewPassword ? 'text' : 'password'}
-                    placeholder="Enter your password"
-                    value={newPassword}
-                    onChange={e => { setNewPassword(e.target.value); setNewPasswordError(''); }}
-                    required
-                  />
-                  <button type="button" onClick={() => setShowNewPassword(p => !p)} className="input-icon-right">
-                    {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-                {newPasswordError && <p style={errorStyle}>{newPasswordError}</p>}
-              </div>
-
-              {/* Strength indicator */}
-              {newPassword && (
-                <div style={{ marginTop: 2 }}>
-                  <div style={{ display: 'flex', gap: 4, marginBottom: 5 }}>
-                    {[1, 2, 3, 4, 5].map(i => (
-                      <div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= strength ? strengthColor : 'rgba(255,255,255,0.1)', transition: 'background 0.2s' }} />
-                    ))}
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5 }}>
-                    <span style={{ color: 'rgba(255,255,255,0.45)' }}>Password strength</span>
-                    <span style={{ fontWeight: 700, color: strengthColor }}>{strengthLabel}</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Confirm Password */}
-              <div>
-                <label style={labelStyle} htmlFor="confirm-password">Confirm Password</label>
-                <div className={`input-group-relative ${confirmPasswordError ? 'error-border' : ''}`}>
-                  <div className="input-icon-left">
-                    <Lock size={16} />
-                  </div>
-                  <input
-                    id="confirm-password"
-                    className="premium-input"
-                    type={showNewPassword ? 'text' : 'password'}
-                    placeholder="Enter your password"
-                    value={confirmPassword}
-                    onChange={e => { setConfirmPassword(e.target.value); setConfirmPasswordError(''); }}
-                    required
-                  />
-                </div>
-                {confirmPasswordError && <p style={errorStyle}>{confirmPasswordError}</p>}
-              </div>
-
-              {/* Password strength checklist / rules */}
-              <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 12, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {[
-                  { ok: newPassword.length >= 8, label: 'Minimum 8 characters' },
-                  { ok: /[A-Z]/.test(newPassword), label: 'One uppercase letter' },
-                  { ok: /[a-z]/.test(newPassword), label: 'One lowercase letter' },
-                  { ok: /[0-9]/.test(newPassword), label: 'One number' },
-                  { ok: /[^A-Za-z0-9]/.test(newPassword), label: 'One special character' },
-                ].map((r, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: r.ok ? '#10B981' : 'rgba(255,255,255,0.3)' }}>
-                    {r.ok ? <Check size={12} /> : <X size={12} />} {r.label}
-                  </div>
-                ))}
-              </div>
-
-              <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
-                <button
-                  type="button"
-                  onClick={() => setView('forgot-step2')}
-                  style={{
-                    height: 52, width: 56, borderRadius: 14, border: '1px solid rgba(255,255,255,0.1)',
-                    background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.7)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                    transition: 'all 0.2s'
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#FFFFFF'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.color = 'rgba(255,255,255,0.7)'; }}
-                >
-                  <ArrowLeft size={18} />
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  style={{
-                    flex: 1, height: 52, borderRadius: 14, border: 'none',
-                    background: 'linear-gradient(135deg, #6C3CF0 0%, #4c22bc 100%)',
-                    color: 'white', fontSize: 15, fontWeight: 800, cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    boxShadow: '0 8px 24px rgba(108,60,240,0.35), inset 0 1px 0 rgba(255,255,255,0.12)',
-                    transition: 'all 0.22s'
-                  }}
-                  onMouseEnter={e => { if (!loading) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 14px 32px rgba(108,60,240,0.45), inset 0 1px 0 rgba(255,255,255,0.12)'; } }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 8px 24px rgba(108,60,240,0.35), inset 0 1px 0 rgba(255,255,255,0.12)'; }}
-                >
-                  {loading ? 'Saving…' : 'Save Password'}
-                </button>
-              </div>
-            </form>
-          )}
-
-          {/* ─── Attempt dots indicator ─── */}
-          {view === 'login' && !isLocked && failedAttempts > 0 && failedAttempts < MAX_ATTEMPTS && (
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 18 }}>
-              {Array.from({ length: MAX_ATTEMPTS }).map((_, i) => (
-                <div
-                  key={i}
-                  style={{
-                    width: 7, height: 7, borderRadius: '50%',
-                    background: i < failedAttempts ? '#EF4444' : 'rgba(255,255,255,0.12)',
-                    transition: 'background 0.2s',
-                  }}
-                />
-              ))}
-            </div>
-          )}
+            )}
           </div>
 
-          {/* ─── Security Footer ─── */}
-          <div style={{ marginTop: 24, textAlign: 'center', position: 'relative' }}>
-            <span style={{ fontSize: 11.5, color: 'rgba(255, 255, 255, 0.25)', fontWeight: 500, letterSpacing: '0.4px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              🔒 Secure Authentication
-            </span>
-          </div>
         </div>
       </div>
 
-      {/* ─── Toast Modal ─── */}
       <CustomModal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
@@ -1463,10 +1405,8 @@ const Login = () => {
         <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.65 }}>{modalText}</p>
       </CustomModal>
 
-      {/* Firebase reCAPTCHA Container */}
       <div id="recaptcha-container"></div>
 
-      {/* ─── Styles ─── */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
         
@@ -1497,19 +1437,20 @@ const Login = () => {
           border-radius: 14px !important;
           box-sizing: border-box;
           transition: all 0.2s ease;
+          overflow: hidden !important;
         }
         .input-group-relative:focus-within {
           border-color: #8B5CF6 !important;
-          box-shadow: 0 0 8px rgba(139, 92, 246, 0.3) !important;
+          box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.25) !important;
           background: rgba(255, 255, 255, 0.05) !important;
         }
         .input-group-relative.error-border {
           border-color: #EF4444 !important;
-          box-shadow: 0 0 8px rgba(239, 68, 68, 0.2) !important;
+          box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2) !important;
         }
         .input-group-relative.success-border {
           border-color: #10B981 !important;
-          box-shadow: 0 0 8px rgba(16, 185, 129, 0.2) !important;
+          box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2) !important;
         }
 
         .premium-input {
@@ -1525,6 +1466,10 @@ const Login = () => {
           padding: 0 48px !important;
           transition: all 0.2s ease;
         }
+        .premium-input:focus {
+          outline: none !important;
+          box-shadow: none !important;
+        }
         .premium-input.phone-input-field {
           padding-left: 14px !important;
           padding-right: 18px !important;
@@ -1533,7 +1478,23 @@ const Login = () => {
           color: rgba(156, 163, 175, 0.55);
         }
 
-        /* Hide Microsoft Edge native password reveal eye icon */
+        /* password field — kill native browser credential/autofill icons and overlays */
+        input[type="password"] {
+          -webkit-text-security: disc;
+        }
+        input[type="password"]::-webkit-credentials-auto-fill-button,
+        input[type="password"]::-webkit-strong-password-auto-fill-button,
+        input[type="password"]::-webkit-contacts-auto-fill-button {
+          visibility: hidden !important;
+          display: none !important;
+          pointer-events: none !important;
+          position: absolute !important;
+          right: 0 !important;
+          width: 0 !important;
+          height: 0 !important;
+          opacity: 0 !important;
+        }
+
         input::-ms-reveal,
         input::-ms-clear {
           display: none !important;
@@ -1585,17 +1546,20 @@ const Login = () => {
           z-index: 2;
         }
 
-        input.premium-input:-webkit-autofill {
-          -webkit-box-shadow: 0 0 0 100px #0e0a1f inset !important;
+        input.premium-input:-webkit-autofill,
+        input.premium-input:-webkit-autofill:hover,
+        input.premium-input:-webkit-autofill:focus,
+        input.premium-input:-webkit-autofill:active {
+          -webkit-box-shadow: 0 0 0 1000px transparent inset !important;
           -webkit-text-fill-color: #ffffff !important;
-          caret-color: white;
+          transition: background-color 999999s ease-in-out 0s;
+          caret-color: white !important;
         }
       `}</style>
     </>
   );
 };
 
-/* ─── Shared input styles ─────────────────────────── */
 const labelStyle = {
   display: 'block',
   fontSize: '11px',

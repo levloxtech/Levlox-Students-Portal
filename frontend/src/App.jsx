@@ -38,10 +38,23 @@ function App() {
     window.fetch = async (...args) => {
       const response = await originalFetch(...args);
       if (response.status === 401) {
+        let isRevoked = false;
+        try {
+          const clone = response.clone();
+          const data = await clone.json();
+          if (data && (data.error === 'session_revoked' || data.message === 'This session was logged out. Please log in again.')) {
+            isRevoked = true;
+          }
+        } catch (e) {}
+
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         if (!window.location.pathname.includes('/login')) {
-          window.location.href = '/login?reason=session_expired';
+          if (isRevoked) {
+            window.location.href = '/login?reason=session_revoked';
+          } else {
+            window.location.href = '/login?reason=session_expired';
+          }
         }
       }
       return response;
