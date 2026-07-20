@@ -535,9 +535,9 @@ const Login = () => {
 
             {/* LOGO */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 32 }}>
-              <img 
-                src={leveloxLogo} 
-                alt="Levlox Logo" 
+              <img
+                src={leveloxLogo}
+                alt="Levlox Logo"
                 style={{
                   width: 84,
                   height: 84,

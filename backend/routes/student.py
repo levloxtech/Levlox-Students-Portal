@@ -462,6 +462,8 @@ def get_live_classes():
         classes = list(db.live_classes.find({"is_published": True, "batch_id": get_batch_query_criteria(batch_id)}))
         for c in classes:
             c['_id'] = str(c['_id'])
+            if 'batch_id' in c and c['batch_id']:
+                c['batch_id'] = str(c['batch_id'])
             # Strip links for security from the list view if unpaid
             if not fees_are_paid:
                 c.pop('meet_link', None)

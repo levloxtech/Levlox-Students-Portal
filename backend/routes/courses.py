@@ -38,7 +38,7 @@ def list_courses():
     courses = list(db.courses.find())
     for course in courses:
         course['_id'] = str(course['_id'])
-        course['created_by'] = str(course['created_by'])
+        course['created_by'] = str(course.get('created_by', ''))
         course['students'] = [str(sid) for sid in course.get('students', [])]
     return jsonify({'courses': courses}), 200
 
