@@ -833,13 +833,13 @@ const Login = () => {
                     </>
                   ) : (
                     <>
-                      <ShieldCheck size={17} strokeWidth={1.75} /> Secure Login
+                      <ShieldCheck size={17} strokeWidth={1.75} /> Login
                     </>
                   )}
                 </button>
 
-                {/* Sub-form Navigation links */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', fontSize: 13, marginTop: 12 }}>
+                {/* Sub-form Navigation link */}
+                <div style={{ display: 'flex', justifyContent: 'center', width: '100%', fontSize: 13, marginTop: 12 }}>
                   <a
                     href="#forgot"
                     onClick={(e) => { e.preventDefault(); setForgotPhone(phone); setView('forgot-step1'); }}
@@ -847,15 +847,9 @@ const Login = () => {
                   >
                     Forgot password?
                   </a>
-                  <a
-                    href="#register"
-                    onClick={(e) => { e.preventDefault(); setView('register'); }}
-                    style={{ color: '#A78BFA', fontWeight: 600, textDecoration: 'none' }}
-                  >
-                    Register as Student
-                  </a>
                 </div>
               </form>
+
             )}
 
             {/* Student Registration Form */}
