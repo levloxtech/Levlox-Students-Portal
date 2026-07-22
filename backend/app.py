@@ -11,8 +11,18 @@ from routes.admin import admin_bp
 from routes.settings import settings_bp
 from routes.files import files_bp
 
+import threading
+from setup_indexes import setup_indexes
+
 app = Flask(__name__)
 app.config.from_object(Config)
+
+# Run MongoDB indexing in background thread on startup
+try:
+    threading.Thread(target=setup_indexes, daemon=True).start()
+except Exception as _idx_err:
+    print(f"Index initialization warning: {_idx_err}")
+
 
 # Enable CORS for all routes (important for React dev server, Vercel, and production)
 _cors_origins = [
