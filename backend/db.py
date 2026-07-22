@@ -150,7 +150,16 @@ class DatabaseWrapper:
         return list(mapped_names)
 
 try:
-    client = MongoClient(Config.MONGO_URI)
+    client = MongoClient(
+        Config.MONGO_URI,
+        maxPoolSize=50,
+        minPoolSize=5,
+        maxIdleTimeMS=45000,
+        connectTimeoutMS=5000,
+        socketTimeoutMS=10000,
+        serverSelectionTimeoutMS=5000,
+        retryWrites=True
+    )
     client.admin.command('ping')
     # Explicitly select levlox_student_portal database
     raw_db = client["levlox_student_portal"]
@@ -158,8 +167,9 @@ try:
     print(f"Successfully connected to MongoDB Atlas! Database: {raw_db.name}")
 except Exception as e:
     print(f"Error connecting to MongoDB Atlas: {e}. Falling back to local MongoDB.")
-    client = MongoClient("mongodb://localhost:27017/")
+    client = MongoClient("mongodb://localhost:27017/", serverSelectionTimeoutMS=2000)
     raw_db = client["levlox_student_portal"]
     db = DatabaseWrapper(raw_db)
     print(f"Successfully connected to Local MongoDB! Database: {raw_db.name}")
+
 

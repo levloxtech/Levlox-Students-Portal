@@ -33,7 +33,8 @@ def find_user_by_phone(phone):
     else:
         last_10 = phone_clean
         
-    query = {"$or": [{"phone": phone_clean}, {"phone": last_10}, {"phone": {"$regex": f"{last_10}$"}}]}
+    possible_phones = list(set([phone_clean, last_10, f"+91{last_10}", f"+{last_10}"]))
+    query = {"phone": {"$in": possible_phones}}
     
     admin = db._db.admins.find_one(query)
     if admin:
@@ -44,6 +45,7 @@ def find_user_by_phone(phone):
         return student, "student"
         
     return None, None
+
 
 @auth_bp.route('/register', methods=['POST'])
 def register():
