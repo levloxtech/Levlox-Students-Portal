@@ -18,8 +18,8 @@ import StudyMaterialsPage from './StudyMaterialsPage';
 import LeaderboardPage from './LeaderboardPage';
 import CustomModal from '../components/Modal';
 import leveloxIcon from '../assets/levelox-icon-transparent.png';
+import { API_BASE } from '../utils/api';
 
-const API_BASE = 'http://localhost:5000/api';
 
 /* ─── tiny helpers ─────────────────────────────────── */
 const CircularProgress = ({ pct = 0, size = 80, stroke = 7, color = '#6C3CF0' }) => {

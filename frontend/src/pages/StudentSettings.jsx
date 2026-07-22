@@ -3,8 +3,8 @@ import {
   User, Mail, Phone, Lock, Eye, EyeOff, Camera, CheckCircle,
   AlertCircle, Save, X, RefreshCw, Key, Shield, HelpCircle, ArrowRight
 } from 'lucide-react';
+import { API_BASE } from '../utils/api';
 
-const API_BASE = 'http://localhost:5000/api';
 
 const StudentSettings = ({ token, user, showModal, onPasswordChanged }) => {
   const [profileData, setProfileData] = useState(null);

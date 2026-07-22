@@ -1,3 +1,4 @@
+import os
 from flask import Flask, jsonify
 from flask_cors import CORS
 from config import Config
@@ -13,15 +14,19 @@ from routes.files import files_bp
 app = Flask(__name__)
 app.config.from_object(Config)
 
-# Enable CORS for all routes (important for React Dev server)
-# Trigger reload
+# Enable CORS for all routes (important for React dev server and production)
+_cors_origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+]
+_frontend_url = os.environ.get("FRONTEND_URL", "").strip()
+if _frontend_url:
+    _cors_origins.append(_frontend_url)
+
 CORS(app, resources={r"/api/*": {
-    "origins": [
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173"
-    ],
+    "origins": _cors_origins,
     "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     "allow_headers": ["Content-Type", "Authorization"]
 }}, supports_credentials=True)
@@ -48,6 +53,10 @@ def handle_exception(e):
         "message": "An internal server error occurred.",
         "error": str(e)
     }), 500
+
+@app.route('/', methods=['GET'])
+def root():
+    return jsonify({"status": "success", "message": "Levlox Student Portal API is running"}), 200
 
 @app.route('/health', methods=['GET'])
 def health():

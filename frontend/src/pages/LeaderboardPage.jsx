@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE } from '../utils/api';
 import { 
   Crown, Award, Star, Flame, Zap, Trophy,
   Users, Calendar, Filter, Mic, ClipboardList, MessageSquare
 } from 'lucide-react';
 
-const API_BASE = 'http://localhost:5000/api';
 
 const CustomPodiumMedal = ({ rank, size = 22 }) => {
   const colors = {

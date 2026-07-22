@@ -4,6 +4,7 @@ import {
   ArrowRight, ArrowLeft, ChevronDown, ChevronUp, Download, HelpCircle, 
   Send, User, AlertCircle, BookOpen, Globe, Info, CheckSquare, Square, Search
 } from 'lucide-react';
+import { API_BASE } from '../utils/api';
 
 /* ── Error Boundary Component ────────────────────── */
 class ErrorBoundary extends React.Component {
@@ -97,7 +98,7 @@ const RecordedClassesPage = ({ initialCourseId = null, initialLessonId = null })
         setLoading(false);
         return;
       }
-      const response = await fetch('http://localhost:5000/api/student/recorded-courses', {
+      const response = await fetch(`${API_BASE}/student/recorded-courses`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.status === 401) {
@@ -160,7 +161,7 @@ const RecordedClassesPage = ({ initialCourseId = null, initialLessonId = null })
     setSelectedCourseId(courseId);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/student/recorded-courses/${courseId}/player`, {
+      const response = await fetch(`${API_BASE}/student/recorded-courses/${courseId}/player`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
@@ -206,7 +207,7 @@ const RecordedClassesPage = ({ initialCourseId = null, initialLessonId = null })
     if (!lesson || lesson.locked) return;
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/student/lessons/${lesson.id}/complete`, {
+      const response = await fetch(`${API_BASE}/student/lessons/${lesson.id}/complete`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -245,7 +246,7 @@ const RecordedClassesPage = ({ initialCourseId = null, initialLessonId = null })
     setSubmitting(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/assignments/${submitAssignment.id}/submit`, {
+      const response = await fetch(`${API_BASE}/assignments/${submitAssignment.id}/submit`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

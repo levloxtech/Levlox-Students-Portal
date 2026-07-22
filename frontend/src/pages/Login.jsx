@@ -10,6 +10,7 @@ import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
 import { auth } from "../firebase";
 import CustomModal from '../components/Modal';
 import { getDeviceId, getDeviceType, getDeviceLabel } from "../utils/deviceId";
+import { API_BASE } from '../utils/api';
 
 const COUNTRIES = [
   { name: 'India', code: 'IN', dial: '+91', flag: '🇮🇳', length: 10, pattern: /^[6789]\d{9}$/ },
@@ -21,7 +22,6 @@ const COUNTRIES = [
   { name: 'Australia', code: 'AU', dial: '+61', flag: '🇦🇺', length: 9, pattern: /^4\d{8}$/ },
 ];
 
-const API_BASE = 'http://localhost:5000/api';
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_SECONDS = 30;
 const INACTIVITY_TIMEOUT = 15 * 60 * 1000;

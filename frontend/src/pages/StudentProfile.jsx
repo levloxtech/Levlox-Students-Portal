@@ -4,8 +4,8 @@ import {
   GraduationCap, MapPin, Building2, Briefcase, CheckCircle,
   FileText, Calendar, Award, BookOpen, Percent, Users, UserCheck
 } from 'lucide-react';
+import { API_BASE } from '../utils/api';
 
-const API_BASE = 'http://localhost:5000/api';
 
 const StudentProfile = ({ dashboardData, enrolledCourses = [], token, onProfileUpdate }) => {
   const [profileData, setProfileData] = useState(null);

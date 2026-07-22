@@ -13,8 +13,8 @@ import {
 import CustomModal from '../components/Modal';
 import FilterBar from '../components/FilterBar';
 import leveloxIcon from '../assets/levelox-icon-transparent.png';
+import { API_BASE } from '../utils/api';
 
-const API_BASE = 'http://localhost:5000/api';
 
 const CustomDropdown = ({ label, value, options, onChange, placeholder, width = '120px' }) => {
   const [isOpen, setIsOpen] = useState(false);
