@@ -14,12 +14,14 @@ from routes.files import files_bp
 app = Flask(__name__)
 app.config.from_object(Config)
 
-# Enable CORS for all routes (important for React dev server and production)
+# Enable CORS for all routes (important for React dev server, Vercel, and production)
 _cors_origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:5174",
     "http://127.0.0.1:5174",
+    "https://levlox-students-portal.vercel.app",
+    r"https://.*\.vercel\.app",
 ]
 _frontend_url = os.environ.get("FRONTEND_URL", "").strip()
 if _frontend_url:
@@ -30,6 +32,7 @@ CORS(app, resources={r"/api/*": {
     "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     "allow_headers": ["Content-Type", "Authorization"]
 }}, supports_credentials=True)
+
 
 # Register blueprints
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
