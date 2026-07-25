@@ -309,6 +309,56 @@ def get_dashboard():
     for idx, item in enumerate(leaderboard_payload):
         item['rank'] = idx + 1
 
+    # 12. Learning Ranking summary
+    rankings = []
+    tot_rec_classes = len(recorded_classes_list)
+    for s in batch_students:
+        s_id_str = str(s['_id'])
+        s_id_obj = s['_id']
+        att_pct = s.get('attendance', {}).get('percentage', 92)
+        comp_l = db.lesson_progress.count_documents({"student_id": s_id_str})
+        comp_pct = round((comp_l / max(1, tot_rec_classes)) * 100) if tot_rec_classes > 0 else 0
+        if comp_pct > 100:
+            comp_pct = 100
+        
+        st_subs = [sb for sb in submissions_list if sb.get('student_id') in [s_id_str, str(s_id_obj)]] if s_id_str == student_id else list(db.submissions.find({"student_id": s_id_obj}))
+        graded_st_subs = [sub for sub in st_subs if sub.get('grade') is not None]
+        if graded_st_subs:
+            grades = [float(sub.get('grade')) for sub in graded_st_subs if sub.get('grade') is not None]
+            avg_grade = sum(grades) / len(grades) if grades else 80.0
+        else:
+            sub_rate_calc = (len(st_subs) / max(1, tot_assigns)) * 100
+            avg_grade = min(100.0, sub_rate_calc)
+
+        st_ivs = interviews if s_id_str == student_id else list(db.mock_interviews.find({"student_id": s_id_obj}, {"score": 1}))
+        avg_m = (sum(i.get('score', 0) for i in st_ivs) / len(st_ivs)) if st_ivs else 75.0
+
+        final_score = round((avg_grade * 0.3) + (avg_m * 0.3) + (att_pct * 0.2) + (comp_pct * 0.2), 1)
+        rankings.append({
+            "student_id": s_id_str,
+            "name": s.get('name', 'Student'),
+            "score": final_score,
+            "is_current": s_id_str == student_id
+        })
+
+    rankings.sort(key=lambda x: x['score'], reverse=True)
+    for idx, r in enumerate(rankings):
+        r['rank'] = idx + 1
+
+    top_performers = rankings[:3]
+    current_student = next((r for r in rankings if r['is_current']), {
+        "rank": 1,
+        "score": 85.0,
+        "name": student.get('name')
+    })
+    learning_ranking_payload = {
+        "topPerformers": top_performers if top_performers else [
+            {"name": student.get('name'), "score": 85.0, "is_current": True, "rank": 1}
+        ],
+        "currentStudent": current_student,
+        "rankings": rankings
+    }
+
     # Consolidated Response Payload
     dashboard_data = {
         "student": {
@@ -341,7 +391,8 @@ def get_dashboard():
         "submissions": submissions_list,
         "latestReplays": replays_list,
         "analytics": analytics_payload,
-        "leaderboard": leaderboard_payload
+        "leaderboard": leaderboard_payload,
+        "learningRanking": learning_ranking_payload
     }
 
     return jsonify(dashboard_data), 200
