@@ -390,7 +390,6 @@ const StudentDashboard = () => {
       if (updatedProfile.name !== undefined) setProfileName(updatedProfile.name);
       if (updatedProfile.profile_pic !== undefined) setProfilePic(updatedProfile.profile_pic);
       fetchDashboard();
-      fetchLearningRanking();
       fetchLeaderboards();
     }
   };
