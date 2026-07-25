@@ -258,6 +258,7 @@ const StudentDashboard = () => {
   const liveClassesList = dashboardData?.upcomingLiveClasses ? [dashboardData.todayLiveClass, ...dashboardData.upcomingLiveClasses].filter(Boolean) : [];
   const analytics = dashboardData?.analytics || null;
   const overallLeaderboard = dashboardData?.leaderboard || [];
+  const learningRanking = dashboardData?.learningRanking ?? null;
 
   const [selectedCourse, setSelectedCourse] = useState(null);
 
@@ -315,7 +316,6 @@ const StudentDashboard = () => {
   const fetchLiveClasses = fetchDashboard;
   const fetchAnalytics = fetchDashboard;
   const fetchLeaderboards = fetchDashboard;
-  const fetchLearningRanking = fetchDashboard;
   const fetchLatestReplays = fetchDashboard;
   const replaysLoading = false;
 
@@ -994,7 +994,7 @@ const StudentDashboard = () => {
                     {learningRanking?.topPerformers?.map((performer, idx) => {
                       const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉';
                       const label = idx === 0 ? 'Top Performer' : idx === 1 ? '2nd' : '3rd';
-                      const isCurrent = performer.is_current || performer.name === user.name;
+                      const isCurrent = performer?.is_current || performer?.name === user?.name;
                       return (
                         <div
                           key={idx}
@@ -1011,13 +1011,13 @@ const StudentDashboard = () => {
                         >
                           <div style={{ fontSize: 24, marginBottom: 6 }}>{medal}</div>
                           <h5 style={{ margin: '0 0 2px', fontSize: 13, fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {performer.name}
+                            {performer?.name}
                           </h5>
                           <p style={{ margin: '0 0 6px', fontSize: 10, color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>
                             {label}
                           </p>
                           <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--primary-color)' }}>
-                            {performer.score} pts
+                            {performer?.score} pts
                           </div>
                         </div>
                       );
@@ -1052,17 +1052,17 @@ const StudentDashboard = () => {
                           fontSize: 15,
                           fontWeight: 800
                         }}>
-                          {learningRanking.currentStudent.rank}
+                          {learningRanking?.currentStudent?.rank}
                         </div>
                         <div>
                           <p style={{ margin: 0, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.8, color: 'rgba(255,255,255,0.7)', fontWeight: 700 }}>Your Position</p>
                           <h5 style={{ margin: '2px 0 0', fontSize: 14, fontWeight: 800 }}>
-                            {learningRanking.currentStudent.name} (You)
+                            {learningRanking?.currentStudent?.name} (You)
                           </h5>
                         </div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                        <span style={{ fontSize: 16, fontWeight: 800 }}>{learningRanking.currentStudent.score} pts</span>
+                        <span style={{ fontSize: 16, fontWeight: 800 }}>{learningRanking?.currentStudent?.score} pts</span>
                         <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>Dynamic Batch Rating</div>
                       </div>
                     </div>
