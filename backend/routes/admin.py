@@ -745,6 +745,11 @@ def update_student(student_id):
             if feesStatus == 'Paid':
                 update_doc["feesPaymentDate"] = datetime.datetime.utcnow().strftime("%Y-%m-%d")
 
+        new_pw = data.get('password') or data.get('new_password')
+        if new_pw and len(new_pw.strip()) >= 8:
+            hashed_pw = bcrypt.hashpw(new_pw.strip().encode('utf-8'), bcrypt.gensalt())
+            update_doc["password_hash"] = hashed_pw
+
         db.users.update_one(
             {"_id": ObjectId(student_id)},
             {"$set": update_doc}

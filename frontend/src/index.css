@@ -1699,14 +1699,17 @@ body:has(.modal-overlay) {
     left: -280px !important;
     width: 280px !important;
     height: 100dvh !important;
+    max-height: 100dvh !important;
     z-index: 1000 !important;
     transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
     display: flex !important;
     flex-direction: column !important;
-    padding: 24px 16px 24px !important;
+    padding: 16px 14px 16px !important;
     box-sizing: border-box !important;
     box-shadow: var(--shadow-lg) !important;
     background-color: var(--sidebar-bg) !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
   }
 
   .sidebar.mobile-open {
@@ -1731,59 +1734,67 @@ body:has(.modal-overlay) {
     margin-top: 0 !important;
     padding-top: 0 !important;
     padding-bottom: 0 !important;
-    margin-bottom: 0 !important;
+    margin-bottom: 12px !important;
     min-height: auto !important;
     display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
     width: 100% !important;
     padding: 0 !important;
+    flex-shrink: 0 !important;
   }
 
   .sidebar-menu {
-    flex: none !important;
+    flex: 1 !important;
     display: flex !important;
     flex-direction: column !important;
-    gap: 12px !important;
-    margin: auto 0 !important;
+    gap: 4px !important;
+    margin: 0 !important;
     width: 100% !important;
     padding: 0 !important;
+    justify-content: flex-start !important;
+    overflow-y: visible !important;
   }
 
   .sidebar-link {
-    height: 48px !important;
-    border-radius: 12px !important;
-    font-size: 15px !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    border-radius: 10px !important;
+    font-size: 14px !important;
     display: flex !important;
     align-items: center !important;
-    padding: 10px 12px !important;
+    padding: 8px 12px !important;
     margin-top: 0 !important;
     box-sizing: border-box !important;
+    flex-shrink: 0 !important;
   }
 
   .sidebar-link svg {
-    width: 20px !important;
-    height: 20px !important;
+    width: 18px !important;
+    height: 18px !important;
   }
 
   .sidebar-link-text {
-    font-size: 15px !important;
+    font-size: 14px !important;
   }
 
   .sidebar-section-label {
-    margin-top: 0 !important;
-    margin-bottom: 0 !important;
+    margin-top: 8px !important;
+    margin-bottom: 4px !important;
     padding: 0 8px !important;
+    font-size: 9px !important;
+    flex-shrink: 0 !important;
   }
 
   .sidebar-footer {
-    margin-top: 0 !important;
-    padding-top: 16px !important;
+    margin-top: auto !important;
+    padding-top: 10px !important;
     border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
     display: flex !important;
     flex-direction: column !important;
-    gap: 12px !important;
+    gap: 4px !important;
     width: 100% !important;
+    flex-shrink: 0 !important;
   }
 
   .sidebar.collapsed {
@@ -2165,44 +2176,53 @@ body:has(.modal-overlay) {
   /* Sidebar to Slide-out Drawer */
   .sidebar {
     position: fixed !important;
-    left: -264px !important;
+    left: -280px !important;
     top: 0 !important;
     bottom: 0 !important;
-    height: 100vh !important;
-    width: 264px !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    width: 280px !important;
     z-index: 1000 !important;
     transition: left var(--transition-normal) !important;
     box-shadow: var(--shadow-lg) !important;
     display: flex !important;
     flex-direction: column !important;
-    padding: 20px 12px 24px !important; /* Account section -> Bottom: 20-24px padding */
+    padding: 16px 14px 16px !important;
     box-sizing: border-box !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
   }
   .sidebar.mobile-open {
     left: 0 !important;
   }
   .sidebar-header {
-    margin-bottom: 24px !important; /* Logo -> Main Menu: 24px */
-    padding: 8px 8px 0 !important;
+    margin-bottom: 12px !important;
+    padding: 0 !important;
+    flex-shrink: 0 !important;
   }
   .sidebar-menu {
     flex: 1 !important;
     display: flex !important;
     flex-direction: column !important;
-    gap: 10px !important; /* Between menu items: 8–10px */
+    gap: 4px !important;
+    overflow-y: visible !important;
   }
   .sidebar-footer {
-    margin-top: auto !important; /* Pin to bottom */
+    margin-top: auto !important;
     display: flex !important;
     flex-direction: column !important;
-    gap: 10px !important;
+    gap: 4px !important;
+    padding-top: 10px !important;
+    flex-shrink: 0 !important;
   }
   .sidebar-link {
-    height: 48px !important; /* Same height (48px) */
-    border-radius: var(--radius-md) !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    border-radius: 10px !important;
     display: flex !important;
     align-items: center !important;
-    padding: 11px 12px !important;
+    padding: 8px 12px !important;
+    flex-shrink: 0 !important;
   }
   /* Keep full width and display items properly when drawer is open, even if sidebarCollapsed is true */
   .sidebar.collapsed {

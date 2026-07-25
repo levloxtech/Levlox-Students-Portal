@@ -309,33 +309,7 @@ def update_profile():
 @student_bp.route('/change-password', methods=['PUT'])
 @token_required(allowed_roles=['student'])
 def change_password():
-    import bcrypt
-    data = request.get_json() or {}
-    current_password = data.get('current_password')
-    new_password = data.get('new_password')
-
-    if not current_password or not new_password:
-        return jsonify({'message': 'Missing password inputs'}), 400
-
-    try:
-        user = db.users.find_one({"_id": ObjectId(g.user_id)})
-        if not user:
-            return jsonify({'message': 'Student not found'}), 404
-
-        # Validate current password
-        hashed_pw = user.get('password_hash') or user.get('password')
-        if not hashed_pw or not bcrypt.checkpw(current_password.encode('utf-8'), hashed_pw):
-            return jsonify({'message': 'Invalid current password!'}), 400
-
-        # Hash and update new password
-        hashed = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
-        db.users.update_one(
-            {"_id": ObjectId(g.user_id)},
-            {"$set": {"password_hash": hashed, "must_change_password": False}}
-        )
-        return jsonify({'message': 'Password changed successfully!'}), 200
-    except Exception as e:
-        return jsonify({'message': 'Error changing password', 'error': str(e)}), 400
+    return jsonify({'message': 'Students are not allowed to change or reset passwords. Please contact administration.'}), 403
 
 @student_bp.route('/update-phone/request', methods=['POST'])
 @token_required(allowed_roles=['student'])

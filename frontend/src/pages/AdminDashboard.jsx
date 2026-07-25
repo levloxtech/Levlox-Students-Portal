@@ -2690,12 +2690,15 @@ const AdminDashboard = () => {
     }
   };
 
+  const [editPassword, setEditPassword] = useState('');
+
   const handleEditClick = (student) => {
     setEditingStudent(student);
     setEditName(student.name || '');
     setEditEmail(student.email || '');
     setEditRollNumber(student.rollNumber || '');
     setEditPhone(student.phone || '');
+    setEditPassword('');
     setEditCourse(student.course || 'Fullstack Engineering');
     setEditBatchId(student.batch_id || '');
     setEditCollege(student.college || 'Levlox Technical Institute');
@@ -2710,27 +2713,31 @@ const AdminDashboard = () => {
   const saveStudentEdit = async (e) => {
     e.preventDefault();
     try {
+      const payload = {
+        name: editName,
+        email: editEmail,
+        rollNumber: editRollNumber,
+        phone: editPhone,
+        course: editCourse,
+        batch_id: editBatchId,
+        college: editCollege,
+        profile_pic: editProfilePic,
+        current_location: editLocation,
+        permanent_address: editAddress,
+        company: editCompany,
+        status: editAccountStatus,
+        feesStatus: editFeesStatus
+      };
+      if (editPassword.trim()) {
+        payload.password = editPassword.trim();
+      }
       const response = await fetch(`${API_BASE}/admin/students/${editingStudent.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          name: editName,
-          email: editEmail,
-          rollNumber: editRollNumber,
-          phone: editPhone,
-          course: editCourse,
-          batch_id: editBatchId,
-          college: editCollege,
-          profile_pic: editProfilePic,
-          current_location: editLocation,
-          permanent_address: editAddress,
-          company: editCompany,
-          status: editAccountStatus,
-          feesStatus: editFeesStatus
-        })
+        body: JSON.stringify(payload)
       });
       if (response.ok) {
         setEditingStudent(null);
@@ -5547,6 +5554,10 @@ const AdminDashboard = () => {
                   <div className="form-group">
                     <label className="form-label" htmlFor="editPhone">Mobile Number (Login ID)</label>
                     <input id="editPhone" type="text" className="form-input" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="editPassword">Change Password (Optional)</label>
+                    <input id="editPassword" type="password" className="form-input" placeholder="Leave blank to keep unchanged" value={editPassword} onChange={(e) => setEditPassword(e.target.value)} />
                   </div>
                   <div className="form-group">
                     <label className="form-label" htmlFor="editRollNumber">Roll Number / Student ID (Read Only)</label>

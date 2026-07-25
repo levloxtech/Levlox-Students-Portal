@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   BookOpen, FileText, Bookmark, LogOut, GraduationCap,
   ClipboardList, Lock, Video, Megaphone, User, DollarSign,
-  Download, ExternalLink, Calendar, Percent, Bell,
+  Download, ExternalLink, Calendar, Percent,
   Search, ChevronLeft, ChevronRight, Settings, HelpCircle,
   Clock, CheckCircle, AlertCircle, PlayCircle, Zap, TrendingUp,
   Award, Star, ArrowRight, Plus, X, Eye, Users, Menu,
@@ -308,17 +308,6 @@ const StudentDashboard = () => {
   const portalLogo = portalSettings.logo;
   const fetchPortalSettings = () => {};
 
-  const { data: notifications = [], refetch: fetchNotifications } = useQuery({
-    queryKey: ['studentNotifications'],
-    queryFn: async () => {
-      const r = await apiFetch(`${API_BASE}/student/notifications`, { headers: { Authorization: `Bearer ${token}` } });
-      const d = await r.json();
-      return d || [];
-    }
-  });
-
-  const [showNotiCenter, setShowNotiCenter] = useState(false);
-
   const { data: liveClassesList = [], refetch: fetchLiveClasses } = useQuery({
     queryKey: ['studentLiveClasses'],
     queryFn: async () => {
@@ -395,7 +384,6 @@ const StudentDashboard = () => {
   });
 
   const [replayTarget, setReplayTarget] = useState(null); // { courseId, lessonId }
-  const notiRef = useRef(null);
   const profileRef = useRef(null);
 
   useEffect(() => {
@@ -426,10 +414,9 @@ const StudentDashboard = () => {
     if (activeTab === 'profile') fetchProfile();
   }, [activeTab]);
 
-  // Close notification/profile dropdown on outside click
+  // Close profile dropdown on outside click
   useEffect(() => {
     const handler = (e) => { 
-      if (notiRef.current && !notiRef.current.contains(e.target)) setShowNotiCenter(false); 
       if (profileRef.current && !profileRef.current.contains(e.target)) setShowProfileDropdown(false);
     };
     document.addEventListener('mousedown', handler);
@@ -946,35 +933,6 @@ const StudentDashboard = () => {
             <div className="navbar-date-chip">
               <Calendar size={14} strokeWidth={1.75} />
               {new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
-            </div>
-
-            {/* Notifications */}
-            <div style={{ position: 'relative' }} ref={notiRef}>
-              <button className="navbar-action-btn" onClick={() => setShowNotiCenter(!showNotiCenter)}>
-                <Bell size={18} strokeWidth={1.75} />
-                {notifications.length > 0 && <span className="notification-badge" />}
-              </button>
-              {showNotiCenter && (
-                <div className="noti-center-box">
-                  <div style={{ paddingBottom: 12, borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-primary)' }}>Notifications</span>
-                    <button onClick={() => setNotifications([])} style={{ background: 'none', border: 'none', color: 'var(--primary-color)', fontSize: 12, cursor: 'pointer', fontWeight: 700 }}>Clear all</button>
-                  </div>
-                  {notifications.length === 0
-                    ? <div style={{ padding: '32px 12px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13 }}>You're all caught up ✓</div>
-                    : notifications.map((n, i) => (
-                      <div key={i} style={{ padding: '12px 4px', borderBottom: i < notifications.length - 1 ? '1px solid var(--border-light)' : 'none' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                          <span style={{ fontSize: 10, textTransform: 'uppercase', color: 'var(--primary-color)', fontWeight: 800, letterSpacing: 0.5 }}>{(n.type || 'alert').replace('_', ' ')}</span>
-                          <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{n.created_at}</span>
-                        </div>
-                        <p style={{ margin: '0 0 2px', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{n.title}</p>
-                        <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{n.message}</p>
-                      </div>
-                    ))
-                  }
-                </div>
-              )}
             </div>
 
             {/* Profile dropdown */}

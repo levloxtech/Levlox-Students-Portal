@@ -252,179 +252,19 @@ def get_me():
 
 @auth_bp.route('/forgot-password/request', methods=['POST'])
 def forgot_password_request():
-    data = request.get_json() or {}
-    phone = data.get('phone')
-
-    if not phone or len(phone) < 9 or not phone.replace("+", "").replace("-", "").isdigit():
-        return jsonify({'message': 'Please provide a valid mobile number.'}), 400
-
-    phone = phone.strip()
-    user, _ = find_user_by_phone(phone)
-    if not user:
-        return jsonify({'message': 'No registered account found with this mobile number.'}), 404
-
-    # Generate secure 6-digit OTP
-    otp = "".join([str(random.randint(0, 9)) for _ in range(6)])
-    print(f"[SECURITY MOCK] SMS to {phone}: Your OTP code is {otp}")
-
-    # Invalidate existing active OTPs
-    db.otps.update_many({"phone": phone, "status": "active"}, {"$set": {"status": "invalidated"}})
-
-    # Hash the OTP
-    otp_hash = bcrypt.hashpw(otp.encode('utf-8'), bcrypt.gensalt())
-    now = datetime.datetime.utcnow()
-    expires_at = now + datetime.timedelta(minutes=5)
-
-    db.otps.insert_one({
-        "phone": phone,
-        "otp_hash": otp_hash,
-        "created_at": now,
-        "expires_at": expires_at,
-        "attempts": 0,
-        "status": "active"
-    })
-
-    return jsonify({'message': 'A secure OTP has been sent to your registered mobile number.'}), 200
+    return jsonify({'message': 'Self-service password reset is disabled. Please contact administration.'}), 403
 
 @auth_bp.route('/forgot-password/verify', methods=['POST'])
 def forgot_password_verify():
-    data = request.get_json() or {}
-    phone = data.get('phone')
-    otp = data.get('otp')
-
-    if not phone or not otp or len(otp) != 6:
-        return jsonify({'message': 'Mobile number and 6-digit OTP are required.'}), 400
-
-    phone = phone.strip()
-    otp = otp.strip()
-
-    otp_doc = db.otps.find_one({"phone": phone, "status": "active"})
-    if not otp_doc:
-        return jsonify({'message': 'No active OTP found or it has already been used/invalidated.'}), 400
-
-    now = datetime.datetime.utcnow()
-    expires_at = otp_doc["expires_at"]
-    if isinstance(expires_at, str):
-        expires_at = datetime.datetime.fromisoformat(expires_at)
-
-    if now > expires_at:
-        db.otps.update_one({"_id": otp_doc["_id"]}, {"$set": {"status": "expired"}})
-        return jsonify({'message': 'OTP has expired.'}), 400
-
-    attempts = otp_doc.get('attempts', 0) + 1
-    db.otps.update_one({"_id": otp_doc["_id"]}, {"$set": {"attempts": attempts}})
-
-    if attempts > 5:
-        db.otps.update_one({"_id": otp_doc["_id"]}, {"$set": {"status": "invalidated"}})
-        return jsonify({'message': 'Maximum verification attempts exceeded. Please request a new OTP.'}), 400
-
-    if not bcrypt.checkpw(otp.encode('utf-8'), otp_doc["otp_hash"]):
-        if attempts >= 5:
-            db.otps.update_one({"_id": otp_doc["_id"]}, {"$set": {"status": "invalidated"}})
-            return jsonify({'message': 'Incorrect OTP. Maximum verification attempts reached. This OTP is now invalid.'}), 400
-        return jsonify({'message': f'Incorrect OTP. Remaining attempts: {5 - attempts}.'}), 400
-
-    # OTP is correct and verified
-    db.otps.update_one({"_id": otp_doc["_id"]}, {"$set": {"status": "used"}})
-
-    # Generate one-time reset token
-    reset_payload = {
-        'phone': phone,
-        'purpose': 'password_reset',
-        'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=15)
-    }
-    reset_token = jwt.encode(reset_payload, Config.JWT_SECRET_KEY, algorithm='HS256')
-
-    return jsonify({
-        'message': 'OTP verified successfully.',
-        'reset_token': reset_token
-    }), 200
+    return jsonify({'message': 'Self-service password reset is disabled. Please contact administration.'}), 403
 
 @auth_bp.route('/forgot-password/reset', methods=['POST'])
 def forgot_password_reset():
-    data = request.get_json() or {}
-    reset_token = data.get('reset_token')
-    new_password = data.get('new_password')
-
-    if not reset_token or not new_password:
-        return jsonify({'message': 'Missing reset token or new password.'}), 400
-
-    try:
-        payload = jwt.decode(reset_token, Config.JWT_SECRET_KEY, algorithms=["HS256"])
-        if payload.get('purpose') != 'password_reset':
-            return jsonify({'message': 'Invalid token purpose.'}), 400
-        phone = payload.get('phone')
-    except jwt.ExpiredSignatureError:
-        return jsonify({'message': 'Reset session has expired. Please request a new OTP.'}), 401
-    except Exception:
-        return jsonify({'message': 'Invalid reset token.'}), 401
-
-    if not validate_password_strength(new_password):
-        return jsonify({'message': 'Password does not meet safety rules.'}), 400
-
-    hashed_pw = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
-    
-    # Try updating admins first, then students
-    result = db._db.admins.update_one({"phone": phone}, {"$set": {"password_hash": hashed_pw}})
-    if result.matched_count == 0:
-        # Try finding by 10-digit normalized suffix
-        if phone.startswith("+") and len(phone) > 10:
-            suffix = phone[-10:]
-            result = db._db.admins.update_one({"phone": suffix}, {"$set": {"password_hash": hashed_pw}})
-            
-    if result.matched_count == 0:
-        result = db._db.students.update_one({"phone": phone}, {"$set": {"password_hash": hashed_pw}})
-        if result.matched_count == 0 and phone.startswith("+") and len(phone) > 10:
-            suffix = phone[-10:]
-            result = db._db.students.update_one({"phone": suffix}, {"$set": {"password_hash": hashed_pw}})
-
-    if result.matched_count == 0:
-        return jsonify({'message': 'User profile not found.'}), 404
-
-    return jsonify({'message': 'Password changed successfully! Please login with your new password.'}), 200
+    return jsonify({'message': 'Self-service password reset is disabled. Please contact administration.'}), 403
 
 @auth_bp.route('/reset-password', methods=['POST'])
 def reset_password():
-    data = request.get_json(force=True) or {}
-    id_token = data.get("idToken")
-    new_password = data.get("newPassword")
-
-    if not id_token or not new_password:
-        return jsonify({"error": "Missing token or password"}), 400
-
-    phone = None
-    if firebase_init.firebase_initialized:
-        try:
-            from firebase_admin import auth as firebase_auth
-            decoded = firebase_auth.verify_id_token(id_token)
-            phone = decoded.get("phone_number")
-        except Exception as e:
-            return jsonify({"error": "Invalid or expired OTP session", "detail": str(e)}), 401
-    else:
-        print(f"[SECURITY MOCK] Verifying reset OTP mock token: {id_token}")
-        if id_token.startswith("mock-token-"):
-            phone = id_token.split("mock-token-")[-1]
-            if not phone.startswith("+"):
-                phone = "+91" + phone
-        else:
-            phone = "+919876543210"
-
-    if not phone:
-        return jsonify({"error": "Failed to verify phone number from token"}), 401
-
-    if not validate_password_strength(new_password):
-        return jsonify({"error": "Password does not meet safety rules"}), 400
-
-    password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
-
-    user, role = find_user_by_phone(phone)
-    if not user:
-        return jsonify({"error": "No account found for this phone number"}), 404
-
-    coll = db._db.admins if role == "admin" else db._db.students
-    coll.update_one({"_id": user["_id"]}, {"$set": {"password_hash": password_hash, "must_change_password": False}})
-
-    return jsonify({"message": "Password reset successful"}), 200
+    return jsonify({'message': 'Self-service password reset is disabled. Please contact administration.'}), 403
 
 @auth_bp.route('/verify', methods=['POST'])
 def verify_firebase_login():
