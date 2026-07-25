@@ -411,7 +411,6 @@ const StudentDashboard = () => {
         localStorage.setItem('user', JSON.stringify(lu));
         queryClient.invalidateQueries({ queryKey: ['studentProfile'] });
         queryClient.invalidateQueries({ queryKey: ['studentDashboard'] });
-        queryClient.invalidateQueries({ queryKey: ['learningRanking'] });
         queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
       } else {
         const err = await r.json();
