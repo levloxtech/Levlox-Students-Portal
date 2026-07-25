@@ -248,7 +248,10 @@ const StudentDashboard = () => {
         localStorage.setItem('user', JSON.stringify(lu));
       }
       return d;
-    }
+    },
+    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+    gcTime: 1000 * 60 * 10,
+    refetchOnWindowFocus: false
   });
 
   const courses = dashboardData?.courses || [];

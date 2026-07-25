@@ -283,18 +283,43 @@ def get_dashboard():
         }
     }
 
-    # 11. Leaderboard summary (Overall Top 5)
+    # 11. Batch-fetch for Leaderboard & Learning Ranking (Fixes N+1 Queries)
     batch_students = list(db.users.find({"role": "student", "batch_id": batch_id}, {"name": 1, "profile_pic": 1, "attendance": 1, "batch_id": 1})) if batch_id else []
+    batch_student_ids = [s['_id'] for s in batch_students]
+    batch_student_str_ids = [str(s['_id']) for s in batch_students]
+
+    # Bulk query all submissions, mock interviews, and lesson progress for batch students in 3 batch queries
+    bulk_submissions = list(db.submissions.find({"student_id": {"$in": batch_student_ids + batch_student_str_ids}})) if batch_students else []
+    bulk_interviews = list(db.mock_interviews.find({"student_id": {"$in": batch_student_ids + batch_student_str_ids}}, {"student_id": 1, "score": 1})) if batch_students else []
+    bulk_progress = list(db.lesson_progress.find({"student_id": {"$in": batch_student_str_ids}})) if batch_students else []
+
+    # Map fetched items by student ID
+    subs_by_student = {}
+    for sb in bulk_submissions:
+        sid = str(sb.get('student_id'))
+        subs_by_student.setdefault(sid, []).append(sb)
+
+    ivs_by_student = {}
+    for iv in bulk_interviews:
+        sid = str(iv.get('student_id'))
+        ivs_by_student.setdefault(sid, []).append(iv)
+
+    progress_by_student = {}
+    for pr in bulk_progress:
+        sid = str(pr.get('student_id'))
+        progress_by_student.setdefault(sid, []).append(pr)
+
     leaderboard_payload = []
+    tot_rec_classes = len(recorded_classes_list)
+
     for s in batch_students:
         s_id_str = str(s['_id'])
-        s_id_obj = s['_id']
         att_pct = s.get('attendance', {}).get('percentage', 92)
         
-        st_subs = [sb for sb in submissions_list if sb.get('student_id') in [s_id_str, str(s_id_obj)]] if s_id_str == student_id else list(db.submissions.find({"student_id": s_id_obj}, {"_id": 1}))
+        st_subs = subs_by_student.get(s_id_str, [])
         sub_rate_st = round((len(st_subs) / max(1, tot_assigns)) * 100)
         
-        st_ivs = interviews if s_id_str == student_id else list(db.mock_interviews.find({"student_id": s_id_obj}, {"score": 1}))
+        st_ivs = ivs_by_student.get(s_id_str, [])
         avg_m = (sum(i.get('score', 0) for i in st_ivs) / len(st_ivs)) if st_ivs else 75.0
 
         overall_score = round((att_pct * 2) + (sub_rate_st * 3) + (avg_m * 3) + 150)
@@ -305,23 +330,22 @@ def get_dashboard():
             "overall_score": overall_score,
             "is_current": s_id_str == student_id
         })
+
     leaderboard_payload.sort(key=lambda x: x['overall_score'], reverse=True)
     for idx, item in enumerate(leaderboard_payload):
         item['rank'] = idx + 1
 
-    # 12. Learning Ranking summary
+    # 12. Learning Ranking summary using cached bulk data
     rankings = []
-    tot_rec_classes = len(recorded_classes_list)
     for s in batch_students:
         s_id_str = str(s['_id'])
-        s_id_obj = s['_id']
         att_pct = s.get('attendance', {}).get('percentage', 92)
-        comp_l = db.lesson_progress.count_documents({"student_id": s_id_str})
+        comp_l = len(progress_by_student.get(s_id_str, []))
         comp_pct = round((comp_l / max(1, tot_rec_classes)) * 100) if tot_rec_classes > 0 else 0
         if comp_pct > 100:
             comp_pct = 100
         
-        st_subs = [sb for sb in submissions_list if sb.get('student_id') in [s_id_str, str(s_id_obj)]] if s_id_str == student_id else list(db.submissions.find({"student_id": s_id_obj}))
+        st_subs = subs_by_student.get(s_id_str, [])
         graded_st_subs = [sub for sub in st_subs if sub.get('grade') is not None]
         if graded_st_subs:
             grades = [float(sub.get('grade')) for sub in graded_st_subs if sub.get('grade') is not None]
@@ -330,7 +354,7 @@ def get_dashboard():
             sub_rate_calc = (len(st_subs) / max(1, tot_assigns)) * 100
             avg_grade = min(100.0, sub_rate_calc)
 
-        st_ivs = interviews if s_id_str == student_id else list(db.mock_interviews.find({"student_id": s_id_obj}, {"score": 1}))
+        st_ivs = ivs_by_student.get(s_id_str, [])
         avg_m = (sum(i.get('score', 0) for i in st_ivs) / len(st_ivs)) if st_ivs else 75.0
 
         final_score = round((avg_grade * 0.3) + (avg_m * 0.3) + (att_pct * 0.2) + (comp_pct * 0.2), 1)

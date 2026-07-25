@@ -201,6 +201,7 @@ const Login = () => {
   const isMockFirebase = !import.meta.env.VITE_FIREBASE_API_KEY || import.meta.env.VITE_FIREBASE_API_KEY === "PLACEHOLDER_API_KEY";
 
   const setupRecaptcha = () => {
+    if (!auth) return;
     if (!window.recaptchaVerifier) {
       window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
         size: "invisible",
