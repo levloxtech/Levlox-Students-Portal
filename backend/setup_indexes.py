@@ -69,15 +69,19 @@ def setup_indexes():
     print("Indexing submissions...")
     db._db.submissions.create_index("student_id")
     db._db.submissions.create_index("assignment_id")
+    db._db.submissions.create_index([("student_id", 1), ("assignment_id", 1)])
+    db._db.submissions.create_index([("student_id", 1), ("status", 1)])
 
     # mock_interviews
     print("Indexing mock_interviews...")
     db._db.mock_interviews.create_index("student_id")
+    db._db.mock_interviews.create_index([("student_id", 1), ("date", -1)])
 
     # lesson_progress
     print("Indexing lesson_progress...")
     db._db.lesson_progress.create_index("student_id")
     db._db.lesson_progress.create_index("recorded_class_id")
+    db._db.lesson_progress.create_index([("student_id", 1), ("lesson_id", 1)], unique=True, sparse=True)
 
     print("Indexes created successfully!")
 

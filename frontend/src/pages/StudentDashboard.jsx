@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -10,19 +10,21 @@ import {
   Award, Star, ArrowRight, Plus, X, Eye, Users, Menu,
   Crown, Medal, Flame, Activity, Trophy
 } from 'lucide-react';
-import StudentProfile from './StudentProfile';
-import StudentSettings from './StudentSettings';
-import AttendancePage from './AttendancePage';
-import RecordedClassesPage from './RecordedClassesPage';
-import StudyMaterialsPage from './StudyMaterialsPage';
-import LeaderboardPage from './LeaderboardPage';
+
 import CustomModal from '../components/Modal';
 import leveloxIcon from '../assets/levelox-icon-transparent.png';
 import { API_BASE } from '../utils/api';
 
+// Lazy-load sub-page components for code-splitting and below-the-fold optimization
+const StudentProfile = lazy(() => import('./StudentProfile'));
+const StudentSettings = lazy(() => import('./StudentSettings'));
+const AttendancePage = lazy(() => import('./AttendancePage'));
+const RecordedClassesPage = lazy(() => import('./RecordedClassesPage'));
+const StudyMaterialsPage = lazy(() => import('./StudyMaterialsPage'));
+const LeaderboardPage = lazy(() => import('./LeaderboardPage'));
 
-/* ─── tiny helpers ─────────────────────────────────── */
-const CircularProgress = ({ pct = 0, size = 80, stroke = 7, color = '#6C3CF0' }) => {
+/* ─── tiny helpers (Memoized for re-render optimization) ─────────────── */
+const CircularProgress = memo(({ pct = 0, size = 80, stroke = 7, color = '#6C3CF0' }) => {
   const r = (size - stroke) / 2;
   const circ = 2 * Math.PI * r;
   const offset = circ - (pct / 100) * circ;
@@ -38,9 +40,9 @@ const CircularProgress = ({ pct = 0, size = 80, stroke = 7, color = '#6C3CF0' })
       />
     </svg>
   );
-};
+});
 
-const ProgressBar = ({ pct = 0, color = '#6C3CF0', height = 6 }) => (
+const ProgressBar = memo(({ pct = 0, color = '#6C3CF0', height = 6 }) => (
   <div style={{ background: 'rgba(0,0,0,0.05)', borderRadius: 99, height, overflow: 'hidden', width: '100%' }}>
     <div style={{
       height: '100%', borderRadius: 99, width: `${Math.min(pct, 100)}%`,
@@ -48,9 +50,9 @@ const ProgressBar = ({ pct = 0, color = '#6C3CF0', height = 6 }) => (
       transition: 'width 0.8s cubic-bezier(0.4,0,0.2,1)'
     }} />
   </div>
-);
+));
 
-const FlatIcon = ({ children, size = 40 }) => (
+const FlatIcon = memo(({ children, size = 40 }) => (
   <div style={{
     width: size, height: size, borderRadius: 12, flexShrink: 0,
     background: 'rgba(108, 60, 240, 0.08)',
@@ -58,9 +60,9 @@ const FlatIcon = ({ children, size = 40 }) => (
   }}>
     {children}
   </div>
-);
+));
 
-const WeeklyLineChart = ({ data = [0, 0, 0, 0, 0, 0, 0] }) => {
+const WeeklyLineChart = memo(({ data = [0, 0, 0, 0, 0, 0, 0] }) => {
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const maxVal = Math.max(...data, 8);
   const width = 380;
@@ -110,9 +112,9 @@ const WeeklyLineChart = ({ data = [0, 0, 0, 0, 0, 0, 0] }) => {
       </svg>
     </div>
   );
-};
+});
 
-const MockBarChart = ({ data = [0, 0, 0, 0] }) => {
+const MockBarChart = memo(({ data = [0, 0, 0, 0] }) => {
   const width = 280;
   const height = 150;
   const padding = 20;
@@ -154,7 +156,7 @@ const MockBarChart = ({ data = [0, 0, 0, 0] }) => {
       </svg>
     </div>
   );
-};
+});
 
 /* ─── Main Component ───────────────────────────────── */
 const StudentDashboard = () => {
@@ -202,228 +204,8 @@ const StudentDashboard = () => {
   const [activeTab, setActiveTab] = useState(initialUser.must_change_password ? 'settings' : 'dashboard');
   const queryClient = useQueryClient();
 
-  const { data: dashboardData = null, refetch: fetchDashboard } = useQuery({
-    queryKey: ['studentDashboard'],
-    queryFn: async () => {
-      const r = await apiFetch(`${API_BASE}/student/dashboard`, { headers: { Authorization: `Bearer ${token}` } });
-      const d = await r.json();
-      const lu = JSON.parse(localStorage.getItem('user') || '{}');
-      lu.feesPaid = d.student.feesPaid;
-      localStorage.setItem('user', JSON.stringify(lu));
-      return d;
-    }
-  });
-
-  const { data: courses = [], refetch: fetchCourses, isFetching: loadingCourses } = useQuery({
-    queryKey: ['courses'],
-    queryFn: async () => {
-      const r = await apiFetch(`${API_BASE}/courses`, { headers: { Authorization: `Bearer ${token}` } });
-      const d = await r.json();
-      return d.courses || [];
-    }
-  });
-
-  const { data: enrolledCourses = [], refetch: fetchEnrolledCourses } = useQuery({
-    queryKey: ['enrolledCourses'],
-    queryFn: async () => {
-      const r = await apiFetch(`${API_BASE}/courses/enrolled`, { headers: { Authorization: `Bearer ${token}` } });
-      const d = await r.json();
-      return d.courses || [];
-    }
-  });
-
-  const [selectedCourse, setSelectedCourse] = useState(null);
-
-  const { data: assignments = [], isFetching: loadingAssignments } = useQuery({
-    queryKey: ['assignments', selectedCourse?._id],
-    queryFn: async () => {
-      const r = await apiFetch(`${API_BASE}/assignments/course/${selectedCourse._id}`, { headers: { Authorization: `Bearer ${token}` } });
-      const d = await r.json();
-      return d.assignments || [];
-    },
-    enabled: !!selectedCourse?._id
-  });
-
-  const selectCourse = (course) => {
-    setSelectedCourse(course);
-  };
-
-  const loading = loadingCourses || loadingAssignments;
-
-  const { data: submissions = [], refetch: fetchMySubmissions } = useQuery({
-    queryKey: ['mySubmissions'],
-    queryFn: async () => {
-      const r = await apiFetch(`${API_BASE}/assignments/student/submissions`, { headers: { Authorization: `Bearer ${token}` } });
-      const d = await r.json();
-      return d.submissions || [];
-    }
-  });
-
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [globalSearch, setGlobalSearch] = useState('');
-  const [submitModalAssignment, setSubmitModalAssignment] = useState(null);
-  const [submissionText, setSubmissionText] = useState('');
-  const [vidQuery, setVidQuery] = useState('');
-  const [vidCourse, setVidCourse] = useState('');
-  const [matQuery, setMatQuery] = useState('');
-
-  const [profileName, setProfileName] = useState('');
-  const [profilePhone, setProfilePhone] = useState('');
-  const [profileCollege, setProfileCollege] = useState('');
-  const [profileCourse, setProfileCourse] = useState('');
-  const [profilePic, setProfilePic] = useState('');
-
-  const { data: profileData = null, refetch: fetchProfile } = useQuery({
-    queryKey: ['studentProfile'],
-    queryFn: async () => {
-      const r = await apiFetch(`${API_BASE}/student/profile`, { headers: { Authorization: `Bearer ${token}` } });
-      const d = await r.json();
-      setProfileName(d.name || '');
-      setProfilePhone(d.phone || '');
-      setProfileCollege(d.college || '');
-      setProfileCourse(d.course || '');
-      setProfilePic(d.profile_pic || '');
-      return d;
-    },
-    enabled: activeTab === 'profile'
-  });
-
-  const [currPassword, setCurrPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-
-  const { data: portalSettings = { name: 'Levlox', logo: '' } } = useQuery({
-    queryKey: ['portalSettings'],
-    queryFn: async () => {
-      const r = await fetch(`${API_BASE}/portal-settings`);
-      if (r.ok) {
-        const d = await r.json();
-        return { name: d.portal_name || 'Levlox', logo: d.portal_logo || '' };
-      }
-      return { name: 'Levlox', logo: '' };
-    }
-  });
-  const portalName = portalSettings.name;
-  const portalLogo = portalSettings.logo;
-  const fetchPortalSettings = () => {};
-
-  const { data: liveClassesList = [], refetch: fetchLiveClasses } = useQuery({
-    queryKey: ['studentLiveClasses'],
-    queryFn: async () => {
-      const r = await apiFetch(`${API_BASE}/student/live-classes`, { headers: { Authorization: `Bearer ${token}` } });
-      const d = await r.json();
-      return d.liveClasses || [];
-    }
-  });
-
-  const [showLockModal, setShowLockModal] = useState(false);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [modalTitle, setModalTitle] = useState('');
-  const [modalText, setModalText] = useState('');
-  const [modalType, setModalType] = useState('info');
-  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
-
-  const { data: analytics = null, refetch: fetchAnalytics } = useQuery({
-    queryKey: ['studentAnalytics'],
-    queryFn: async () => {
-      const r = await apiFetch(`${API_BASE}/student/analytics`, { headers: { Authorization: `Bearer ${token}` } });
-      return await r.json();
-    }
-  });
-
-  const { data: overallLeaderboard = [] } = useQuery({
-    queryKey: ['leaderboard', 'overall'],
-    queryFn: async () => {
-      const r = await apiFetch(`${API_BASE}/student/leaderboard/overall`, { headers: { Authorization: `Bearer ${token}` } });
-      return await r.json();
-    }
-  });
-
-  const { data: mockLeaderboard = [] } = useQuery({
-    queryKey: ['leaderboard', 'mock'],
-    queryFn: async () => {
-      const r = await apiFetch(`${API_BASE}/student/leaderboard/mock`, { headers: { Authorization: `Bearer ${token}` } });
-      return await r.json();
-    }
-  });
-
-  const { data: taskLeaderboard = [] } = useQuery({
-    queryKey: ['leaderboard', 'tasks'],
-    queryFn: async () => {
-      const r = await apiFetch(`${API_BASE}/student/leaderboard/tasks`, { headers: { Authorization: `Bearer ${token}` } });
-      return await r.json();
-    }
-  });
-
-  const fetchLeaderboards = () => {
-    queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
-  };
-
-  const { data: learningRanking = null, refetch: fetchLearningRanking } = useQuery({
-    queryKey: ['learningRanking'],
-    queryFn: async () => {
-      const r = await apiFetch(`${API_BASE}/student/learning-ranking`, { headers: { Authorization: `Bearer ${token}` } });
-      if (r.ok) {
-        return await r.json();
-      }
-      return null;
-    }
-  });
-
-  const { data: latestReplays = [], refetch: fetchLatestReplays, isFetching: replaysLoading } = useQuery({
-    queryKey: ['latestReplays'],
-    queryFn: async () => {
-      const r = await fetch(`${API_BASE}/student/latest-replays`, { headers: { Authorization: `Bearer ${token}` } });
-      if (r.ok) {
-        const d = await r.json();
-        return d.replays || [];
-      }
-      return [];
-    }
-  });
-
-  const [replayTarget, setReplayTarget] = useState(null); // { courseId, lessonId }
-  const profileRef = useRef(null);
-
-  useEffect(() => {
-    if (mobileMenuOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [mobileMenuOpen]);
-
-  const showModal = (title, text, type = 'info') => {
-    setModalTitle(title);
-    setModalText(text);
-    setModalType(type);
-    setModalOpen(true);
-  };
-
-  const navigate = useNavigate();
   const token = localStorage.getItem('token');
   const user = JSON.parse(localStorage.getItem('user') || '{}');
-  const activeAnalytics = analytics && analytics.has_data ? analytics : defaultDummyAnalytics;
-
-  // Let react-query do the initial fetch automatically. We only run tab specific fetches as needed.
-  useEffect(() => {
-    if (activeTab === 'profile') fetchProfile();
-  }, [activeTab]);
-
-  // Close profile dropdown on outside click
-  useEffect(() => {
-    const handler = (e) => { 
-      if (profileRef.current && !profileRef.current.contains(e.target)) setShowProfileDropdown(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const handleLogout = () => { localStorage.clear(); navigate('/login'); };
 
   const apiFetch = async (url, options = {}) => {
     try {
@@ -453,6 +235,155 @@ const StudentDashboard = () => {
       throw e;
     }
   };
+
+  // Consolidated Dashboard Query: Single API request for all dashboard components
+  const { data: dashboardData = null, refetch: fetchDashboard } = useQuery({
+    queryKey: ['studentDashboard'],
+    queryFn: async () => {
+      const r = await apiFetch(`${API_BASE}/student/dashboard`, { headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json();
+      const lu = JSON.parse(localStorage.getItem('user') || '{}');
+      if (d.student) {
+        lu.feesPaid = d.student.feesPaid;
+        localStorage.setItem('user', JSON.stringify(lu));
+      }
+      return d;
+    }
+  });
+
+  const courses = dashboardData?.courses || [];
+  const enrolledCourses = dashboardData?.enrolledCourses || [];
+  const submissions = dashboardData?.submissions || [];
+  const latestReplays = dashboardData?.latestReplays || [];
+  const liveClassesList = dashboardData?.upcomingLiveClasses ? [dashboardData.todayLiveClass, ...dashboardData.upcomingLiveClasses].filter(Boolean) : [];
+  const analytics = dashboardData?.analytics || null;
+  const overallLeaderboard = dashboardData?.leaderboard || [];
+
+  const [selectedCourse, setSelectedCourse] = useState(null);
+
+  const { data: assignments = [], isFetching: loadingAssignments } = useQuery({
+    queryKey: ['assignments', selectedCourse?._id],
+    queryFn: async () => {
+      const r = await apiFetch(`${API_BASE}/assignments/course/${selectedCourse._id}`, { headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json();
+      return d.assignments || [];
+    },
+    enabled: !!selectedCourse?._id
+  });
+
+  const selectCourse = (course) => {
+    setSelectedCourse(course);
+  };
+
+  const loading = loadingAssignments;
+
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [globalSearch, setGlobalSearch] = useState('');
+  const [submitModalAssignment, setSubmitModalAssignment] = useState(null);
+  const [submissionText, setSubmissionText] = useState('');
+  const [vidQuery, setVidQuery] = useState('');
+  const [vidCourse, setVidCourse] = useState('');
+  const [matQuery, setMatQuery] = useState('');
+
+  const [profileName, setProfileName] = useState(dashboardData?.student?.name || '');
+  const [profilePhone, setProfilePhone] = useState(dashboardData?.student?.phone || '');
+  const [profileCollege, setProfileCollege] = useState(dashboardData?.student?.college || '');
+  const [profileCourse, setProfileCourse] = useState(dashboardData?.student?.course || '');
+  const [profilePic, setProfilePic] = useState(dashboardData?.student?.profile_pic || '');
+
+  const profileData = dashboardData?.student ? {
+    name: dashboardData.student.name,
+    email: dashboardData.student.email,
+    phone: dashboardData.student.phone,
+    college: dashboardData.student.college,
+    course: dashboardData.student.course,
+    feesStatus: dashboardData.student.feesStatus,
+    feesTotal: dashboardData.student.feesTotal,
+    feesPaidAmount: dashboardData.student.feesPaidAmount,
+    feesRemainingAmount: dashboardData.student.feesRemainingAmount,
+    feesDueDate: dashboardData.student.feesDueDate,
+    attendance: dashboardData.student.attendance?.percentage || 92,
+    profile_pic: dashboardData.student.profile_pic,
+    rollNumber: dashboardData.student.rollNumber
+  } : null;
+
+  const fetchProfile = fetchDashboard;
+  const fetchCourses = fetchDashboard;
+  const fetchEnrolledCourses = fetchDashboard;
+  const fetchMySubmissions = fetchDashboard;
+  const fetchLiveClasses = fetchDashboard;
+  const fetchAnalytics = fetchDashboard;
+  const fetchLeaderboards = fetchDashboard;
+  const fetchLearningRanking = fetchDashboard;
+  const fetchLatestReplays = fetchDashboard;
+  const replaysLoading = false;
+
+  const [currPassword, setCurrPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  const { data: portalSettings = { name: 'Levlox', logo: '' } } = useQuery({
+    queryKey: ['portalSettings'],
+    queryFn: async () => {
+      const r = await fetch(`${API_BASE}/portal-settings`);
+      if (r.ok) {
+        const d = await r.json();
+        return { name: d.portal_name || 'Levlox', logo: d.portal_logo || '' };
+      }
+      return { name: 'Levlox', logo: '' };
+    }
+  });
+  const portalName = portalSettings.name;
+  const portalLogo = portalSettings.logo;
+  const fetchPortalSettings = () => {};
+
+  const [showLockModal, setShowLockModal] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalText, setModalText] = useState('');
+  const [modalType, setModalType] = useState('info');
+  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+
+  const [replayTarget, setReplayTarget] = useState(null); // { courseId, lessonId }
+  const profileRef = useRef(null);
+
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [mobileMenuOpen]);
+
+  const showModal = (title, text, type = 'info') => {
+    setModalTitle(title);
+    setModalText(text);
+    setModalType(type);
+    setModalOpen(true);
+  };
+
+  const navigate = useNavigate();
+  const activeAnalytics = analytics && analytics.has_data ? analytics : defaultDummyAnalytics;
+
+  // Let react-query do the initial fetch automatically. We only run tab specific fetches as needed.
+  useEffect(() => {
+    if (activeTab === 'profile') fetchProfile();
+  }, [activeTab]);
+
+  // Close profile dropdown on outside click
+  useEffect(() => {
+    const handler = (e) => { 
+      if (profileRef.current && !profileRef.current.contains(e.target)) setShowProfileDropdown(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const handleLogout = () => { localStorage.clear(); navigate('/login'); };
 
   const handleProfileUpdate = (updatedProfile) => {
     if (updatedProfile) {
@@ -1496,93 +1427,93 @@ const StudentDashboard = () => {
           </div>
         )}
 
-        {/* RECORDED CLASSES TAB — premium Netflix-style */}
-        {activeTab === 'recorded-classes-tab' && (
-          <RecordedClassesPage
-            dashboardData={dashboardData}
-            isPaid={isPaid}
-            initialCourseId={replayTarget?.courseId || null}
-            initialLessonId={replayTarget?.lessonId || null}
-          />
-        )}
-
-        {/* ATTENDANCE TAB — premium GitHub heatmap */}
-        {activeTab === 'attendance-tab' && dashboardData && (
-          <AttendancePage dashboardData={dashboardData} />
-        )}
-
-
-
-        {/* ANNOUNCEMENTS TAB */}
-        {activeTab === 'announcements-tab' && dashboardData && (
-          <div className="dashboard-card-section">
-            <div className="section-header-premium">
-              <h3 className="section-title-premium"><Megaphone size={18} color="var(--primary-color)" /> All Announcements</h3>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {dashboardData.announcements?.map((a, i) => (
-                <div key={i} style={{ padding: 20, borderRadius: 14, background: a.is_pinned ? 'rgba(108,60,240,0.03)' : 'white', border: `1.5px solid ${a.is_pinned ? 'rgba(108,60,240,0.2)' : 'var(--border-color)'}`, boxShadow: 'var(--shadow-sm)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <span style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', padding: '3px 8px', borderRadius: 5, background: a.priority === 'High' ? 'rgba(239,68,68,0.1)' : 'rgba(108,60,240,0.1)', color: a.priority === 'High' ? '#ef4444' : 'var(--primary-color)' }}>{a.priority}</span>
-                      {a.is_pinned && <span style={{ fontSize: 11, color: 'var(--primary-color)', fontWeight: 700 }}>📌 Pinned</span>}
-                    </div>
-                    <span style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>{a.date}</span>
-                  </div>
-                  <h4 style={{ fontSize: 15, fontWeight: 800, margin: '0 0 6px' }}>{a.title}</h4>
-                  <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>{a.content}</p>
-                </div>
-              ))}
-            </div>
+        <Suspense fallback={
+          <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+            Loading content...
           </div>
-        )}
-
-
-
-        {/* LEADERBOARD TAB */}
-        {activeTab === 'leaderboard-tab' && (
-          <LeaderboardPage token={token} user={user} />
-        )}
-
-        {/* PROFILE TAB — premium page component */}
-        {activeTab === 'profile' && (
-          <StudentProfile
-            dashboardData={dashboardData}
-            enrolledCourses={enrolledCourses}
-            token={token}
-            onProfileUpdate={handleProfileUpdate}
-          />
-        )}
-
-        {/* SETTINGS TAB */}
-        {activeTab === 'settings' && (
-          <div>
-            {mustChangePassword && (
-              <div style={{
-                background: '#FEF2F2',
-                border: '1.5px solid #FCA5A5',
-                borderRadius: '12px',
-                padding: '16px',
-                marginBottom: '20px',
-                color: '#991B1B',
-                fontSize: '13.5px',
-                fontWeight: 600,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px'
-              }}>
-                <TriangleAlert size={18} color="#ef4444" />
-                <span>Security Notice: You are logged in with a temporary password. You must change your password immediately to unlock portal access.</span>
-              </div>
-            )}
-            <StudentSettings
-              token={token}
-              user={user}
-              showModal={showModal}
-              onPasswordChanged={() => setMustChangePassword(false)}
+        }>
+          {/* RECORDED CLASSES TAB */}
+          {activeTab === 'recorded-classes-tab' && (
+            <RecordedClassesPage
+              dashboardData={dashboardData}
+              isPaid={isPaid}
+              initialCourseId={replayTarget?.courseId || null}
+              initialLessonId={replayTarget?.lessonId || null}
             />
-          </div>
-        )}
+          )}
+
+          {/* ATTENDANCE TAB */}
+          {activeTab === 'attendance-tab' && dashboardData && (
+            <AttendancePage dashboardData={dashboardData} />
+          )}
+
+          {/* ANNOUNCEMENTS TAB */}
+          {activeTab === 'announcements-tab' && dashboardData && (
+            <div className="dashboard-card-section">
+              <div className="section-header-premium">
+                <h3 className="section-title-premium"><Megaphone size={18} color="var(--primary-color)" /> All Announcements</h3>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {dashboardData.announcements?.map((a, i) => (
+                  <div key={i} style={{ padding: 20, borderRadius: 14, background: a.is_pinned ? 'rgba(108,60,240,0.03)' : 'white', border: `1.5px solid ${a.is_pinned ? 'rgba(108,60,240,0.2)' : 'var(--border-color)'}`, boxShadow: 'var(--shadow-sm)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <span style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', padding: '3px 8px', borderRadius: 5, background: a.priority === 'High' ? 'rgba(239,68,68,0.1)' : 'rgba(108,60,240,0.1)', color: a.priority === 'High' ? '#ef4444' : 'var(--primary-color)' }}>{a.priority}</span>
+                        {a.is_pinned && <span style={{ fontSize: 11, color: 'var(--primary-color)', fontWeight: 700 }}>📌 Pinned</span>}
+                      </div>
+                      <span style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>{a.date}</span>
+                    </div>
+                    <h4 style={{ fontSize: 15, fontWeight: 800, margin: '0 0 6px' }}>{a.title}</h4>
+                    <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>{a.content}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* LEADERBOARD TAB */}
+          {activeTab === 'leaderboard-tab' && (
+            <LeaderboardPage token={token} user={user} />
+          )}
+
+          {/* PROFILE TAB */}
+          {activeTab === 'profile' && (
+            <StudentProfile
+              dashboardData={dashboardData}
+              enrolledCourses={enrolledCourses}
+              token={token}
+              onProfileUpdate={handleProfileUpdate}
+            />
+          )}
+
+          {/* SETTINGS TAB */}
+          {activeTab === 'settings' && (
+            <div>
+              {mustChangePassword && (
+                <div style={{
+                  background: '#FEF2F2',
+                  border: '1.5px solid #FCA5A5',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  marginBottom: '20px',
+                  color: '#991B1B',
+                  fontSize: '13.5px',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px'
+                }}>
+                  <TriangleAlert size={18} color="#ef4444" />
+                  <span>Security Notice: You are logged in with a temporary password. You must change your password immediately to unlock portal access.</span>
+                </div>
+              )}
+              <StudentSettings
+                token={token}
+                user={user}
+              />
+            </div>
+          )}
+        </Suspense>
       </main>
 
       {/* SUBMISSION MODAL */}
