@@ -1,16 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import {
-  User, Mail, Phone, Lock, Eye, EyeOff, Camera, CheckCircle,
-  AlertCircle, Save, X, RefreshCw, Key, Shield, HelpCircle, ArrowRight
+  User, Mail, Phone, Camera, CheckCircle, Save, Smartphone
 } from 'lucide-react';
 import { API_BASE } from '../utils/api';
 
-
-const StudentSettings = ({ token, user, showModal, onPasswordChanged }) => {
+const StudentSettings = ({ token, user, showModal }) => {
   const [profileData, setProfileData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [savingAccount, setSavingAccount] = useState(false);
-  const [savingPassword, setSavingPassword] = useState(false);
   const [toast, setToast] = useState('');
 
   // Account Fields
@@ -18,34 +15,6 @@ const StudentSettings = ({ token, user, showModal, onPasswordChanged }) => {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [profilePic, setProfilePic] = useState('');
-
-  // Password Fields
-  const [currPassword, setCurrPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showCurrPassword, setShowCurrPassword] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
-  // Phone Update OTP State
-  const [isUpdatingPhone, setIsUpdatingPhone] = useState(false);
-  const [tempPhone, setTempPhone] = useState('');
-  const [phoneOtp, setPhoneOtp] = useState('');
-  const [phoneOtpSent, setPhoneOtpSent] = useState(false);
-  const [phoneTimer, setPhoneTimer] = useState(0);
-  const [verifyingPhone, setVerifyingPhone] = useState(false);
-
-  // Forgot Password Stepper State
-  const [showForgotFlow, setShowForgotFlow] = useState(false);
-  const [forgotStep, setForgotStep] = useState(1); // 1: Enter Phone, 2: Enter OTP, 3: Set New Password
-  const [forgotPhone, setForgotPhone] = useState('');
-  const [forgotOtp, setForgotOtp] = useState('');
-  const [forgotNewPassword, setForgotNewPassword] = useState('');
-  const [forgotConfirmPassword, setForgotConfirmPassword] = useState('');
-  const [forgotResetToken, setForgotResetToken] = useState('');
-  const [forgotTimer, setForgotTimer] = useState(0);
-  const [showForgotNewPassword, setShowForgotNewPassword] = useState(false);
-  const [showForgotConfirmPassword, setShowForgotConfirmPassword] = useState(false);
   const [mySessions, setMySessions] = useState([]);
 
   useEffect(() => {
@@ -84,31 +53,6 @@ const StudentSettings = ({ token, user, showModal, onPasswordChanged }) => {
       console.error(e);
     }
   };
-
-  // Timer intervals
-  useEffect(() => {
-    let interval = null;
-    if (phoneTimer > 0) {
-      interval = setInterval(() => {
-        setPhoneTimer(prev => prev - 1);
-      }, 1000);
-    } else {
-      clearInterval(interval);
-    }
-    return () => clearInterval(interval);
-  }, [phoneTimer]);
-
-  useEffect(() => {
-    let interval = null;
-    if (forgotTimer > 0) {
-      interval = setInterval(() => {
-        setForgotTimer(prev => prev - 1);
-      }, 1000);
-    } else {
-      clearInterval(interval);
-    }
-    return () => clearInterval(interval);
-  }, [forgotTimer]);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -160,7 +104,6 @@ const StudentSettings = ({ token, user, showModal, onPasswordChanged }) => {
         body: JSON.stringify({
           name: name.trim(),
           email: email.trim().toLowerCase(),
-          phone: phone, // phone only updated via OTP verification endpoints
           profile_pic: profilePic,
           current_location: profileData?.current_location || '',
           permanent_address: profileData?.permanent_address || '',
@@ -197,222 +140,6 @@ const StudentSettings = ({ token, user, showModal, onPasswordChanged }) => {
     reader.readAsDataURL(file);
   };
 
-  // Password Strength Evaluator
-  const getPasswordStrength = (pwd) => {
-    if (!pwd) return { label: '', color: 'transparent', score: 0 };
-    let score = 0;
-    if (pwd.length >= 8) score++;
-    if (/[a-z]/.test(pwd) && /[A-Z]/.test(pwd)) score++;
-    if (/[0-9]/.test(pwd)) score++;
-    if (/[!@#$%^&*(),.?":{}|<>_+\-\[\]\\]/.test(pwd)) score++;
-
-    if (pwd.length < 6) return { label: 'Weak (Too Short)', color: 'var(--danger-color)', score: 1 };
-    if (score <= 1) return { label: 'Weak', color: 'var(--danger-color)', score: 1 };
-    if (score === 2 || score === 3) return { label: 'Medium', color: 'var(--warning-color)', score: 2 };
-    return { label: 'Strong', color: 'var(--success-color)', score: 3 };
-  };
-
-  // Standard Password Change Form
-  const handleChangePassword = async (e) => {
-    e.preventDefault();
-    if (!currPassword) {
-      showModal('Validation Error', 'Please enter your current password.', 'warning');
-      return;
-    }
-    if (newPassword.length < 8) {
-      showModal('Validation Error', 'New password must be at least 8 characters long.', 'warning');
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      showModal('Validation Error', 'New passwords do not match.', 'warning');
-      return;
-    }
-
-    setSavingPassword(true);
-    try {
-      const r = await fetch(`${API_BASE}/student/change-password`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          current_password: currPassword,
-          new_password: newPassword
-        })
-      });
-      const d = await r.json();
-      if (r.ok) {
-        showModal('Password Updated', 'Your password was changed successfully!', 'success');
-        setCurrPassword('');
-        setNewPassword('');
-        setConfirmPassword('');
-        const lu = JSON.parse(localStorage.getItem('user') || '{}');
-        lu.must_change_password = false;
-        localStorage.setItem('user', JSON.stringify(lu));
-        if (onPasswordChanged) onPasswordChanged();
-      } else {
-        showModal('Update Failed', d.message || 'Incorrect current password.', 'error');
-      }
-    } catch (e) {
-      console.error(e);
-      showModal('Error', 'An error occurred during password change.', 'error');
-    } finally {
-      setSavingPassword(false);
-    }
-  };
-
-  // OTP Verification for Phone Number Change
-  const requestPhoneOtp = async () => {
-    if (!tempPhone || tempPhone.length !== 10 || !/^\d+$/.test(tempPhone)) {
-      showModal('Validation Error', 'Please enter a valid 10-digit mobile number.', 'warning');
-      return;
-    }
-    setVerifyingPhone(true);
-    try {
-      const r = await fetch(`${API_BASE}/student/update-phone/request`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ new_phone: tempPhone })
-      });
-      const d = await r.json();
-      if (r.ok) {
-        setPhoneOtpSent(true);
-        setPhoneTimer(120); // 2 minutes countdown
-        showToast('OTP sent successfully ✓ Check backend logs.');
-      } else {
-        showModal('Failed to send OTP', d.message || 'Mobile number already registered.', 'error');
-      }
-    } catch (e) {
-      console.error(e);
-      showModal('Error', 'An error occurred while requesting OTP.', 'error');
-    } finally {
-      setVerifyingPhone(false);
-    }
-  };
-
-  const verifyPhoneOtp = async () => {
-    if (!phoneOtp || phoneOtp.length !== 6) {
-      showModal('Validation Error', 'Please enter a valid 6-digit OTP code.', 'warning');
-      return;
-    }
-    setVerifyingPhone(true);
-    try {
-      const r = await fetch(`${API_BASE}/student/update-phone/verify`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ new_phone: tempPhone, otp: phoneOtp })
-      });
-      const d = await r.json();
-      if (r.ok) {
-        showModal('Verification Successful', 'Mobile number updated successfully!', 'success');
-        setPhone(tempPhone);
-        setPhoneOtp('');
-        setPhoneOtpSent(false);
-        setIsUpdatingPhone(false);
-        fetchProfile();
-      } else {
-        showModal('Verification Failed', d.message || 'Invalid or expired OTP code.', 'error');
-      }
-    } catch (e) {
-      console.error(e);
-      showModal('Error', 'An error occurred during verification.', 'error');
-    } finally {
-      setVerifyingPhone(false);
-    }
-  };
-
-  // Forgot Password Stepper Flow
-  const handleForgotRequestOtp = async () => {
-    if (!forgotPhone || forgotPhone.length !== 10 || !/^\d+$/.test(forgotPhone)) {
-      showModal('Validation Error', 'Please enter your registered 10-digit mobile number.', 'warning');
-      return;
-    }
-    try {
-      const r = await fetch(`${API_BASE}/auth/forgot-password/request`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: forgotPhone })
-      });
-      const d = await r.json();
-      if (r.ok) {
-        setForgotStep(2);
-        setForgotTimer(120); // 2 minutes
-        showToast('Forgot password OTP sent. Check backend logs.');
-      } else {
-        showModal('Error', d.message || 'Registered mobile number not found.', 'error');
-      }
-    } catch (e) {
-      console.error(e);
-      showModal('Error', 'Failed to request OTP for forgot password.', 'error');
-    }
-  };
-
-  const handleForgotVerifyOtp = async () => {
-    if (!forgotOtp || forgotOtp.length !== 6) {
-      showModal('Validation Error', 'Please enter a valid 6-digit OTP code.', 'warning');
-      return;
-    }
-    try {
-      const r = await fetch(`${API_BASE}/auth/forgot-password/verify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: forgotPhone, otp: forgotOtp })
-      });
-      const d = await r.json();
-      if (r.ok) {
-        setForgotResetToken(d.reset_token);
-        setForgotStep(3);
-      } else {
-        showModal('Verification Failed', d.message || 'Invalid or expired OTP.', 'error');
-      }
-    } catch (e) {
-      console.error(e);
-      showModal('Error', 'Failed to verify OTP.', 'error');
-    }
-  };
-
-  const handleForgotResetPassword = async () => {
-    if (forgotNewPassword.length < 8) {
-      showModal('Validation Error', 'Password must meet safety rules (8+ chars, uppercase, lowercase, numbers, and symbols).', 'warning');
-      return;
-    }
-    if (forgotNewPassword !== forgotConfirmPassword) {
-      showModal('Validation Error', 'Passwords do not match.', 'warning');
-      return;
-    }
-    try {
-      const r = await fetch(`${API_BASE}/auth/forgot-password/reset`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reset_token: forgotResetToken, new_password: forgotNewPassword })
-      });
-      const d = await r.json();
-      if (r.ok) {
-        showModal('Success', 'Password updated successfully! You can now use your new password.', 'success');
-        // Reset stepper
-        setShowForgotFlow(false);
-        setForgotStep(1);
-        setForgotPhone('');
-        setForgotOtp('');
-        setForgotNewPassword('');
-        setForgotConfirmPassword('');
-        setForgotResetToken('');
-      } else {
-        showModal('Error', d.message || 'Could not reset password.', 'error');
-      }
-    } catch (e) {
-      console.error(e);
-      showModal('Error', 'Failed to reset password.', 'error');
-    }
-  };
-
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 350 }}>
@@ -420,8 +147,6 @@ const StudentSettings = ({ token, user, showModal, onPasswordChanged }) => {
       </div>
     );
   }
-
-  const pwdStrength = getPasswordStrength(newPassword);
 
   return (
     <div style={{ padding: '4px 0' }} className="animate-fade-in">
@@ -452,7 +177,7 @@ const StudentSettings = ({ token, user, showModal, onPasswordChanged }) => {
       <div style={{ marginBottom: 24 }}>
         <h2 style={{ fontSize: 24, fontWeight: 800, margin: 0 }}>Student Settings</h2>
         <p style={{ margin: '4px 0 0', fontSize: 13.5, color: 'var(--text-secondary)' }}>
-          Manage your student account details and adjust security credentials.
+          Manage your account profile details.
         </p>
       </div>
 
@@ -562,125 +287,20 @@ const StudentSettings = ({ token, user, showModal, onPasswordChanged }) => {
                 </div>
               </div>
 
-              {/* Mobile Number Block (Requires OTP) */}
+              {/* Mobile Number Read Only */}
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Mobile Number (Requires OTP verification to update)</label>
-                
-                {!isUpdatingPhone ? (
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    <div style={{ position: 'relative', flex: 1 }}>
-                      <input
-                        type="text"
-                        className="form-input"
-                        value={phone}
-                        readOnly
-                        style={{ paddingLeft: 42, background: 'var(--surface-alt)', opacity: 0.95, cursor: 'default' }}
-                      />
-                      <Phone size={16} color="var(--text-secondary)" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }} />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => { setTempPhone(phone); setIsUpdatingPhone(true); }}
-                      className="btn btn-secondary btn-sm"
-                      style={{ height: '46px', alignSelf: 'flex-end' }}
-                    >
-                      Update Number
-                    </button>
-                  </div>
-                ) : (
-                  <div style={{ background: 'var(--surface-alt)', border: '1.5px solid var(--border-color)', borderRadius: 14, padding: 18, marginTop: 4 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                      <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--primary-color)' }}>UPDATE MOBILE NUMBER</span>
-                      <button
-                        type="button"
-                        onClick={() => { setIsUpdatingPhone(false); setPhoneOtpSent(false); }}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
-                      >
-                        <X size={16} />
-                      </button>
-                    </div>
-
-                    {!phoneOtpSent ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        <div style={{ position: 'relative' }}>
-                          <input
-                            type="text"
-                            className="form-input"
-                            value={tempPhone}
-                            onChange={e => setTempPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                            placeholder="Enter 10-digit new number"
-                            style={{ paddingLeft: 42 }}
-                            disabled={verifyingPhone}
-                          />
-                          <Phone size={16} color="var(--text-secondary)" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }} />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={requestPhoneOtp}
-                          disabled={verifyingPhone || tempPhone.length !== 10}
-                          className="btn btn-primary btn-block"
-                          style={{ height: 40, fontSize: 13 }}
-                        >
-                          {verifyingPhone ? 'Requesting...' : 'Send Verification OTP'}
-                        </button>
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                        <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)' }}>
-                          An OTP code has been generated to verify <strong>+91 {tempPhone}</strong>.
-                        </p>
-                        <input
-                          type="text"
-                          className="form-input"
-                          value={phoneOtp}
-                          onChange={e => setPhoneOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                          placeholder="Enter 6-digit OTP"
-                          style={{ letterSpacing: 3, textAlign: 'center', fontWeight: 'bold' }}
-                          disabled={verifyingPhone}
-                        />
-
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>
-                            {phoneTimer > 0 ? (
-                              <span>Expires in: <strong>{Math.floor(phoneTimer / 60)}:{String(phoneTimer % 60).padStart(2, '0')}</strong></span>
-                            ) : (
-                              <span style={{ color: 'var(--danger-color)', fontWeight: 600 }}>OTP Expired</span>
-                            )}
-                          </span>
-                          
-                          <button
-                            type="button"
-                            onClick={requestPhoneOtp}
-                            disabled={phoneTimer > 0 || verifyingPhone}
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              color: phoneTimer > 0 ? 'var(--text-muted)' : 'var(--primary-color)',
-                              cursor: phoneTimer > 0 ? 'not-allowed' : 'pointer',
-                              fontSize: 12,
-                              fontWeight: 700,
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 4
-                            }}
-                          >
-                            <RefreshCw size={11} /> Resend OTP
-                          </button>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={verifyPhoneOtp}
-                          disabled={verifyingPhone || phoneOtp.length !== 6}
-                          className="btn btn-primary btn-block"
-                          style={{ height: 40, fontSize: 13 }}
-                        >
-                          {verifyingPhone ? 'Verifying...' : 'Verify & Change Number'}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
+                <label className="form-label">Mobile Number (Managed by Admin)</label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={phone}
+                    readOnly
+                    disabled
+                    style={{ paddingLeft: 42, background: 'var(--surface-alt)', opacity: 0.85, cursor: 'not-allowed' }}
+                  />
+                  <Phone size={16} color="var(--text-secondary)" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }} />
+                </div>
               </div>
 
             </div>
@@ -688,7 +308,7 @@ const StudentSettings = ({ token, user, showModal, onPasswordChanged }) => {
             {/* Save Profile Button */}
             <button
               type="submit"
-              disabled={savingAccount || isUpdatingPhone}
+              disabled={savingAccount}
               className="btn btn-primary btn-block"
               style={{ height: 46 }}
             >
@@ -697,55 +317,53 @@ const StudentSettings = ({ token, user, showModal, onPasswordChanged }) => {
           </form>
         </div>
 
-
-
-          {/* MY DEVICES CARD */}
-          <div className="clickable-card-hover" style={{
-            background: '#FFF',
-            border: '1.5px solid var(--border-color)',
-            borderRadius: 20,
-            padding: 28,
-            boxShadow: 'var(--shadow-card)',
-            display: 'flex',
-            flexDirection: 'column'
-          }}>
-            <h3 style={{ fontSize: 16, fontWeight: 800, margin: '0 0 20px', display: 'flex', alignItems: 'center', gap: 8, color: '#121118' }}>
-              📱 My Active Devices
-            </h3>
-            <p style={{ margin: '0 0 16px', fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-              You can be logged in on maximum 2 devices (1 mobile + 1 desktop). Manage your active sessions below:
-            </p>
-            
-            {mySessions.length === 0 ? (
-              <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>No active devices found.</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {mySessions.map(session => (
-                  <div key={session._id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: 'var(--surface-alt)', border: '1px solid var(--border-color)', borderRadius: 12 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <span style={{ fontSize: 20 }}>{session.device_type === 'mobile' ? '📱' : '💻'}</span>
-                      <div>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', display: 'block' }}>
-                          {session.device_label || 'Unknown Device'}
-                        </span>
-                        <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
-                          Last active: {new Date(session.last_active).toLocaleString()}
-                        </span>
-                      </div>
+        {/* MY DEVICES CARD */}
+        <div className="clickable-card-hover" style={{
+          background: '#FFF',
+          border: '1.5px solid var(--border-color)',
+          borderRadius: 20,
+          padding: 28,
+          boxShadow: 'var(--shadow-card)',
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          <h3 style={{ fontSize: 16, fontWeight: 800, margin: '0 0 20px', display: 'flex', alignItems: 'center', gap: 8, color: '#121118' }}>
+            📱 My Active Devices
+          </h3>
+          <p style={{ margin: '0 0 16px', fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+            You can be logged in on maximum 2 devices (1 mobile + 1 desktop). Manage your active sessions below:
+          </p>
+          
+          {mySessions.length === 0 ? (
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>No active devices found.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {mySessions.map(session => (
+                <div key={session._id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: 'var(--surface-alt)', border: '1px solid var(--border-color)', borderRadius: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span style={{ fontSize: 20 }}>{session.device_type === 'mobile' ? '📱' : '💻'}</span>
+                    <div>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', display: 'block' }}>
+                        {session.device_label || 'Unknown Device'}
+                      </span>
+                      <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                        Last active: {new Date(session.last_active).toLocaleString()}
+                      </span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveMySession(session._id)}
-                      className="btn btn-secondary btn-sm"
-                      style={{ padding: '6px 12px', height: 'auto', fontSize: 12 }}
-                    >
-                      Log Out
-                    </button>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveMySession(session._id)}
+                    className="btn btn-secondary btn-sm"
+                    style={{ padding: '6px 12px', height: 'auto', fontSize: 12 }}
+                  >
+                    Log Out
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
       </div>
     </div>
@@ -753,3 +371,4 @@ const StudentSettings = ({ token, user, showModal, onPasswordChanged }) => {
 };
 
 export default StudentSettings;
+

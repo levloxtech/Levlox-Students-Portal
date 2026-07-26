@@ -370,17 +370,13 @@ const StudentProfile = ({ dashboardData, enrolledCourses = [], token, onProfileU
               )}
             </div>
 
-            {/* Phone Number */}
+            {/* Phone Number (Read-Only Managed by Admin) */}
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Phone Number</label>
-              {editing ? (
-                <input type="text" className="form-input" style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1.5px solid var(--border-color)', fontSize: 13.5, fontWeight: 600, outline: 'none' }} value={phone} onChange={e => setPhone(e.target.value)} />
-              ) : (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: 'var(--surface-alt)', borderRadius: 10, border: '1.5px solid transparent' }}>
-                  <Phone size={15} color="var(--primary-color)" />
-                  <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{phone || 'Not added'}</span>
-                </div>
-              )}
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Phone Number (Managed by Admin)</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: 'var(--surface-alt)', borderRadius: 10, border: '1.5px solid transparent', opacity: 0.85 }}>
+                <Phone size={15} color="var(--primary-color)" />
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{phone || 'Not added'}</span>
+              </div>
             </div>
 
             {/* Current Location */}
