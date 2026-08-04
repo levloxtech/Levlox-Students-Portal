@@ -1,0 +1,75 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        request.auth.token.role == 'admin'
+      );
+    }
+
+    // Students Collection
+    match /students/{studentId} {
+      allow read: if isOwner(studentId) || isAdmin();
+      allow write: if isAdmin();
+      allow update: if isOwner(studentId) && 
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'role', 'batch']);
+    }
+
+    // Admins Collection
+    match /admins/{adminId} {
+      allow read: if isOwner(adminId) || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // Courses, Recorded Classes, Study Materials
+    match /courses/{courseId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /recorded_classes/{classId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /study_materials/{materialId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Attendance Records
+    match /attendance/{attendanceId} {
+      allow read: if isAuthenticated() && (resource.data.studentId == request.auth.uid || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    // Notifications
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow write: if isAdmin();
+      allow update: if isOwner(resource.data.userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+    }
+
+    // Leaderboard
+    match /leaderboard/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Fallback security rule
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

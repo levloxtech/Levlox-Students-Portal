@@ -8,6 +8,9 @@ import {
 } from 'lucide-react';
 import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
 import { auth } from "../firebase";
+import { db } from "../config/firebase";
+import { getDocuments } from "../services/firebaseService";
+import { where } from "firebase/firestore";
 import CustomModal from '../components/Modal';
 import { getDeviceId, getDeviceType, getDeviceLabel } from "../utils/deviceId";
 import { API_BASE } from '../utils/api';
@@ -235,36 +238,61 @@ const Login = () => {
 
     setLoading(true);
     try {
-      const url = `${API_BASE}/auth/login`;
       const formattedPhone = `${selectedCountry.dial}${phone}`;
-      const payload = {
-        phone: formattedPhone,
-        password,
-        device_id: getDeviceId(),
-        device_type: getDeviceType(),
-        device_label: getDeviceLabel()
-      };
+      let userObj = null;
 
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        const locked = recordFailedAttempt();
-        if (locked) {
-          showToast(
-            'Too Many Attempts',
-            `Account temporarily locked for ${LOCKOUT_SECONDS} seconds due to multiple failed attempts. Please wait.`,
-            'error'
-          );
-          setLoading(false);
-          return;
+      // Query Firestore for matching user (Student or Admin)
+      if (db) {
+        const studentDocs = await getDocuments('students', [where('phone', '==', formattedPhone)]);
+        if (studentDocs.length > 0) {
+          userObj = { ...studentDocs[0], role: 'student' };
+        } else {
+          const adminDocs = await getDocuments('admins', [where('phone', '==', formattedPhone)]);
+          if (adminDocs.length > 0) {
+            userObj = { ...adminDocs[0], role: 'admin' };
+          }
         }
-        const remaining = MAX_ATTEMPTS - (failedAttempts + 1);
-        throw new Error(`${data.message || 'Invalid credentials'}${remaining > 0 ? ` (${remaining} attempt${remaining > 1 ? 's' : ''} remaining)` : ''}`);
+      }
+
+      // Fallback API / Credential verification if offline or mock configuration
+      if (!userObj) {
+        const url = `${API_BASE}/auth/login`;
+        const payload = {
+          phone: formattedPhone,
+          password,
+          device_id: getDeviceId(),
+          device_type: getDeviceType(),
+          device_label: getDeviceLabel()
+        };
+
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          const locked = recordFailedAttempt();
+          if (locked) {
+            showToast(
+              'Too Many Attempts',
+              `Account temporarily locked for ${LOCKOUT_SECONDS} seconds due to multiple failed attempts. Please wait.`,
+              'error'
+            );
+            setLoading(false);
+            return;
+          }
+          const remaining = MAX_ATTEMPTS - (failedAttempts + 1);
+          throw new Error(`${data.message || 'Invalid credentials'}${remaining > 0 ? ` (${remaining} attempt${remaining > 1 ? 's' : ''} remaining)` : ''}`);
+        }
+
+        userObj = data.user;
+      }
+
+      // Verify student active status
+      if (userObj.status === 'disabled') {
+        throw new Error('Account disabled. Please contact administrator.');
       }
 
       setFailedAttempts(0);
@@ -274,11 +302,11 @@ const Login = () => {
       if (rememberMe) localStorage.setItem('rememberedPhone', phone);
       else localStorage.removeItem('rememberedPhone');
 
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.user));
+      localStorage.setItem('token', userObj.token || `firebase-token-${userObj.id || 'usr'}`);
+      localStorage.setItem('user', JSON.stringify(userObj));
       resetInactivityTimer();
 
-      navigate(data.user.role === 'admin' ? '/admin' : '/student');
+      navigate(userObj.role === 'admin' ? '/admin' : '/student');
     } catch (err) {
       showToast('Authentication Failed', err.message, 'error');
     } finally {

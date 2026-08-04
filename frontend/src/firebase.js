@@ -1,8 +1,10 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 const apiKey = import.meta.env.VITE_FIREBASE_API_KEY;
-const isFirebaseConfigured = apiKey && apiKey !== "PLACEHOLDER_API_KEY";
+export const isFirebaseConfigured = Boolean(apiKey && apiKey !== "PLACEHOLDER_API_KEY");
 
 const firebaseConfig = {
   apiKey: apiKey || "PLACEHOLDER_API_KEY",
@@ -15,4 +17,6 @@ const firebaseConfig = {
 
 const app = isFirebaseConfigured ? initializeApp(firebaseConfig) : null;
 export const auth = app ? getAuth(app) : null;
-
+export const db = app ? getFirestore(app) : null;
+export const storage = app ? getStorage(app) : null;
+export default app;

@@ -14,6 +14,8 @@ import CustomModal from '../components/Modal';
 import FilterBar from '../components/FilterBar';
 import leveloxIcon from '../assets/levelox-icon-transparent.png';
 import { API_BASE } from '../utils/api';
+import { db } from '../config/firebase';
+import { updateDocumentFields, addDocument, setDocument } from '../services/firebaseService';
 
 
 const CustomDropdown = ({ label, value, options, onChange, placeholder, width = '120px' }) => {
@@ -2519,11 +2521,18 @@ const AdminDashboard = () => {
 
   const toggleStatus = async (studentId) => {
     try {
+      const studentObj = students.find(s => s._id === studentId || s.id === studentId);
+      const newStatus = studentObj?.status === 'active' ? 'disabled' : 'active';
+
+      if (db) {
+        await updateDocumentFields('students', studentId, { status: newStatus });
+      }
+
       const response = await fetch(`${API_BASE}/admin/students/${studentId}/toggle-status`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (response.ok) {
+      if (response.ok || db) {
         fetchStudents();
         fetchStats();
       }

@@ -8,12 +8,14 @@ import {
   Search, ChevronLeft, ChevronRight, Settings, HelpCircle,
   Clock, CheckCircle, AlertCircle, PlayCircle, Zap, TrendingUp,
   Award, Star, ArrowRight, Plus, X, Eye, Users, Menu,
-  Crown, Medal, Flame, Activity, Trophy
+  Crown, Medal, Flame, Activity, Trophy, TriangleAlert
 } from 'lucide-react';
 
 import CustomModal from '../components/Modal';
 import leveloxIcon from '../assets/levelox-icon-transparent.png';
 import { API_BASE } from '../utils/api';
+import { db } from '../config/firebase';
+import { getDocument } from '../services/firebaseService';
 
 // Lazy-load sub-page components for code-splitting and below-the-fold optimization
 const StudentProfile = lazy(() => import('./StudentProfile'));
@@ -199,12 +201,51 @@ const StudentDashboard = () => {
     }
   };
 
+  const navigate = useNavigate();
   const initialUser = JSON.parse(localStorage.getItem('user') || '{}');
   const [activeTab, setActiveTab] = useState('dashboard');
   const queryClient = useQueryClient();
 
   const token = localStorage.getItem('token');
   const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+  // Modal and dropdown states
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalText, setModalText] = useState('');
+  const [modalType, setModalType] = useState('info');
+  const [showLockModal, setShowLockModal] = useState(false);
+  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+  const [replayTarget, setReplayTarget] = useState(null);
+  const profileRef = useRef(null);
+
+  const showModal = (title, text, type = 'info') => {
+    setModalTitle(title);
+    setModalText(text);
+    setModalType(type);
+    setModalOpen(true);
+  };
+
+  const handleLogout = () => {
+    localStorage.clear();
+    navigate('/login');
+  };
+
+  const handleProfileUpdate = (updatedData) => {
+    if (updatedData.name) setProfileName(updatedData.name);
+    if (updatedData.profile_pic) setProfilePic(updatedData.profile_pic);
+    fetchDashboard();
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (profileRef.current && !profileRef.current.contains(e.target)) {
+        setShowProfileDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const apiFetch = async (url, options = {}) => {
     try {
@@ -235,18 +276,44 @@ const StudentDashboard = () => {
     }
   };
 
-  // Consolidated Dashboard Query: Single API request for all dashboard components
+  // Consolidated Dashboard Query: Single API request or Firestore fetch for all dashboard components
   const { data: dashboardData = null, refetch: fetchDashboard } = useQuery({
     queryKey: ['studentDashboard'],
     queryFn: async () => {
-      const r = await apiFetch(`${API_BASE}/student/dashboard`, { headers: { Authorization: `Bearer ${token}` } });
-      const d = await r.json();
       const lu = JSON.parse(localStorage.getItem('user') || '{}');
-      if (d.student) {
-        lu.feesPaid = d.student.feesPaid;
-        localStorage.setItem('user', JSON.stringify(lu));
+      let studentRecord = lu;
+      
+      if (db && lu.id) {
+        try {
+          const docData = await getDocument('students', lu.id);
+          if (docData) studentRecord = docData;
+        } catch (fsErr) {
+          console.warn("Firestore unreachable or failed, falling back to local user data:", fsErr);
+        }
       }
-      return d;
+      
+      try {
+        const r = await apiFetch(`${API_BASE}/student/dashboard`, { headers: { Authorization: `Bearer ${token}` } });
+        const d = await r.json();
+        if (d.student) {
+          lu.feesPaid = d.student.feesPaid;
+          localStorage.setItem('user', JSON.stringify({ ...d.student, ...lu }));
+        }
+        return { ...d, student: { ...d.student, ...studentRecord } };
+      } catch (err) {
+        // Fallback to local / Firestore student data if API fails or server offline
+        return {
+          student: studentRecord,
+          courses: [],
+          enrolledCourses: [],
+          submissions: [],
+          latestReplays: [],
+          upcomingLiveClasses: [],
+          analytics: defaultDummyAnalytics,
+          leaderboard: [],
+          learningRanking: null
+        };
+      }
     },
     staleTime: 1000 * 60 * 5, // Cache for 5 minutes
     gcTime: 1000 * 60 * 10,
@@ -261,6 +328,13 @@ const StudentDashboard = () => {
   const analytics = dashboardData?.analytics || null;
   const overallLeaderboard = dashboardData?.leaderboard || [];
   const learningRanking = dashboardData?.learningRanking ?? null;
+
+  const mustChangePassword = Boolean(
+    dashboardData?.student?.mustChangePassword ??
+    user?.mustChangePassword ??
+    user?.must_change_password ??
+    false
+  );
 
   const [selectedCourse, setSelectedCourse] = useState(null);
 
