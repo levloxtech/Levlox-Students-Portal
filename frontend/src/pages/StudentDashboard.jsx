@@ -13,9 +13,22 @@ import {
 
 import CustomModal from '../components/Modal';
 import leveloxIcon from '../assets/levelox-icon-transparent.png';
-import { API_BASE } from '../utils/api';
-import { db } from '../config/firebase';
-import { getDocument } from '../services/firebaseService';
+import { useAuth } from '../context/AuthContext';
+import {
+  getStudent,
+  getEnrollmentsForStudent,
+  getCourses,
+  getUpcomingLiveClasses,
+  getRecordedClasses,
+  getAnnouncements,
+  getLeaderboard,
+  getSubmissionsForStudent,
+  getAssignmentsForCourse,
+  submitAssignment as submitAssignmentToFirestore,
+  updateStudent,
+  getStudentAnalytics,
+  classifyFirestoreError,
+} from '../services/firebaseService';
 
 // Lazy-load sub-page components for code-splitting and below-the-fold optimization
 const StudentProfile = lazy(() => import('./StudentProfile'));
@@ -202,12 +215,10 @@ const StudentDashboard = () => {
   };
 
   const navigate = useNavigate();
-  const initialUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const { currentUser, userProfile, logout: authLogout, uid } = useAuth();
+  const user = userProfile || JSON.parse(localStorage.getItem('user') || '{}');
   const [activeTab, setActiveTab] = useState('dashboard');
   const queryClient = useQueryClient();
-
-  const token = localStorage.getItem('token');
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
 
   // Modal and dropdown states
   const [modalOpen, setModalOpen] = useState(false);
@@ -226,8 +237,8 @@ const StudentDashboard = () => {
     setModalOpen(true);
   };
 
-  const handleLogout = () => {
-    localStorage.clear();
+  const handleLogout = async () => {
+    await authLogout();
     navigate('/login');
   };
 
@@ -235,6 +246,7 @@ const StudentDashboard = () => {
     if (updatedData.name) setProfileName(updatedData.name);
     if (updatedData.profile_pic) setProfilePic(updatedData.profile_pic);
     fetchDashboard();
+    queryClient.invalidateQueries({ queryKey: ['studentDashboard'] });
   };
 
   useEffect(() => {
@@ -247,77 +259,84 @@ const StudentDashboard = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const apiFetch = async (url, options = {}) => {
-    try {
-      const response = await fetch(url, options);
-      if (response.status === 401) {
-        localStorage.clear();
-        navigate('/login?reason=session_expired');
-        throw new Error('Session expired');
-      }
-      if (response.status === 403) {
-        showModal('Access Denied', 'Access forbidden: Insufficient permissions.', 'error');
-        throw new Error('Access denied');
-      }
-      if (response.status === 404) {
-        showModal('Not Found', 'Requested resource not found.', 'error');
-        throw new Error('Resource not found');
-      }
-      if (response.status >= 500) {
-        showModal('Server Error', 'Internal server error. Please try again later.', 'error');
-        throw new Error('Server error');
-      }
-      return response;
-    } catch (e) {
-      if (e.message !== 'Session expired' && e.message !== 'Access denied' && e.message !== 'Resource not found' && e.message !== 'Server error') {
-        showModal('Network Error', 'Network error: Cannot reach the backend server.', 'error');
-      }
-      throw e;
-    }
-  };
-
-  // Consolidated Dashboard Query: Single API request or Firestore fetch for all dashboard components
+  // Consolidated Firestore Dashboard Query — parallel reads with Promise.all
   const { data: dashboardData = null, refetch: fetchDashboard } = useQuery({
-    queryKey: ['studentDashboard'],
+    queryKey: ['studentDashboard', uid],
     queryFn: async () => {
-      const lu = JSON.parse(localStorage.getItem('user') || '{}');
-      let studentRecord = lu;
-      
-      if (db && lu.id) {
-        try {
-          const docData = await getDocument('students', lu.id);
-          if (docData) studentRecord = docData;
-        } catch (fsErr) {
-          console.warn("Firestore unreachable or failed, falling back to local user data:", fsErr);
-        }
-      }
-      
+      if (!uid) return null;
       try {
-        const r = await apiFetch(`${API_BASE}/student/dashboard`, { headers: { Authorization: `Bearer ${token}` } });
-        const d = await r.json();
-        if (d.student) {
-          lu.feesPaid = d.student.feesPaid;
-          localStorage.setItem('user', JSON.stringify({ ...d.student, ...lu }));
+        const [
+          studentDoc,
+          enrollments,
+          courses,
+          liveClasses,
+          recordings,
+          announcements,
+          leaderboard,
+          submissions,
+          analytics,
+        ] = await Promise.all([
+          getStudent(uid).catch(() => userProfile || {}),
+          getEnrollmentsForStudent(uid).catch(() => []),
+          getCourses().catch(() => []),
+          getUpcomingLiveClasses().catch(() => []),
+          getRecordedClasses().catch(() => []),
+          getAnnouncements().catch(() => []),
+          getLeaderboard().catch(() => []),
+          getSubmissionsForStudent(uid).catch(() => []),
+          getStudentAnalytics(uid).catch(() => null),
+        ]);
+
+        const enrolledCourseIds = enrollments.map(e => e.courseId);
+        const enrolledCourses = courses.filter(c => enrolledCourseIds.includes(c.id));
+        const latestReplays = recordings.slice(0, 5).map(r => ({ ...r, access: studentDoc?.feesStatus === 'Paid' }));
+
+        // Build leaderboard ranking for current student
+        const sortedLeaderboard = [...leaderboard].sort((a, b) => (b.score || 0) - (a.score || 0));
+        const myRank = sortedLeaderboard.findIndex(e => e.id === uid) + 1;
+        const topPerformers = sortedLeaderboard.slice(0, 3).map((p, i) => ({ ...p, is_current: p.id === uid }));
+        const currentStudent = myRank > 0 ? { ...sortedLeaderboard[myRank - 1], rank: myRank } : null;
+
+        // Update localStorage to keep in sync
+        if (studentDoc) {
+          localStorage.setItem('user', JSON.stringify({ ...studentDoc, role: 'student' }));
         }
-        return { ...d, student: { ...d.student, ...studentRecord } };
-      } catch (err) {
-        // Fallback to local / Firestore student data if API fails or server offline
+
         return {
-          student: studentRecord,
+          student: studentDoc || userProfile || {},
+          courses,
+          enrolledCourses,
+          submissions,
+          latestReplays,
+          upcomingLiveClasses: liveClasses,
+          todayLiveClass: liveClasses[0] || null,
+          announcements,
+          leaderboard,
+          learningRanking: { topPerformers, currentStudent },
+          analytics: analytics || defaultDummyAnalytics,
+        };
+      } catch (err) {
+        const classified = classifyFirestoreError(err);
+        console.error('[StudentDashboard] load error:', classified);
+        // Graceful fallback — show what we know from auth context
+        return {
+          student: userProfile || {},
           courses: [],
           enrolledCourses: [],
           submissions: [],
           latestReplays: [],
           upcomingLiveClasses: [],
-          analytics: defaultDummyAnalytics,
+          announcements: [],
           leaderboard: [],
-          learningRanking: null
+          learningRanking: null,
+          analytics: defaultDummyAnalytics,
         };
       }
     },
-    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+    enabled: !!uid,
+    staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 10,
-    refetchOnWindowFocus: false
+    refetchOnWindowFocus: false,
   });
 
   const courses = dashboardData?.courses || [];
@@ -339,13 +358,9 @@ const StudentDashboard = () => {
   const [selectedCourse, setSelectedCourse] = useState(null);
 
   const { data: assignments = [], isFetching: loadingAssignments } = useQuery({
-    queryKey: ['assignments', selectedCourse?._id],
-    queryFn: async () => {
-      const r = await apiFetch(`${API_BASE}/assignments/course/${selectedCourse._id}`, { headers: { Authorization: `Bearer ${token}` } });
-      const d = await r.json();
-      return d.assignments || [];
-    },
-    enabled: !!selectedCourse?._id
+    queryKey: ['assignments', selectedCourse?.id],
+    queryFn: () => getAssignmentsForCourse(selectedCourse.id),
+    enabled: !!selectedCourse?.id,
   });
 
   const selectCourse = (course) => {
@@ -407,41 +422,16 @@ const StudentDashboard = () => {
     reader.readAsDataURL(file);
   };
 
-  const handleJoinLiveClass = async (classId) => {
-    try {
-      const r = await fetch(`${API_BASE}/student/live-classes/${classId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (r.status === 401) {
-        localStorage.clear();
-        navigate('/login?reason=session_expired');
-        return;
-      }
-      if (r.status === 403) {
-        setShowLockModal(true);
-        return;
-      }
-      if (r.status === 404) {
-        showModal('Not Found', 'The requested live class could not be found.', 'error');
-        return;
-      }
-      if (r.status >= 500) {
-        showModal('Server Error', 'Internal server error occurred.', 'error');
-        return;
-      }
-      if (r.ok) {
-        const d = await r.json();
-        if (d.meet_link) {
-          window.open(d.meet_link, '_blank');
-        } else {
-          showModal('Link Unavailable', "Meeting URL is currently not available.", 'warning');
-        }
-      } else {
-        showModal('Error', "Failed to retrieve live class meeting link.", 'error');
-      }
-    } catch (e) {
-      console.error(e);
-      showModal('Network Error', 'Cannot connect to the server.', 'error');
+  const handleJoinLiveClass = (liveClass) => {
+    if (!isPaid) {
+      setShowLockModal(true);
+      return;
+    }
+    const meetLink = liveClass?.meet_link || liveClass?.join_url || liveClass?.meetLink;
+    if (meetLink) {
+      window.open(meetLink, '_blank', 'noopener,noreferrer');
+    } else {
+      showModal('Link Unavailable', 'The meeting URL is not available yet. Please check back later.', 'warning');
     }
   };
 
@@ -453,52 +443,49 @@ const StudentDashboard = () => {
   };
 
   const payFeesMutation = useMutation({
-    mutationFn: async () => {
-      return await apiFetch(`${API_BASE}/student/pay-fees`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
-    },
+    mutationFn: () => updateStudent(uid, { feesStatus: 'Pending Payment', updatedAt: new Date() }),
     onSuccess: () => {
-      fetchDashboard();
+      showModal('Payment Initiated', 'Please complete your payment with the administrator. Your status will be updated shortly.', 'info');
       queryClient.invalidateQueries({ queryKey: ['studentDashboard'] });
-    }
+    },
+    onError: () => showModal('Error', 'Could not initiate payment. Please contact admin.', 'error'),
   });
 
   const payFees = () => payFeesMutation.mutate();
   const paying = payFeesMutation.isPending;
 
-  const enrollInCourseMutation = useMutation({
-    mutationFn: async (courseId) => {
-      return await apiFetch(`${API_BASE}/courses/${courseId}/enroll`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['courses'] });
-      queryClient.invalidateQueries({ queryKey: ['enrolledCourses'] });
-      queryClient.invalidateQueries({ queryKey: ['studentDashboard'] });
-    }
-  });
-
-  const enrollInCourse = (courseId) => enrollInCourseMutation.mutate(courseId);
+  const enrollInCourse = (courseId) => {
+    // Enrollment is handled by admin via Firestore; students see their enrolled courses
+    showModal('Enrollment', 'Please contact your administrator to enroll in this course.', 'info');
+  };
 
   const submitAssignmentMutation = useMutation({
     mutationFn: async ({ assignmentId, submissionText }) => {
-      return await apiFetch(`${API_BASE}/assignments/${assignmentId}/submit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ submission_text: submissionText })
+      return submitAssignmentToFirestore({
+        assignmentId,
+        studentId: uid,
+        submissionText,
+        studentName: user?.name || '',
       });
     },
     onSuccess: () => {
       setSubmitModalAssignment(null);
       setSubmissionText('');
-      queryClient.invalidateQueries({ queryKey: ['mySubmissions'] });
-    }
+      queryClient.invalidateQueries({ queryKey: ['studentDashboard', uid] });
+      showModal('Submitted!', 'Your assignment has been submitted successfully.', 'success');
+    },
+    onError: (err) => {
+      const { message } = classifyFirestoreError(err);
+      showModal('Submission Failed', message, 'error');
+    },
   });
 
   const submitAssignment = (e) => {
     e.preventDefault();
-    submitAssignmentMutation.mutate({ assignmentId: submitModalAssignment._id, submissionText });
+    submitAssignmentMutation.mutate({ assignmentId: submitModalAssignment.id || submitModalAssignment._id, submissionText });
   };
 
-  const getSubmissionStatus = (id) => submissions.find(s => s.assignment_id === id) || null;
+  const getSubmissionStatus = (id) => submissions.find(s => s.assignmentId === id || s.assignment_id === id) || null;
   const isPaid = dashboardData?.student?.feesStatus === 'Paid';
 
   const navigateToPaymentDetails = () => {
@@ -1190,7 +1177,7 @@ const StudentDashboard = () => {
                             <div style={{ fontSize: 12, color: 'var(--text-secondary)', wordBreak: 'break-all', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                               <ExternalLink size={16} strokeWidth={1.75} /> <span><strong>Meet Link:</strong> <a href={c.meet_link || c.join_url} target="_blank" rel="noreferrer" style={{ color: 'var(--primary-color)', fontWeight: 600 }}>{c.meet_link || c.join_url || 'N/A'}</a></span>
                             </div>
-                            <button onClick={() => handleJoinLiveClass(c._id)} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', border: 'none', cursor: 'pointer', background: 'var(--primary-color)', color: 'white', padding: '10px', borderRadius: 10, fontWeight: 700, fontSize: 13.5 }}>
+                            <button onClick={() => handleJoinLiveClass(c)} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', border: 'none', cursor: 'pointer', background: 'var(--primary-color)', color: 'white', padding: '10px', borderRadius: 10, fontWeight: 700, fontSize: 13.5 }}>
                               Join Now
                             </button>
                           </div>
@@ -1260,7 +1247,7 @@ const StudentDashboard = () => {
 
           {/* LEADERBOARD TAB */}
           {activeTab === 'leaderboard-tab' && (
-            <LeaderboardPage token={token} user={user} />
+            <LeaderboardPage user={user} />
           )}
 
           {/* PROFILE TAB */}
@@ -1268,7 +1255,6 @@ const StudentDashboard = () => {
             <StudentProfile
               dashboardData={dashboardData}
               enrolledCourses={enrolledCourses}
-              token={token}
               onProfileUpdate={handleProfileUpdate}
             />
           )}
@@ -1295,7 +1281,6 @@ const StudentDashboard = () => {
                 </div>
               )}
               <StudentSettings
-                token={token}
                 user={user}
               />
             </div>

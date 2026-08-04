@@ -1,127 +1,110 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
 import StudentDashboard from './pages/StudentDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
 
-function App() {
-  // Session Inactivity Auto-Logout (30 minutes)
+/**
+ * Root redirect — uses Firebase Auth state to send users to the right place.
+ */
+const RootRedirect = () => {
+  const { currentUser, userRole, authLoading } = useAuth();
+
+  if (authLoading) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'linear-gradient(135deg, #050308 0%, #0D0A1A 50%, #070510 100%)',
+      }}>
+        <div style={{
+          width: 44, height: 44,
+          border: '3px solid rgba(108,60,240,0.2)',
+          borderTopColor: '#6C3CF0',
+          borderRadius: '50%',
+          animation: 'spin 0.8s linear infinite',
+        }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  if (!currentUser) return <Navigate to="/login" replace />;
+  if (userRole === 'admin') return <Navigate to="/admin" replace />;
+  if (userRole === 'student') return <Navigate to="/student" replace />;
+  return <Navigate to="/login" replace />;
+};
+
+/**
+ * Inactivity auto-logout — signs out after 30 minutes of no activity.
+ */
+const InactivityWatcher = () => {
+  const { logout } = useAuth();
+
   useEffect(() => {
-    let inactivityTimer;
-    const resetTimer = () => {
-      clearTimeout(inactivityTimer);
-      inactivityTimer = setTimeout(() => {
-        const token = localStorage.getItem('token');
-        if (token) {
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-          window.location.href = '/login?reason=inactivity';
-        }
-      }, 30 * 60 * 1000); // 30 minutes
+    let timer;
+    const reset = () => {
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        await logout();
+        window.location.href = '/login?reason=inactivity';
+      }, 30 * 60 * 1000);
     };
 
     const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
-    events.forEach(event => document.addEventListener(event, resetTimer));
-
-    resetTimer();
+    events.forEach(e => document.addEventListener(e, reset, { passive: true }));
+    reset();
 
     return () => {
-      clearTimeout(inactivityTimer);
-      events.forEach(event => document.removeEventListener(event, resetTimer));
+      clearTimeout(timer);
+      events.forEach(e => document.removeEventListener(e, reset));
     };
-  }, []);
+  }, [logout]);
 
-  // Global 401 Unauthenticated Interceptor
-  useEffect(() => {
-    const originalFetch = window.fetch;
-    window.fetch = async (...args) => {
-      const response = await originalFetch(...args);
-      if (response.status === 401) {
-        let isRevoked = false;
-        try {
-          const clone = response.clone();
-          const data = await clone.json();
-          if (data && (data.error === 'session_revoked' || data.message === 'This session was logged out. Please log in again.')) {
-            isRevoked = true;
-          }
-        } catch (e) {}
+  return null;
+};
 
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        if (!window.location.pathname.includes('/login')) {
-          if (isRevoked) {
-            window.location.href = '/login?reason=session_revoked';
-          } else {
-            window.location.href = '/login?reason=session_expired';
-          }
-        }
-      }
-      return response;
-    };
-    return () => {
-      window.fetch = originalFetch;
-    };
-  }, []);
-
+function App() {
   return (
-    <Router>
-      <div className="app-container">
-        <Routes>
-          {/* Public Route */}
-          <Route path="/login" element={<Login />} />
+    <AuthProvider>
+      <Router>
+        <InactivityWatcher />
+        <div className="app-container">
+          <Routes>
+            {/* Public Route */}
+            <Route path="/login" element={<Login />} />
 
-          {/* Protected Student Routes */}
-          <Route 
-            path="/student" 
-            element={
-              <ProtectedRoute allowedRoles={['student']}>
-                <StudentDashboard />
-              </ProtectedRoute>
-            } 
-          />
+            {/* Protected Student Routes */}
+            <Route
+              path="/student"
+              element={
+                <ProtectedRoute allowedRoles={['student']}>
+                  <StudentDashboard />
+                </ProtectedRoute>
+              }
+            />
 
-          {/* Protected Admin Routes */}
-          <Route 
-            path="/admin" 
-            element={
-              <ProtectedRoute allowedRoles={['admin']}>
-                <AdminDashboard />
-              </ProtectedRoute>
-            } 
-          />
+            {/* Protected Admin Routes */}
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
 
-          {/* Fallback routing */}
-          <Route 
-            path="*" 
-            element={
-              <RootRedirect />
-            } 
-          />
-        </Routes>
-      </div>
-    </Router>
+            {/* Catch-all → smart redirect */}
+            <Route path="*" element={<RootRedirect />} />
+          </Routes>
+        </div>
+      </Router>
+    </AuthProvider>
   );
 }
-
-// Handler to check credentials on first entry and redirect to matching role view
-const RootRedirect = () => {
-  const token = localStorage.getItem('token');
-  const userString = localStorage.getItem('user');
-
-  if (token && userString) {
-    try {
-      const user = JSON.parse(userString);
-      if (user.role === 'admin') {
-        return <Navigate to="/admin" replace />;
-      } else if (user.role === 'student') {
-        return <Navigate to="/student" replace />;
-      }
-    } catch (e) {
-      // Fall through to login if parsing fails
-    }
-  }
-  return <Navigate to="/login" replace />;
-};
 
 export default App;

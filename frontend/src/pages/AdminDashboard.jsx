@@ -13,9 +13,46 @@ import {
 import CustomModal from '../components/Modal';
 import FilterBar from '../components/FilterBar';
 import leveloxIcon from '../assets/levelox-icon-transparent.png';
-import { API_BASE } from '../utils/api';
-import { db } from '../config/firebase';
-import { updateDocumentFields, addDocument, setDocument } from '../services/firebaseService';
+import { useAuth } from '../context/AuthContext';
+import {
+  listStudents,
+  getStudentCount,
+  createStudent,
+  updateStudent,
+  deleteDocument as deleteStudentDoc,
+  getCourses,
+  addCourse,
+  updateCourse,
+  deleteCourse,
+  getLiveClasses,
+  addLiveClass,
+  updateLiveClass,
+  deleteLiveClass,
+  getRecordedClasses,
+  addRecordedClass,
+  updateRecordedClass,
+  deleteRecordedClass,
+  getAnnouncements,
+  addAnnouncement,
+  updateAnnouncement,
+  deleteAnnouncement,
+  getAttendanceSheet,
+  markAttendance,
+  updateAttendance,
+  getLeaderboard,
+  getAllPayments,
+  updatePayment,
+  getGlobalSettings,
+  updateGlobalSettings,
+  updateDocumentFields,
+  addDocument,
+  setDocument,
+  getDocuments,
+  classifyFirestoreError,
+} from '../services/firebaseService';
+import { createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '../firebase';
+import { serverTimestamp } from 'firebase/firestore';
 
 
 const CustomDropdown = ({ label, value, options, onChange, placeholder, width = '120px' }) => {
@@ -132,8 +169,8 @@ const ExportDropdown = ({ onExportCSV, onExportExcel, onExportPDF }) => {
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
-  const token = localStorage.getItem('token');
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const { currentUser, userProfile, logout: authLogout, uid } = useAuth();
+  const user = userProfile || JSON.parse(localStorage.getItem('user') || '{}');
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -145,73 +182,72 @@ const AdminDashboard = () => {
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // Queries using React Query
-  const { data: stats = null } = useQuery({
-    queryKey: ['adminStats'],
+  // ─── Parallel initial data load via Firestore ───────────────────────────────
+  const { data: adminData = null } = useQuery({
+    queryKey: ['adminDashboardAll'],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE}/admin/stats`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      return response.ok ? await response.json() : null;
-    }
+      const [
+        studentList,
+        liveClassList,
+        recordedList,
+        announcementList,
+        courseList,
+        leaderboardList,
+        paymentList,
+        globalSettings,
+      ] = await Promise.all([
+        listStudents().catch(() => []),
+        getLiveClasses().catch(() => []),
+        getRecordedClasses().catch(() => []),
+        getAnnouncements().catch(() => []),
+        getCourses().catch(() => []),
+        getLeaderboard().catch(() => []),
+        getAllPayments().catch(() => []),
+        getGlobalSettings().catch(() => ({})),
+      ]);
+
+      const totalStudents = studentList.length;
+      const activeStudents = studentList.filter(s => s.status === 'active' || s.status === 'Active').length;
+      const feesPending = studentList.filter(s => s.feesStatus !== 'Paid').length;
+      const stats = {
+        total_students: totalStudents,
+        active_students: activeStudents,
+        fees_pending: feesPending,
+        live_classes_today: liveClassList.filter(c => c.status === 'live' || c.status === 'Live').length,
+        total_recorded: recordedList.length,
+        total_announcements: announcementList.length,
+        total_courses: courseList.length,
+      };
+
+      return {
+        stats,
+        studentList,
+        liveClassList,
+        recordedList,
+        announcementList,
+        courseList,
+        leaderboardList,
+        paymentList,
+        globalSettings,
+      };
+    },
+    staleTime: 3 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
-  const { data: liveClasses = [] } = useQuery({
-    queryKey: ['adminLiveClasses'],
-    queryFn: async () => {
-      const res = await fetch(`${API_BASE}/student/dashboard`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const combined = [];
-        if (data.todayLiveClass) combined.push(data.todayLiveClass);
-        if (data.upcomingLiveClasses) combined.push(...data.upcomingLiveClasses);
-        return combined;
-      }
-      return [];
-    }
-  });
-
-  const { data: recordedClasses = [] } = useQuery({
-    queryKey: ['adminRecordedClasses'],
-    queryFn: async () => {
-      const res = await fetch(`${API_BASE}/admin/recorded-classes`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      return res.ok ? (await res.json()).recorded_classes || [] : [];
-    }
-  });
-
-  const { data: announcements = [] } = useQuery({
-    queryKey: ['adminAnnouncements'],
-    queryFn: async () => {
-      const res = await fetch(`${API_BASE}/admin/announcements`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      return res.ok ? (await res.json()).announcements || [] : [];
-    }
-  });
-
-  const { data: batches = [] } = useQuery({
+  // Derive named data from adminData
+  const stats = adminData?.stats || null;
+  const liveClasses = adminData?.liveClassList || [];
+  const recordedClasses = adminData?.recordedList || [];
+  const announcements = adminData?.announcementList || [];
+  const courses = adminData?.courseList || [];
+  const batches = []; // Batches managed via 'batches' Firestore collection
+  const { data: firestoreBatches = [] } = useQuery({
     queryKey: ['adminBatches'],
-    queryFn: async () => {
-      const response = await fetch(`${API_BASE}/admin/batches`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      return response.ok ? await response.json() : [];
-    }
+    queryFn: () => getDocuments('batches').catch(() => []),
+    staleTime: 3 * 60 * 1000,
   });
 
-  const { data: courses = [] } = useQuery({
-    queryKey: ['adminCourses'],
-    queryFn: async () => {
-      const response = await fetch(`${API_BASE}/admin/course-titles`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      return response.ok ? (await response.json()).courses || [] : [];
-    }
-  });
   const [selectedBatchId, setSelectedBatchId] = useState('');
   const [batchName, setBatchName] = useState('');
   const [batchCourseName, setBatchCourseName] = useState('');
@@ -2213,7 +2249,7 @@ const AdminDashboard = () => {
   // BATCH MANAGEMENT EVENT HANDLERS
   // ══════════════════════════════════════════════════════
   const fetchCourses = () => {
-    queryClient.invalidateQueries({ queryKey: ['adminCourses'] });
+    queryClient.invalidateQueries({ queryKey: ['adminDashboardAll'] });
   };
 
   const fetchBatches = () => {
@@ -2222,13 +2258,8 @@ const AdminDashboard = () => {
 
   const fetchAllStudentsForAssign = async () => {
     try {
-      const response = await fetch(`${API_BASE}/admin/students?limit=200`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setAllStudentsForAssign(data.students || []);
-      }
+      const list = await listStudents();
+      setAllStudentsForAssign(list || []);
     } catch (error) {
       console.error(error);
     }
@@ -2421,70 +2452,36 @@ const AdminDashboard = () => {
     }
   }, [attBatchId, attendanceDate, activeTab]);
 
-  const handleLogout = () => {
-    localStorage.clear();
+  const handleLogout = async () => {
+    await authLogout();
     navigate('/login');
   };
 
   const fetchStats = () => {
-    queryClient.invalidateQueries({ queryKey: ['adminStats'] });
+    queryClient.invalidateQueries({ queryKey: ['adminDashboardAll'] });
   };
 
   const fetchStudents = async (pageToUse = null) => {
     setLoading(true);
     try {
-      let pageNum = currentPage;
-      if (pageToUse !== null) {
-        pageNum = pageToUse;
-      } else if (activeTab === 'attendance') {
-        pageNum = attendancePage;
-      } else if (activeTab === 'fees-management') {
-        pageNum = feesPage;
-      } else {
-        pageNum = currentPage;
+      const list = await listStudents();
+      let filtered = list || [];
+      const searchVal = activeTab === 'fees-management' ? feesSearchQuery : searchQuery;
+      const statusVal = activeTab === 'fees-management' ? '' : statusFilter;
+      const feesVal = activeTab === 'fees-management' ? feesStatusFilter : feesFilter;
+      const courseVal = activeTab === 'fees-management' ? feesCourseFilter : courseFilter;
+      const batchVal = activeTab === 'fees-management' ? feesBatchFilter : batchFilter;
+
+      if (searchVal) {
+        const q = searchVal.toLowerCase();
+        filtered = filtered.filter(s => (s.name||'').toLowerCase().includes(q) || (s.email||'').toLowerCase().includes(q) || (s.rollNumber||'').toLowerCase().includes(q));
       }
-
-      let searchVal = searchQuery;
-      let statusVal = statusFilter;
-      let feesVal = feesFilter;
-      let courseVal = courseFilter;
-      let batchVal = batchFilter;
-      let startDateVal = '';
-      let endDateVal = '';
-
-      if (activeTab === 'fees-management') {
-        searchVal = feesSearchQuery;
-        statusVal = '';
-        feesVal = feesStatusFilter;
-        courseVal = feesCourseFilter;
-        batchVal = feesBatchFilter;
-      } else if (activeTab === 'students') {
-        const bounds = getDateRangeBounds(studentDateFilter, studentStartDateFilter, studentEndDateFilter);
-        startDateVal = bounds.startDate;
-        endDateVal = bounds.endDate;
-      }
-
-      const queryParams = new URLSearchParams({
-        page: pageNum,
-        limit: 5,
-        search: searchVal,
-        status: statusVal,
-        feesPaid: feesVal,
-        course: courseVal,
-        batch: batchVal
-      });
-
-      if (startDateVal) queryParams.append('startDate', startDateVal);
-      if (endDateVal) queryParams.append('endDate', endDateVal);
-      
-      const response = await fetch(`${API_BASE}/admin/students?${queryParams}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setStudents(data.students || []);
-        setTotalPages(data.pages || 1);
-      }
+      if (statusVal) filtered = filtered.filter(s => s.status === statusVal);
+      if (feesVal) filtered = filtered.filter(s => s.feesStatus === feesVal);
+      if (courseVal) filtered = filtered.filter(s => s.course === courseVal);
+      if (batchVal) filtered = filtered.filter(s => s.batch_id === batchVal);
+      setStudents(filtered);
+      setTotalPages(Math.ceil(filtered.length / 5) || 1);
     } catch (error) {
       console.error(error);
     } finally {
@@ -2493,51 +2490,40 @@ const AdminDashboard = () => {
   };
 
   const fetchLiveClasses = () => {
-    queryClient.invalidateQueries({ queryKey: ['adminLiveClasses'] });
+    queryClient.invalidateQueries({ queryKey: ['adminDashboardAll'] });
   };
 
   const fetchRecordedClasses = () => {
-    queryClient.invalidateQueries({ queryKey: ['adminRecordedClasses'] });
+    queryClient.invalidateQueries({ queryKey: ['adminDashboardAll'] });
   };
 
   const fetchAnnouncements = () => {
-    queryClient.invalidateQueries({ queryKey: ['adminAnnouncements'] });
+    queryClient.invalidateQueries({ queryKey: ['adminDashboardAll'] });
   };
 
   const toggleFees = async (studentId) => {
     try {
-      const response = await fetch(`${API_BASE}/admin/students/${studentId}/toggle-fees`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        fetchStudents();
-        fetchStats();
-      }
+      const student = students.find(s => s.id === studentId);
+      const newStatus = student?.feesStatus === 'Paid' ? 'Pending' : 'Paid';
+      await updateStudent(studentId, { feesStatus: newStatus });
+      fetchStudents();
+      fetchStats();
     } catch (error) {
       console.error(error);
+      showModal('Error', classifyFirestoreError(error).message, 'error');
     }
   };
 
   const toggleStatus = async (studentId) => {
     try {
-      const studentObj = students.find(s => s._id === studentId || s.id === studentId);
+      const studentObj = students.find(s => s.id === studentId);
       const newStatus = studentObj?.status === 'active' ? 'disabled' : 'active';
-
-      if (db) {
-        await updateDocumentFields('students', studentId, { status: newStatus });
-      }
-
-      const response = await fetch(`${API_BASE}/admin/students/${studentId}/toggle-status`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok || db) {
-        fetchStudents();
-        fetchStats();
-      }
+      await updateStudent(studentId, { status: newStatus });
+      fetchStudents();
+      fetchStats();
     } catch (error) {
       console.error(error);
+      showModal('Error', classifyFirestoreError(error).message, 'error');
     }
   };
 
@@ -2548,16 +2534,13 @@ const AdminDashboard = () => {
   const executeDeleteStudent = async () => {
     if (!studentToDelete) return;
     try {
-      const response = await fetch(`${API_BASE}/admin/students/${studentToDelete}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        fetchStudents();
-        fetchStats();
-      }
+      await deleteStudentDoc('students', studentToDelete);
+      fetchStudents();
+      fetchStats();
+      showModal('Deleted', 'Student record deleted successfully.', 'success');
     } catch (error) {
       console.error(error);
+      showModal('Error', classifyFirestoreError(error).message, 'error');
     } finally {
       setStudentToDelete(null);
     }
@@ -2579,123 +2562,90 @@ const AdminDashboard = () => {
 
   const fetchStudentSessions = async (studentId) => {
     try {
-      const response = await fetch(`${API_BASE}/admin/students/${studentId}/sessions`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setStudentSessions(data || []);
-      }
+      setStudentSessions([]);
     } catch (e) {
       console.error("Error fetching sessions:", e);
     }
   };
 
   const revokeStudentSession = async (sessionId, studentId) => {
-    if (!window.confirm("Are you sure you want to revoke this session and force log out this device?")) return;
-    try {
-      const response = await fetch(`${API_BASE}/admin/sessions/${sessionId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        showModal("Success", "Device logged out successfully.", "success");
-        fetchStudentSessions(studentId);
-      } else {
-        showModal("Error", "Failed to revoke session", "error");
-      }
-    } catch (e) {
-      console.error(e);
-    }
+    showModal('Info', 'Session management is handled by Firebase Auth. Disable the student account to prevent access.', 'info');
   };
 
   const handleViewStudentDetails = async (studentId) => {
     try {
-      const response = await fetch(`${API_BASE}/admin/students/${studentId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
+      const { getStudent: getStudentDoc } = await import('../services/firebaseService');
+      const data = await getStudentDoc(studentId);
+      if (data) {
         setSelectedStudentDetails(data);
         fetchStudentSessions(studentId);
         setShowDetailsModal(true);
       } else {
-        showModal("Error", "Failed to retrieve student details", "error");
+        showModal('Error', 'Student record not found in Firestore.', 'error');
       }
     } catch (e) {
       console.error(e);
-      showModal("Error", "An unexpected error occurred while fetching details", "error");
+      showModal('Error', 'Failed to load student details.', 'error');
     }
   };
 
   const handleCreateStudentSubmit = async (e) => {
     e.preventDefault();
-    if (!createName || !createEmail || !createPhone || !createTempPassword) {
-      showModal("Missing Fields", "Name, Email, Mobile number, and Temporary Password are required.", "warning");
+    if (!createName || !createEmail || !createTempPassword) {
+      showModal('Missing Fields', 'Name, Email, and Temporary Password are required.', 'warning');
       return;
     }
     try {
-      const response = await fetch(`${API_BASE}/admin/students`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          name: createName,
-          email: createEmail,
-          phone: createPhone,
-          course: createCourse,
-          batch_id: createBatchId,
-          password: createTempPassword
-        })
+      const credential = await createUserWithEmailAndPassword(auth, createEmail, createTempPassword);
+      const newUid = credential.user.uid;
+      const rollNumber = `LVX${Date.now().toString().slice(-6)}`;
+      await createStudent(newUid, {
+        name: createName,
+        email: createEmail,
+        phone: createPhone,
+        course: createCourse,
+        batch_id: createBatchId,
+        rollNumber,
+        feesStatus: 'Pending',
+        status: 'active',
+        role: 'student',
+        mustChangePassword: true,
+        createdBy: uid,
       });
-      const data = await response.json();
-      if (response.ok) {
-        setCreatedCredentials({
-          username: data.student.rollNumber,
-          password: data.student.temporary_password,
-          name: data.student.name,
-          email: data.student.email,
-          phone: data.student.phone
-        });
-        // Clear fields
-        setCreateName('');
-        setCreateEmail('');
-        setCreatePhone('');
-        setCreateCourse('Fullstack Engineering');
-        setCreateBatchId('');
-        setCreateTempPassword('');
-        setShowCreateModal(false);
-        fetchStudents();
-        fetchStats();
-      } else {
-        showModal("Error", data.message || "Failed to create student account", "error");
-      }
+      setCreatedCredentials({
+        username: rollNumber,
+        password: createTempPassword,
+        name: createName,
+        email: createEmail,
+        phone: createPhone,
+      });
+      setCreateName(''); setCreateEmail(''); setCreatePhone('');
+      setCreateCourse('Fullstack Engineering'); setCreateBatchId('');
+      setCreateTempPassword('');
+      setShowCreateModal(false);
+      fetchStudents(); fetchStats();
     } catch (e) {
       console.error(e);
-      showModal("Error", "An unexpected error occurred during creation", "error");
+      const msg = e.code === 'auth/email-already-in-use'
+        ? 'An account with this email already exists.'
+        : (classifyFirestoreError(e).message || 'Failed to create student account.');
+      showModal('Error', msg, 'error');
     }
   };
 
   const handleResetPassword = async (studentId) => {
-    if (!window.confirm("Are you sure you want to reset the password for this student? a new random temporary password will be generated.")) return;
+    const studentObj = students.find(s => s.id === studentId);
+    if (!studentObj?.email) {
+      showModal('Error', 'This student has no email address set.', 'error');
+      return;
+    }
+    if (!window.confirm(`Send password reset email to ${studentObj.email}?`)) return;
     try {
-      const response = await fetch(`${API_BASE}/admin/students/${studentId}/reset-password`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await response.json();
-      if (response.ok) {
-        setResetCredentials({
-          password: data.temporary_password
-        });
-      } else {
-        showModal("Error", data.message || "Failed to reset password", "error");
-      }
+      await sendPasswordResetEmail(auth, studentObj.email);
+      showModal('Sent!', `Password reset email sent to ${studentObj.email}.`, 'success');
     } catch (e) {
       console.error(e);
-      showModal("Error", "An unexpected error occurred during password reset", "error");
+      showModal('Error', classifyFirestoreError(e).message || 'Failed to send reset email.', 'error');
     }
   };
 
@@ -2735,29 +2685,16 @@ const AdminDashboard = () => {
         permanent_address: editAddress,
         company: editCompany,
         status: editAccountStatus,
-        feesStatus: editFeesStatus
+        feesStatus: editFeesStatus,
       };
-      if (editPassword.trim()) {
-        payload.password = editPassword.trim();
-      }
-      const response = await fetch(`${API_BASE}/admin/students/${editingStudent.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(payload)
-      });
-      if (response.ok) {
-        setEditingStudent(null);
-        fetchStudents();
-        fetchStats();
-      } else {
-        const err = await response.json();
-        showModal("Error", err.message || "Failed to update profile", "error");
-      }
+      await updateStudent(editingStudent.id, payload);
+      setEditingStudent(null);
+      fetchStudents();
+      fetchStats();
+      showModal('Success', 'Student profile updated successfully!', 'success');
     } catch (error) {
       console.error(error);
+      showModal('Error', classifyFirestoreError(error).message, 'error');
     }
   };
 
@@ -2772,28 +2709,20 @@ const AdminDashboard = () => {
   const saveFeesEdit = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch(`${API_BASE}/admin/students/${editingFeesStudent.id}/update-fees`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          feesTotal: editTotal,
-          feesPaidAmount: editPaid,
-          feesStatus: editStatus,
-          feesPaymentDate: editPayDate
-        })
+      await updateStudent(editingFeesStudent.id, {
+        feesTotal: editTotal,
+        feesPaidAmount: editPaid,
+        feesStatus: editStatus,
+        feesPaymentDate: editPayDate,
       });
-      if (response.ok) {
-        setEditingFeesStudent(null);
-        fetchStudents();
-        fetchStats();
-      }
+      setEditingFeesStudent(null);
+      fetchStudents();
+      fetchStats();
+      showModal('Success', 'Fees updated successfully!', 'success');
     } catch (error) {
       console.error(error);
+      showModal('Error', classifyFirestoreError(error).message, 'error');
     }
-  };
 
   const handleCourseChange = (e) => {
     const newCourse = e.target.value;
@@ -2815,70 +2744,28 @@ const AdminDashboard = () => {
     }
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/admin/attendance/sheet?batch_id=${batchId}&date=${dateVal}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        let records = data.records || [];
-        if (records.length === 0) {
-          const anyBatchHasStudents = batches.some(b => b.students_count > 0);
-          if (anyBatchHasStudents) {
-            const selectedBatch = batches.find(b => b.id === batchId);
-            records = [
-              {
-                student_id: 'demo-1',
-                student_name: 'Aarav Mehta',
-                rollNumber: 'LV-2026-001',
-                phone: '9876543210',
-                course: attCourse || selectedBatch?.course_name || 'Fullstack Engineering',
-                batch_name: selectedBatch?.name || 'Demo Batch',
-                status: 'Present',
-                isDemo: true
-              },
-              {
-                student_id: 'demo-2',
-                student_name: 'Isha Sharma',
-                rollNumber: 'LV-2026-002',
-                phone: '9876543211',
-                course: attCourse || selectedBatch?.course_name || 'Fullstack Engineering',
-                batch_name: selectedBatch?.name || 'Demo Batch',
-                status: 'Absent',
-                isDemo: true
-              },
-              {
-                student_id: 'demo-3',
-                student_name: 'Rohan Verma',
-                rollNumber: 'LV-2026-003',
-                phone: '9876543212',
-                course: attCourse || selectedBatch?.course_name || 'Fullstack Engineering',
-                batch_name: selectedBatch?.name || 'Demo Batch',
-                status: 'Present',
-                isDemo: true
-              },
-              {
-                student_id: 'demo-4',
-                student_name: 'Ananya Patel',
-                rollNumber: 'LV-2026-004',
-                phone: '9876543213',
-                course: attCourse || selectedBatch?.course_name || 'Fullstack Engineering',
-                batch_name: selectedBatch?.name || 'Demo Batch',
-                status: 'Present',
-                isDemo: true
-              },
-              {
-                student_id: 'demo-5',
-                student_name: 'Kabir Singh',
-                rollNumber: 'LV-2026-005',
-                phone: '9876543214',
-                course: attCourse || selectedBatch?.course_name || 'Fullstack Engineering',
-                batch_name: selectedBatch?.name || 'Demo Batch',
-                status: 'Absent',
-                isDemo: true
-              }
-            ];
-          }
-        }
+      const { where } = await import('firebase/firestore');
+      const { getDocuments } = await import('../services/firebaseService');
+      const records = await getDocuments('attendance', [
+        where('batch_id', '==', batchId),
+        where('date', '==', dateVal),
+      ]);
+      // If no records exist yet, build empty sheet from batch students
+      if (records.length === 0) {
+        const batchStudents = students.filter(s => s.batch_id === batchId);
+        const emptyRecords = batchStudents.map(s => ({
+          student_id: s.id,
+          student_name: s.name,
+          rollNumber: s.rollNumber,
+          phone: s.phone,
+          course: s.course,
+          batch_id: batchId,
+          date: dateVal,
+          status: 'Present',
+          isNew: true,
+        }));
+        setAttendanceRecords(emptyRecords);
+      } else {
         setAttendanceRecords(records);
       }
     } catch (error) {
@@ -2890,13 +2777,17 @@ const AdminDashboard = () => {
 
   const fetchAttendanceHistory = async () => {
     try {
-      const response = await fetch(`${API_BASE}/admin/attendance/history`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+      const { where, orderBy } = await import('firebase/firestore');
+      const { getDocuments } = await import('../services/firebaseService');
+      const history = await getDocuments('attendance', [orderBy('date', 'desc')]).catch(() => []);
+      // Group by batch+date for history view
+      const grouped = {};
+      history.forEach(r => {
+        const key = `${r.batch_id}_${r.date}`;
+        if (!grouped[key]) grouped[key] = { batch_id: r.batch_id, date: r.date, count: 0 };
+        grouped[key].count++;
       });
-      if (response.ok) {
-        const data = await response.json();
-        setAttSheetsHistory(data || []);
-      }
+      setAttSheetsHistory(Object.values(grouped));
     } catch (error) {
       console.error(error);
     }
@@ -2912,32 +2803,33 @@ const AdminDashboard = () => {
     if (!attBatchId) return;
     const hasDemo = attendanceRecords.some(r => r.isDemo);
     if (hasDemo) {
-      showModal("Demo Mode", "Attendance saved successfully (Demo Mode - records not saved to database).", "success");
+      showModal('Demo Mode', 'Attendance saved successfully (Demo Mode - records not saved to database).', 'success');
       return;
     }
     try {
-      const response = await fetch(`${API_BASE}/admin/attendance/save`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          batch_id: attBatchId,
-          date: attendanceDate,
-          records: attendanceRecords
-        })
-      });
-      if (response.ok) {
-        showModal("Success", "Attendance saved successfully!", "success");
-        fetchAttendanceHistory();
-        fetchStats();
-      } else {
-        const err = await response.json();
-        showModal("Error", err.message || "Failed to save attendance", "error");
-      }
+      // Save each attendance record to Firestore
+      await Promise.all(attendanceRecords.map(async (record) => {
+        if (record.id && !record.isNew) {
+          await updateAttendance(record.id, { status: record.status });
+        } else {
+          await markAttendance({
+            student_id: record.student_id,
+            studentId: record.student_id,
+            student_name: record.student_name,
+            rollNumber: record.rollNumber,
+            batch_id: attBatchId,
+            date: attendanceDate,
+            status: record.status,
+            course: record.course || attCourse,
+          });
+        }
+      }));
+      showModal('Success', 'Attendance saved successfully!', 'success');
+      fetchAttendanceHistory();
+      fetchStats();
     } catch (error) {
       console.error(error);
+      showModal('Error', classifyFirestoreError(error).message, 'error');
     }
   };
 
@@ -3053,44 +2945,32 @@ const AdminDashboard = () => {
     setAttendancePage(1);
   };
 
-  const addLiveClass = async (e) => {
+  const addLiveClassHandler = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch(`${API_BASE}/admin/live-classes`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          title: liveTitle,
-          instructor: liveInstructor,
-          meet_link: liveUrl,
-          date: liveDate,
-          time: liveTime,
-          description: liveDescription,
-          status: liveStatus,
-          is_today: liveToday,
-          is_published: livePublished,
-          batch_id: selectedBatchId
-        })
+      await addLiveClass({
+        title: liveTitle,
+        instructor: liveInstructor,
+        meet_link: liveUrl,
+        meetLink: liveUrl,
+        date: liveDate,
+        time: liveTime,
+        description: liveDescription,
+        status: liveStatus,
+        is_today: liveToday,
+        is_published: livePublished,
+        batch_id: selectedBatchId,
       });
-      if (response.ok) {
-        setLiveTitle('');
-        setLiveInstructor('');
-        setLiveDate('');
-        setLiveTime('');
-        setLiveUrl('');
-        setLiveDescription('');
-        setLiveStatus('Upcoming');
-        setLiveToday(false);
-        setLivePublished(true);
-        setSelectedBatchId('');
-        fetchLiveClasses();
-        fetchStats();
-      }
+      setLiveTitle(''); setLiveInstructor(''); setLiveDate('');
+      setLiveTime(''); setLiveUrl(''); setLiveDescription('');
+      setLiveStatus('Upcoming'); setLiveToday(false);
+      setLivePublished(true); setSelectedBatchId('');
+      setShowLiveClassModal(false);
+      fetchLiveClasses(); fetchStats();
+      showModal('Success', 'Live class scheduled successfully!', 'success');
     } catch (error) {
       console.error(error);
+      showModal('Error', classifyFirestoreError(error).message, 'error');
     }
   };
 
@@ -3110,196 +2990,134 @@ const AdminDashboard = () => {
   const saveLiveClassEdit = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch(`${API_BASE}/admin/live-classes/${editingLiveClass._id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          title: editLiveTitle,
-          instructor: editLiveInstructor,
-          meet_link: editLiveMeetLink,
-          date: editLiveDate,
-          time: editLiveTime,
-          description: editLiveDescription,
-          status: editLiveStatus,
-          is_today: editLiveToday,
-          is_published: editLivePublished
-        })
+      await updateLiveClass(editingLiveClass.id, {
+        title: editLiveTitle,
+        instructor: editLiveInstructor,
+        meet_link: editLiveMeetLink,
+        meetLink: editLiveMeetLink,
+        date: editLiveDate,
+        time: editLiveTime,
+        description: editLiveDescription,
+        status: editLiveStatus,
+        is_today: editLiveToday,
+        is_published: editLivePublished,
       });
-      if (response.ok) {
-        setEditingLiveClass(null);
-        fetchLiveClasses();
-      }
+      setEditingLiveClass(null);
+      fetchLiveClasses();
+      showModal('Success', 'Live class updated successfully!', 'success');
     } catch (error) {
       console.error(error);
+      showModal('Error', classifyFirestoreError(error).message, 'error');
     }
   };
 
-  const deleteLiveClass = async (id) => {
+  const deleteLiveClassHandler = async (id) => {
     try {
-      const response = await fetch(`${API_BASE}/admin/live-classes/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        fetchLiveClasses();
-        fetchStats();
-      }
+      await deleteLiveClass(id);
+      fetchLiveClasses();
+      fetchStats();
+      showModal('Deleted', 'Live class deleted.', 'success');
     } catch (error) {
       console.error(error);
+      showModal('Error', classifyFirestoreError(error).message, 'error');
     }
   };
 
   const handleFileUpload = async (file) => {
-    const formData = new FormData();
-    formData.append('file', file);
+    // Upload to Firebase Storage
     try {
-      const res = await fetch(`${API_BASE}/admin/upload`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData
-      });
-      if (res.ok) {
-        return await res.json();
-      } else {
-        const err = await res.json();
-        showModal("Upload Error", err.message || "Failed to upload file.", "error");
-      }
+      const { uploadFile } = await import('../services/firebaseService');
+      const ext = file.name.split('.').pop();
+      const path = `uploads/${Date.now()}_${file.name}`;
+      const url = await uploadFile(path, file, { contentType: file.type });
+      return { url };
     } catch (e) {
       console.error(e);
-      showModal("Network Error", "Cannot upload file to server.", "error");
+      showModal('Upload Error', 'Failed to upload file to storage.', 'error');
+      return null;
     }
-    return null;
   };
 
-  const addRecordedClass = async (e) => {
+  const addRecordedClassHandler = async (e) => {
     e.preventDefault();
     const isEditing = !!editingRecordedClass;
-    const url = isEditing 
-      ? `${API_BASE}/admin/recorded-classes/${editingRecordedClass._id}`
-      : `${API_BASE}/admin/recorded-classes`;
-    const method = isEditing ? 'PUT' : 'POST';
+    const payload = {
+      title: recTitle,
+      module: recModule,
+      video_url: recVideoUrl,
+      thumbnail: recThumbnailUrl,
+      description: recLessonDescription,
+      notes_url: recNotesUrl,
+      assignment: recAssignment,
+      visibility: recVisibility,
+      course_title: recCourseTitle,
+      batch_id: selectedBatchId,
+      sort_order: recSortOrder ? parseInt(recSortOrder) : 999,
+      duration: recDuration,
+      video_source_type: videoSourceType,
+      study_materials: recStudyMaterials,
+    };
     try {
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          title: recTitle,
-          module: recModule,
-          video_url: recVideoUrl,
-          thumbnail: recThumbnailUrl,
-          description: recLessonDescription,
-          notes_url: recNotesUrl,
-          assignment: recAssignment,
-          visibility: recVisibility,
-          course_title: recCourseTitle,
-          batch_id: selectedBatchId,
-          sort_order: recSortOrder ? parseInt(recSortOrder) : 999,
-          duration: recDuration,
-          video_source_type: videoSourceType,
-          study_materials: recStudyMaterials
-        })
-      });
-      if (response.ok) {
-        setRecTitle('');
-        setRecModule('Module 1 - Python Basics');
-        setRecVideoUrl('');
-        setRecThumbnailUrl('');
-        setRecLessonDescription('');
-        setRecNotesUrl('');
-        setRecAssignment('');
-        setRecVisibility('everyone');
-        setRecSortOrder('');
-        setRecDuration('1h 30m');
-        setVideoSourceType('link');
-        setRecStudyMaterials([]);
-        setEditingRecordedClass(null);
-        fetchRecordedClasses();
-        fetchStats();
-        showModal("Success", isEditing ? "Lesson updated successfully!" : "New LMS Lesson posted successfully!", "success");
+      if (isEditing) {
+        await updateRecordedClass(editingRecordedClass.id, payload);
       } else {
-        const err = await response.json();
-        showModal("Error", err.message || "Failed to upload lesson", "error");
+        await addRecordedClass(payload);
       }
+      setRecTitle(''); setRecModule('Module 1 - Python Basics'); setRecVideoUrl('');
+      setRecThumbnailUrl(''); setRecLessonDescription(''); setRecNotesUrl('');
+      setRecAssignment(''); setRecVisibility('everyone'); setRecSortOrder('');
+      setRecDuration('1h 30m'); setVideoSourceType('link'); setRecStudyMaterials([]);
+      setEditingRecordedClass(null);
+      setShowRecordedClassModal(false);
+      fetchRecordedClasses(); fetchStats();
+      showModal('Success', isEditing ? 'Lesson updated successfully!' : 'New LMS Lesson posted successfully!', 'success');
     } catch (error) {
       console.error(error);
+      showModal('Error', classifyFirestoreError(error).message, 'error');
     }
   };
 
   const toggleRecordedClassVisibility = async (id, currentVisibility) => {
     const newVisibility = currentVisibility === 'everyone' ? 'paid' : 'everyone';
     try {
-      const response = await fetch(`${API_BASE}/admin/recorded-classes/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          visibility: newVisibility
-        })
-      });
-      if (response.ok) {
-        showModal("Success", `Visibility changed to: ${newVisibility === 'everyone' ? 'Everyone' : 'Paid Students Only'}`, "success");
-        fetchRecordedClasses();
-      } else {
-        showModal("Error", "Failed to update visibility status", "error");
-      }
+      await updateRecordedClass(id, { visibility: newVisibility });
+      showModal('Success', `Visibility changed to: ${newVisibility === 'everyone' ? 'Everyone' : 'Paid Students Only'}`, 'success');
+      fetchRecordedClasses();
     } catch (error) {
       console.error(error);
+      showModal('Error', classifyFirestoreError(error).message, 'error');
     }
   };
 
-  const deleteRecordedClass = async (id) => {
+  const deleteRecordedClassHandler = async (id) => {
     try {
-      const response = await fetch(`${API_BASE}/admin/recorded-classes/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        fetchRecordedClasses();
-        fetchStats();
-      }
+      await deleteRecordedClass(id);
+      fetchRecordedClasses(); fetchStats();
+      showModal('Deleted', 'Recorded class deleted.', 'success');
     } catch (error) {
       console.error(error);
+      showModal('Error', classifyFirestoreError(error).message, 'error');
     }
   };
 
-
-
-  const addAnnouncement = async (e) => {
+  const addAnnouncementHandler = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch(`${API_BASE}/admin/announcements`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          title: annTitle,
-          content: annContent,
-          priority: annPriority,
-          is_pinned: annPinned,
-          batch_id: selectedBatchId
-        })
+      await addAnnouncement({
+        title: annTitle,
+        content: annContent,
+        priority: annPriority,
+        is_pinned: annPinned,
+        batch_id: selectedBatchId,
+        date: new Date().toLocaleDateString('en-IN'),
       });
-      if (response.ok) {
-        setAnnTitle('');
-        setAnnContent('');
-        setAnnPriority('Medium');
-        setAnnPinned(false);
-        fetchAnnouncements();
-      }
+      setAnnTitle(''); setAnnContent(''); setAnnPriority('Medium'); setAnnPinned(false);
+      setShowAnnouncementModal(false);
+      fetchAnnouncements();
+      showModal('Success', 'Announcement published!', 'success');
     } catch (error) {
       console.error(error);
+      showModal('Error', classifyFirestoreError(error).message, 'error');
     }
   };
 
@@ -3314,39 +3132,29 @@ const AdminDashboard = () => {
   const saveAnnouncementEdit = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch(`${API_BASE}/admin/announcements/${editingAnnouncement._id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          title: editAnnTitle,
-          content: editAnnContent,
-          priority: editAnnPriority,
-          is_pinned: editAnnPinned
-        })
+      await updateAnnouncement(editingAnnouncement.id, {
+        title: editAnnTitle,
+        content: editAnnContent,
+        priority: editAnnPriority,
+        is_pinned: editAnnPinned,
       });
-      if (response.ok) {
-        setEditingAnnouncement(null);
-        fetchAnnouncements();
-      }
+      setEditingAnnouncement(null);
+      fetchAnnouncements();
+      showModal('Success', 'Announcement updated!', 'success');
     } catch (error) {
       console.error(error);
+      showModal('Error', classifyFirestoreError(error).message, 'error');
     }
   };
 
-  const deleteAnnouncement = async (id) => {
+  const deleteAnnouncementHandler = async (id) => {
     try {
-      const response = await fetch(`${API_BASE}/admin/announcements/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        fetchAnnouncements();
-      }
+      await deleteAnnouncement(id);
+      fetchAnnouncements();
+      showModal('Deleted', 'Announcement deleted.', 'success');
     } catch (error) {
       console.error(error);
+      showModal('Error', classifyFirestoreError(error).message, 'error');
     }
   };
 
