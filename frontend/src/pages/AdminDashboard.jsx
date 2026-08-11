@@ -65,10 +65,10 @@ import {
 } from '../services/firebaseService';
 import {
   changeOwnPassword,
-  sendResetEmail,
   validatePasswordStrength,
   describeAuthError,
 } from '../services/authService';
+import { normalizeMobile, mobileToAuthId, formatMobile } from '../services/phoneIdentity';
 import { createAuthUserDetached } from '../firebase';
 
 
@@ -2459,8 +2459,12 @@ const AdminDashboard = () => {
 
   const handleCreateStudentSubmit = async (e) => {
     e.preventDefault();
-    if (!createName || !createEmail || !createTempPassword) {
-      showModal('Missing Fields', 'Name, Email, and Temporary Password are required.', 'warning');
+
+    // The mobile number is the student's sign-in identity, so it is required.
+    // Email is an optional contact detail and plays no part in authentication.
+    const nationalNumber = normalizeMobile(createPhone);
+    if (!createName || !nationalNumber || !createTempPassword) {
+      showModal('Missing Fields', 'Name, a valid 10-digit Mobile Number, and a Temporary Password are required.', 'warning');
       return;
     }
     const strengthError = validatePasswordStrength(createTempPassword);
@@ -2473,12 +2477,15 @@ const AdminDashboard = () => {
       // Runs on a detached Firebase app so the admin stays signed in — calling
       // createUserWithEmailAndPassword on the primary auth instance would
       // switch this session over to the newly created student.
-      const newUid = await createAuthUserDetached(createEmail.trim(), createTempPassword);
+      const newUid = await createAuthUserDetached(
+        mobileToAuthId(nationalNumber),
+        createTempPassword
+      );
       const rollNumber = `LVX${Date.now().toString().slice(-6)}`;
       await createStudent(newUid, {
         name: createName,
-        email: createEmail,
-        phone: createPhone,
+        email: createEmail.trim(),
+        phone: nationalNumber,
         course: createCourse,
         batch_id: createBatchId,
         rollNumber,
@@ -2492,8 +2499,8 @@ const AdminDashboard = () => {
         username: rollNumber,
         password: createTempPassword,
         name: createName,
-        email: createEmail,
-        phone: createPhone,
+        email: createEmail.trim(),
+        phone: nationalNumber,
       });
       setCreateName(''); setCreateEmail(''); setCreatePhone('');
       setCreateCourse('Fullstack Engineering'); setCreateBatchId('');
@@ -2501,28 +2508,36 @@ const AdminDashboard = () => {
       setShowCreateModal(false);
       fetchStudents(); fetchStats();
     } catch (e) {
-      console.error(e);
+      console.error('[Admin] create student failed:', e);
+      // Firebase enforces uniqueness on the derived identifier, so this is how
+      // a duplicate mobile number surfaces.
       const msg = e.code === 'auth/email-already-in-use'
-        ? 'An account with this email already exists.'
-        : (classifyFirestoreError(e).message || 'Failed to create student account.');
+        ? 'A student is already registered with this mobile number.'
+        : (describeAuthError(e) || 'Failed to create student account.');
       showModal('Error', msg, 'error');
     }
   };
 
+  /**
+   * Password resets are a server-side operation.
+   *
+   * Sign-in identifiers are derived from the mobile number and are not real
+   * mailboxes, so Firebase's "send reset email" flow has nowhere to deliver to.
+   * Setting another user's password requires the Admin SDK, which must never be
+   * exposed to the browser — so this explains the supported path rather than
+   * pretending to do something.
+   */
   const handleResetPassword = async (studentId) => {
     const studentObj = students.find(s => s.id === studentId);
-    if (!studentObj?.email) {
-      showModal('Error', 'This student has no email address set.', 'error');
-      return;
-    }
-    if (!window.confirm(`Send password reset email to ${studentObj.email}?`)) return;
-    try {
-      await sendResetEmail(studentObj.email);
-      showModal('Sent!', `Password reset email sent to ${studentObj.email}.`, 'success');
-    } catch (e) {
-      console.error('[Admin] reset email failed:', e);
-      showModal('Error', describeAuthError(e), 'error');
-    }
+    if (!studentObj) return;
+
+    showModal(
+      'Reset Password',
+      `Students sign in with their mobile number, so password resets are performed by an administrator from a trusted machine:\n\n` +
+      `python backend/reset_password.py --mobile ${studentObj.phone || '<mobile>'} --password "<new-temp-password>"\n\n` +
+      `The student will be required to choose a new password the next time they sign in.`,
+      'info'
+    );
   };
 
   const [editPassword, setEditPassword] = useState('');
@@ -5432,12 +5447,22 @@ const AdminDashboard = () => {
                     <input id="createName" type="text" className="form-input" placeholder="e.g. John Doe" value={createName} onChange={(e) => setCreateName(e.target.value)} required />
                   </div>
                   <div className="form-group">
-                    <label className="form-label" htmlFor="createEmail">Email Address *</label>
-                    <input id="createEmail" type="email" className="form-input" placeholder="john.doe@example.com" value={createEmail} onChange={(e) => setCreateEmail(e.target.value)} required />
+                    <label className="form-label" htmlFor="createPhone">Mobile Number * <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>(used to sign in)</span></label>
+                    <input
+                      id="createPhone"
+                      type="tel"
+                      inputMode="numeric"
+                      className="form-input"
+                      placeholder="e.g. 9876543210"
+                      value={createPhone}
+                      onChange={(e) => setCreatePhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                      maxLength={10}
+                      required
+                    />
                   </div>
                   <div className="form-group">
-                    <label className="form-label" htmlFor="createPhone">Mobile Number *</label>
-                    <input id="createPhone" type="text" className="form-input" placeholder="e.g. 9876543210" value={createPhone} onChange={(e) => setCreatePhone(e.target.value)} required />
+                    <label className="form-label" htmlFor="createEmail">Email Address <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>(optional, for contact only)</span></label>
+                    <input id="createEmail" type="email" className="form-input" placeholder="john.doe@example.com" value={createEmail} onChange={(e) => setCreateEmail(e.target.value)} />
                   </div>
                   <div className="form-group">
                     <label className="form-label" htmlFor="createTempPassword">Temporary Password *</label>
@@ -5497,6 +5522,10 @@ const AdminDashboard = () => {
               </p>
               <div style={{ background: 'var(--surface-alt)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', textAlign: 'left', marginBottom: '20px' }}>
                 <div style={{ marginBottom: '12px' }}>
+                  <span style={{ fontSize: '10.5px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 700, display: 'block', marginBottom: '2px' }}>Mobile Number (sign-in)</span>
+                  <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{formatMobile(createdCredentials.phone)}</strong>
+                </div>
+                <div style={{ marginBottom: '12px' }}>
                   <span style={{ fontSize: '10.5px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 700, display: 'block', marginBottom: '2px' }}>Student ID</span>
                   <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{createdCredentials.username}</strong>
                 </div>
@@ -5508,21 +5537,24 @@ const AdminDashboard = () => {
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <button className="btn btn-outline" style={{ height: '40px', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => {
-                  navigator.clipboard.writeText(`Student ID: ${createdCredentials.username}\nTemporary Password: ${createdCredentials.password}`);
+                  navigator.clipboard.writeText(`Mobile Number: ${createdCredentials.phone}\nStudent ID: ${createdCredentials.username}\nTemporary Password: ${createdCredentials.password}`);
                   showModal("Copied", "Credentials copied to clipboard!", "success");
                 }}>
                   📋 Copy Credentials
                 </button>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: createdCredentials.email ? '1fr 1fr' : '1fr', gap: '10px' }}>
+                  {/* Email is optional now — only offer it when one was provided. */}
+                  {createdCredentials.email && (
                   <button className="btn btn-outline" style={{ height: '40px', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => {
-                    const body = encodeURIComponent(`Hello ${createdCredentials.name},\n\nYour account on Levlox Student Portal has been created.\n\nStudent ID: ${createdCredentials.username}\nEmail: ${createdCredentials.email}\nTemporary Password: ${createdCredentials.password}\n\nPlease sign in with your email address and change your password.\n\nPortal: ${loginUrl}`);
+                    const body = encodeURIComponent(`Hello ${createdCredentials.name},\n\nYour account on Levlox Student Portal has been created.\n\nMobile Number: ${createdCredentials.phone}\nStudent ID: ${createdCredentials.username}\nTemporary Password: ${createdCredentials.password}\n\nPlease sign in with your mobile number and change your password.\n\nPortal: ${loginUrl}`);
                     window.open(`mailto:${createdCredentials.email}?subject=Your Levlox Portal Credentials&body=${body}`, '_blank');
                   }}>
                     ✉ Send Email
                   </button>
+                  )}
                   <button className="btn btn-outline" style={{ height: '40px', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => {
-                    const text = encodeURIComponent(`Hello ${createdCredentials.name},\nYour student account is created.\nStudent ID: ${createdCredentials.username}\nEmail: ${createdCredentials.email}\nTemporary Password: ${createdCredentials.password}\nPlease sign in at ${loginUrl} with your email address and change your password.`);
+                    const text = encodeURIComponent(`Hello ${createdCredentials.name},\nYour student account is created.\nMobile Number: ${createdCredentials.phone}\nStudent ID: ${createdCredentials.username}\nTemporary Password: ${createdCredentials.password}\nPlease sign in at ${loginUrl} with your mobile number and change your password.`);
                     const cleanPhone = createdCredentials.phone.replace(/[^0-9]/g, '');
                     const link = `https://wa.me/${cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone}?text=${text}`;
                     window.open(link, '_blank');

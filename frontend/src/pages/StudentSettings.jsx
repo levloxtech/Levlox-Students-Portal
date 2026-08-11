@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import {
-  User, Mail, Phone, Camera, CheckCircle, Save, Shield, Lock, Eye, EyeOff, TriangleAlert
+  User, Mail, Smartphone, Camera, CheckCircle, Save, Shield, Lock, Eye, EyeOff, TriangleAlert
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { formatMobile } from '../services/phoneIdentity';
 import { updateStudent, uploadProfileImage, classifyFirestoreError } from '../services/firebaseService';
 import {
   changeOwnPassword,
@@ -310,35 +311,37 @@ const StudentSettings = ({ user, onProfileUpdate }) => {
                 </div>
               </div>
 
-              {/* Email (read-only — it is the sign-in identity) */}
+              {/* Mobile number — this is the sign-in identity, so only an
+                  administrator can change it. */}
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Email Address (Sign-in ID — managed by Admin)</label>
+                <label className="form-label">Mobile Number (Sign-in ID — managed by Admin)</label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="tel"
+                    className="form-input"
+                    value={formatMobile(phone)}
+                    readOnly
+                    disabled
+                    style={{ paddingLeft: 42, background: 'var(--surface-alt)', opacity: 0.85, cursor: 'not-allowed' }}
+                  />
+                  <Smartphone size={16} color="var(--text-secondary)" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }} />
+                </div>
+              </div>
+
+              {/* Email — contact detail only, not used to sign in. */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Email Address (Managed by Admin)</label>
                 <div style={{ position: 'relative' }}>
                   <input
                     type="email"
                     className="form-input"
                     value={email}
+                    placeholder="Not provided"
                     readOnly
                     disabled
                     style={{ paddingLeft: 42, background: 'var(--surface-alt)', opacity: 0.85, cursor: 'not-allowed' }}
                   />
                   <Mail size={16} color="var(--text-secondary)" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }} />
-                </div>
-              </div>
-
-              {/* Mobile Number Read Only */}
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Mobile Number (Managed by Admin)</label>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={phone}
-                    readOnly
-                    disabled
-                    style={{ paddingLeft: 42, background: 'var(--surface-alt)', opacity: 0.85, cursor: 'not-allowed' }}
-                  />
-                  <Phone size={16} color="var(--text-secondary)" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }} />
                 </div>
               </div>
 

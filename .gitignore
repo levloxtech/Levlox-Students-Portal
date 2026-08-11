@@ -38,3 +38,10 @@ Thumbs.db
 # Claude Code — editor tooling only, machine-specific. Not needed to build,
 # run or deploy the portal.
 .claude/
+
+# Firebase emulator artifacts
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+database-debug.log
+.firebase/

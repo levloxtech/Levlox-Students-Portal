@@ -7,19 +7,20 @@ import {
 import { auth } from '../firebase';
 import { getStudent, getAdmin } from '../services/firebaseService';
 import {
-  Eye, EyeOff, Lock, Mail, Check, X,
+  Eye, EyeOff, Lock, Smartphone, Check, X,
   ShieldCheck, AlertTriangle, Shield, Loader2,
   GraduationCap, Sparkles
 } from 'lucide-react';
 import CustomModal from '../components/Modal';
 import leveloxLogo from '../assets/levelox-icon-transparent.png';
+import { normalizeMobile, mobileToAuthId, isValidMobile } from '../services/phoneIdentity';
 
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_SECONDS = 30;
 
 const Login = () => {
   /* ─── Form state ─── */
-  const [email, setEmail] = useState('');
+  const [mobile, setMobile] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
@@ -32,7 +33,7 @@ const Login = () => {
   const [modalType, setModalType] = useState('info');
 
   /* ─── Validation feedback ─── */
-  const [emailError, setEmailError] = useState('');
+  const [mobileError, setMobileError] = useState('');
   const [passError, setPassError] = useState('');
 
   /* ─── Rate limiting ─── */
@@ -43,10 +44,10 @@ const Login = () => {
 
   const navigate = useNavigate();
 
-  /* ════ LOAD REMEMBERED EMAIL ════ */
+  /* ════ LOAD REMEMBERED MOBILE ════ */
   useEffect(() => {
-    const saved = localStorage.getItem('rememberedEmail');
-    if (saved) { setEmail(saved); setRememberMe(true); }
+    const saved = localStorage.getItem('rememberedMobile');
+    if (saved) { setMobile(saved); setRememberMe(true); }
 
     const savedLockout = sessionStorage.getItem('loginLockoutEnd');
     if (savedLockout) {
@@ -122,14 +123,16 @@ const Login = () => {
 
   const getFirebaseAuthError = (code) => {
     const map = {
-      'auth/user-not-found': 'No account found with this email address.',
+      'auth/user-not-found': 'No account found with this mobile number.',
       'auth/wrong-password': 'Incorrect password. Please try again.',
-      // Returned for both a bad password and an unknown email when email
-      // enumeration protection is on (the default for new Firebase projects).
-      'auth/invalid-credential': 'Invalid email or password. Please try again.',
-      'auth/invalid-login-credentials': 'Invalid email or password. Please try again.',
+      // Firebase returns this for BOTH an unregistered number and a wrong
+      // password when email enumeration protection is on (the default). The
+      // wording stays deliberately ambiguous so it cannot be used to discover
+      // which mobile numbers are registered.
+      'auth/invalid-credential': 'Incorrect mobile number or password. Please try again.',
+      'auth/invalid-login-credentials': 'Incorrect mobile number or password. Please try again.',
       'auth/missing-password': 'Please enter your password.',
-      'auth/invalid-email': 'Please enter a valid email address.',
+      'auth/invalid-email': 'Please enter a valid 10-digit mobile number.',
       'auth/user-disabled': 'This account has been disabled. Contact your administrator.',
       'auth/too-many-requests': 'Too many failed attempts. Please try again later.',
       'auth/network-request-failed': 'Network error. Please check your connection.',
@@ -137,9 +140,9 @@ const Login = () => {
       // Raised when the Email/Password provider is not enabled on the Firebase
       // project — a console configuration problem, not a user mistake.
       'auth/configuration-not-found':
-        'Email sign-in is not enabled for this portal yet. Please contact your administrator.',
+        'Sign-in is not enabled for this portal yet. Please contact your administrator.',
       'auth/operation-not-allowed':
-        'Email sign-in is not enabled for this portal yet. Please contact your administrator.',
+        'Sign-in is not enabled for this portal yet. Please contact your administrator.',
     };
     return map[code] || 'Authentication failed. Please try again.';
   };
@@ -151,33 +154,33 @@ const Login = () => {
   /* ════ LOGIN SUBMIT ════ */
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
-    setEmailError(''); setPassError('');
+    setMobileError(''); setPassError('');
 
     if (isLocked) return;
 
     let valid = true;
-    const inputVal = email.trim();
-    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inputVal);
+    const nationalNumber = normalizeMobile(mobile);
 
-    if (!isEmail) {
-      // Firebase Authentication signs in by email address. Phone numbers used to
-      // work through the old Flask backend, which no longer handles auth.
-      setEmailError(
-        /^[0-9+\-\s]{7,15}$/.test(inputVal)
-          ? 'Please sign in with your registered email address, not your phone number.'
-          : 'Please enter a valid email address.'
-      );
+    if (!nationalNumber) {
+      setMobileError('Please enter a valid 10-digit mobile number.');
       valid = false;
     }
-    if (password.length < 6) {
-      setPassError('Password must be at least 6 characters.');
+    if (!password) {
+      setPassError('Please enter your password.');
       valid = false;
     }
     if (!valid) return;
 
     setLoading(true);
     try {
-      const credential = await signInWithEmailAndPassword(auth, inputVal, password);
+      // The mobile number is mapped to a deterministic Firebase Auth identifier.
+      // Firebase verifies the password on its own servers — this app never sees,
+      // stores or hashes it. See services/phoneIdentity.js.
+      const credential = await signInWithEmailAndPassword(
+        auth,
+        mobileToAuthId(nationalNumber),
+        password
+      );
       const firebaseUser = credential.user;
 
       // Resolve the account's role from Firestore. Admin records take priority.
@@ -207,9 +210,9 @@ const Login = () => {
       sessionStorage.removeItem('loginAttempts');
       sessionStorage.removeItem('loginLockoutEnd');
 
-      // Remember the email if requested (never the password)
-      if (rememberMe) localStorage.setItem('rememberedEmail', inputVal);
-      else localStorage.removeItem('rememberedEmail');
+      // Remember the mobile number if requested (never the password)
+      if (rememberMe) localStorage.setItem('rememberedMobile', nationalNumber);
+      else localStorage.removeItem('rememberedMobile');
 
       // AuthContext's onAuthStateChanged listener loads the profile from here.
       navigate(role === 'admin' ? '/admin' : '/student', { replace: true });
@@ -357,32 +360,35 @@ const Login = () => {
 
             {/* LOGIN FORM */}
             <form onSubmit={handleLoginSubmit} noValidate className="animated-form">
-              {/* Email */}
-              <div style={{ marginBottom: emailError ? 10 : 20 }}>
-                <label style={labelStyle} htmlFor="email">Email Address</label>
-                <div className={`input-group-relative ${emailError ? 'error-border' : email && !emailError ? 'success-border' : ''}`}>
+              {/* Mobile Number */}
+              <div style={{ marginBottom: mobileError ? 10 : 20 }}>
+                <label style={labelStyle} htmlFor="mobile">Mobile Number</label>
+                <div className={`input-group-relative ${mobileError ? 'error-border' : isValidMobile(mobile) ? 'success-border' : ''}`}>
                   <div className="input-icon-left">
-                    <Mail size={16} />
+                    <Smartphone size={16} />
                   </div>
                   <input
-                    id="email"
+                    id="mobile"
                     className="premium-input"
-                    type="email"
-                    placeholder="Enter your registered email"
-                    value={email}
-                    onChange={e => { setEmail(e.target.value); setEmailError(''); }}
+                    type="tel"
+                    inputMode="numeric"
+                    placeholder="Enter your 10-digit mobile number"
+                    value={mobile}
+                    // Digits only, capped at 10 — matches the registered format.
+                    onChange={e => { setMobile(e.target.value.replace(/\D/g, '').slice(0, 10)); setMobileError(''); }}
                     disabled={isLocked}
-                    autoComplete="username"
+                    autoComplete="tel"
+                    maxLength={10}
                     required
                     style={{ cursor: isLocked ? 'not-allowed' : 'text', paddingLeft: '48px', paddingRight: '18px' }}
                   />
-                  {email && !emailError && (
+                  {isValidMobile(mobile) && !mobileError && (
                     <div style={{ paddingRight: 18, display: 'flex', alignItems: 'center', color: '#10B981', flexShrink: 0 }}>
                       <Check size={15} />
                     </div>
                   )}
                 </div>
-                {emailError && <p style={errorStyle}>{emailError}</p>}
+                {mobileError && <p style={errorStyle}>{mobileError}</p>}
               </div>
 
               {/* Password */}

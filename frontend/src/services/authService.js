@@ -8,8 +8,6 @@ import {
   EmailAuthProvider,
   reauthenticateWithCredential,
   updatePassword,
-  updateEmail,
-  sendPasswordResetEmail,
 } from "firebase/auth";
 import { auth } from "../firebase";
 
@@ -61,25 +59,19 @@ export const changeOwnPassword = async (currentPassword, newPassword) => {
   return true;
 };
 
-/** Change the signed-in user's email address (requires the current password). */
-export const changeOwnEmail = async (currentPassword, newEmail) => {
-  const user = auth.currentUser;
-  if (!user) throw new Error("You are not signed in.");
-  if (!user.email) throw new Error("This account has no email address linked.");
-
-  const credential = EmailAuthProvider.credential(user.email, currentPassword);
-  await reauthenticateWithCredential(user, credential);
-  await updateEmail(user, newEmail);
-  return true;
-};
-
-/** Send a password-reset email (used by admins for student accounts). */
-export const sendResetEmail = (email) => sendPasswordResetEmail(auth, email);
+/*
+ * Deliberately not provided here:
+ *
+ *   • sendPasswordResetEmail — sign-in identifiers are derived from the mobile
+ *     number and are undeliverable by design, so a reset mail has nowhere to go.
+ *     Resets are an administrator action: backend/reset_password.py.
+ *   • updateEmail — the identifier IS the identity. Changing it would silently
+ *     move the account to a different mobile number. Admins change the mobile
+ *     number through the Admin SDK instead.
+ */
 
 export default {
   changeOwnPassword,
-  changeOwnEmail,
-  sendResetEmail,
   validatePasswordStrength,
   describeAuthError,
 };

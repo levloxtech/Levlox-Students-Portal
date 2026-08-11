@@ -10,8 +10,9 @@ import {
   browserLocalPersistence,
   setPersistence,
   initializeAuth,
+  connectAuthEmulator,
 } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
@@ -42,6 +43,23 @@ const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
+
+/*
+ * Local development against the Firebase Emulator Suite.
+ *
+ * Opt in with VITE_USE_FIREBASE_EMULATOR=true in frontend/.env.local. Production
+ * builds never set it, so this branch is dead code there. Emulators run the same
+ * Auth and Firestore behaviour locally without touching the live project.
+ */
+if (import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true') {
+  const authHost = import.meta.env.VITE_EMULATOR_AUTH_URL || 'http://127.0.0.1:9099';
+  const firestoreHost = import.meta.env.VITE_EMULATOR_FIRESTORE_HOST || '127.0.0.1';
+  const firestorePort = Number(import.meta.env.VITE_EMULATOR_FIRESTORE_PORT || 8080);
+
+  connectAuthEmulator(auth, authHost, { disableWarnings: true });
+  connectFirestoreEmulator(db, firestoreHost, firestorePort);
+  console.info(`[Firebase] Using local emulators — Auth ${authHost}, Firestore ${firestoreHost}:${firestorePort}`);
+}
 
 // Keep the session across reloads/tabs. Fire-and-forget: onAuthStateChanged
 // still resolves correctly if this rejects (e.g. storage blocked in private mode).

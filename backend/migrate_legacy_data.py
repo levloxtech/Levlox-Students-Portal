@@ -28,6 +28,8 @@ import firebase_init
 from firebase_admin import auth as firebase_auth
 from firebase_admin import firestore
 
+from phone_identity import mobile_to_auth_id, normalize_mobile
+
 # Legacy collection name -> current collection name.
 COLLECTION_RENAMES = {
     "recorded_classes": "recordedClasses",
@@ -90,54 +92,61 @@ def migrate_people(db, source: str, apply: bool, create_missing: bool) -> None:
     """
     Re-key students/admins onto their Firebase Auth uid.
 
-    Documents already keyed by a valid uid are left in place (and simply have
-    any stored credentials stripped).
+    The portal signs in by mobile number, so the Auth account is looked up by
+    the identifier derived from the record's phone field. Documents already
+    keyed by a valid uid are left in place (and simply have any stored
+    credentials stripped).
     """
     docs = list(db.collection(source).stream())
     print(f"\n{source}: {len(docs)} document(s)")
 
     for doc in docs:
         data = doc.to_dict() or {}
-        email = (data.get("email") or "").strip().lower()
         had_secrets = bool(SECRET_FIELDS & set(data.keys()))
 
-        if not email:
-            print(f"  ! {doc.id}: no email — cannot map to a Firebase Auth user. SKIPPED.")
+        national = normalize_mobile(data.get("phone"))
+        if not national:
+            print(f"  ! {doc.id}: no usable mobile number — cannot map to a sign-in "
+                  f"identity. Add a valid `phone` and re-run. SKIPPED.")
             continue
 
-        uid = None
+        auth_id = mobile_to_auth_id(national)
+        label = f"{national} ({data.get('name') or 'unnamed'})"
+
         try:
-            uid = firebase_auth.get_user_by_email(email).uid
+            uid = firebase_auth.get_user_by_email(auth_id).uid
         except firebase_auth.UserNotFoundError:
-            if create_missing:
-                if apply:
-                    uid = firebase_auth.create_user(
-                        email=email,
-                        display_name=data.get("name") or "",
-                        # A temporary password the holder must reset via email.
-                        password=f"Lvx-{doc.id[:8]}-Temp1",
-                    ).uid
-                    print(f"  + created Auth user for {email} (uid={uid})")
-                else:
-                    print(f"  + would create Auth user for {email}")
-                    continue
-            else:
-                print(f"  ! {email}: no Firebase Auth user. Re-run with "
+            if not create_missing:
+                print(f"  ! {label}: no Firebase Auth account. Re-run with "
                       f"--create-missing-auth-users, or create it manually. SKIPPED.")
                 continue
+            if not apply:
+                print(f"  + would create Auth account for {label}")
+                continue
+            # A temporary password; the holder is forced to change it at sign-in.
+            uid = firebase_auth.create_user(
+                email=auth_id,
+                display_name=data.get("name") or "",
+                password=f"Lvx-{national}-Temp1",
+            ).uid
+            print(f"  + created Auth account for {label} (uid={uid}) "
+                  f"— temporary password: Lvx-{national}-Temp1")
 
         if uid == doc.id:
             note = " (stripping stored credentials)" if had_secrets else " (already current)"
-            print(f"  = {email}: uid matches document id{note}")
+            print(f"  = {label}: uid matches document id{note}")
             if apply and had_secrets:
                 db.collection(source).document(doc.id).set(clean(data))
             continue
 
-        print(f"  > {email}: {doc.id} -> {uid}"
+        print(f"  > {label}: {doc.id} -> {uid}"
               + (" (stripping stored credentials)" if had_secrets else ""))
         if apply:
             payload = clean(data)
+            payload["phone"] = national
             payload["legacyId"] = doc.id
+            if source == "students":
+                payload["mustChangePassword"] = True
             db.collection(source).document(uid).set(payload, merge=True)
             # The old document is left untouched so nothing is lost; delete it
             # manually once the migration has been verified in the console.
