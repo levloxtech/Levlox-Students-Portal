@@ -1,8 +1,4 @@
-flask
-flask-cors
-pymongo[srv]
-pyjwt
-bcrypt
-python-dotenv
+# Admin-only tooling (see seed_admin.py). The portal itself runs entirely on
+# the Firebase Web SDK from the React frontend — no server is deployed.
 firebase-admin
-gunicorn
+python-dotenv

@@ -1,0 +1,69 @@
+rules_version = '2';
+
+/**
+ * Firebase Storage rules — Levlox Student Portal.
+ *
+ * Uploads are size- and type-constrained so a signed-in user cannot use the
+ * bucket as free unlimited storage. Firestore only ever stores the resulting
+ * download URL, never the file bytes.
+ */
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid));
+    }
+
+    function isImageUnder(mb) {
+      return request.resource.contentType.matches('image/.*') &&
+             request.resource.size < mb * 1024 * 1024;
+    }
+
+    function isDocumentUnder(mb) {
+      return request.resource.size < mb * 1024 * 1024;
+    }
+
+    // Profile photos — a user writes only their own avatar.
+    match /students/{userId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if (isOwner(userId) && isImageUnder(3)) || isAdmin();
+    }
+
+    // Assignment submissions — a student writes only their own file.
+    match /assignments/{assignmentId}/submissions/{studentId} {
+      allow read: if isOwner(studentId) || isAdmin();
+      allow write: if (isOwner(studentId) && isDocumentUnder(15)) || isAdmin();
+    }
+
+    // Certificates issued to a student — admin-written, student-readable.
+    match /certificates/{userId}/{fileName} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // Shared course assets — any signed-in user reads, only admins write.
+    match /courses/{courseId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /notes/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Anything not matched above is denied.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

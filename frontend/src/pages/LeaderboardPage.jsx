@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { API_BASE } from '../utils/api';
 import { 
   Crown, Award, Star, Flame, Zap, Trophy,
   Users, Calendar, Filter, Mic, ClipboardList, MessageSquare
 } from 'lucide-react';
-
+import { getLeaderboard, classifyFirestoreError } from '../services/firebaseService';
 
 const CustomPodiumMedal = ({ rank, size = 22 }) => {
   const colors = {
@@ -27,37 +26,41 @@ const CustomPodiumMedal = ({ rank, size = 22 }) => {
   );
 };
 
-const LeaderboardPage = ({ token, user }) => {
+const LeaderboardPage = ({ user, currentUid = null, leaderboard = null }) => {
   const [activeTab, setActiveTab] = useState('overall');
-  const [leaderboardData, setLeaderboardData] = useState([]);
-  const [loading, setLoading] = useState(false);
-  
-  useEffect(() => {
-    fetchLeaderboard();
-  }, [activeTab]);
+  const [leaderboardData, setLeaderboardData] = useState(leaderboard || []);
+  const [loading, setLoading] = useState(!leaderboard);
+  const [error, setError] = useState(null);
 
   const fetchLeaderboard = async () => {
     setLoading(true);
+    setError(null);
     try {
-      const params = new URLSearchParams({
-        month: 'all',
-        week: 'all'
-      });
-      
-      const endpoint = `${API_BASE}/student/leaderboard/${activeTab === 'activity' ? 'live-class-activity' : activeTab}`;
-      const res = await fetch(`${endpoint}?${params}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setLeaderboardData(data || []);
-      }
+      const data = await getLeaderboard();
+      setLeaderboardData(data || []);
     } catch (e) {
-      console.error(e);
+      console.error('[Leaderboard] load failed:', e);
+      setError(classifyFirestoreError(e).message);
     } finally {
       setLoading(false);
     }
   };
+
+  /*
+   * Switching tabs is a client-side view change over the same ranking data —
+   * it must not re-issue the query. Only fetch when the dashboard did not
+   * already supply the list.
+   */
+  useEffect(() => {
+    if (leaderboard) {
+      setLeaderboardData(leaderboard);
+      setLoading(false);
+      return;
+    }
+    fetchLeaderboard();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leaderboard]);
+
 
   const getBadgeIcon = (badge) => {
     if (!badge) return <Award size={14} color="#10B981" />;
@@ -69,9 +72,18 @@ const LeaderboardPage = ({ token, user }) => {
     return <Award size={14} color="#10B981" />;
   };
 
-  const topThree = leaderboardData.slice(0, 3);
-  const totalStudents = leaderboardData.length;
-  const currentStudentRank = leaderboardData.findIndex(s => s.is_current) + 1;
+  /*
+   * Leaderboard docs are keyed by the student's uid. Flag the signed-in
+   * student's row here — Firestore does not store a per-viewer `is_current`.
+   */
+  const rows = React.useMemo(
+    () => leaderboardData.map(r => ({ ...r, is_current: !!currentUid && r.id === currentUid })),
+    [leaderboardData, currentUid]
+  );
+
+  const topThree = rows.slice(0, 3);
+  const totalStudents = rows.length;
+  const currentStudentRank = rows.findIndex(s => s.is_current) + 1;
 
   return (
     <div className="animate-fade-in leaderboard-page-container" style={{ padding: '4px 0' }}>
@@ -116,7 +128,7 @@ const LeaderboardPage = ({ token, user }) => {
 
 
       {/* TOP PODIUM (DESKTOP) */}
-      {leaderboardData.length > 0 && (
+      {rows.length > 0 && (
         <div className="desktop-only" style={{ 
           display: 'grid', 
           gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
@@ -211,7 +223,7 @@ const LeaderboardPage = ({ token, user }) => {
       )}
 
       {/* TOP PODIUM (MOBILE) */}
-      {leaderboardData.length > 0 && (
+      {rows.length > 0 && (
         <div className="mobile-only mobile-podium-list" style={{ display: 'none', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
           {/* 1st Place */}
           {topThree[0] && (
@@ -359,7 +371,19 @@ const LeaderboardPage = ({ token, user }) => {
           <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-secondary)', fontWeight: 600 }}>
             Recalculating and sorting rankings...
           </div>
-        ) : leaderboardData.length === 0 ? (
+        ) : error ? (
+          <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-secondary)' }}>
+            <p style={{ margin: '0 0 14px', fontWeight: 600, color: '#991B1B' }}>{error}</p>
+            <button
+              type="button"
+              onClick={fetchLeaderboard}
+              className="btn btn-primary"
+              style={{ padding: '9px 20px' }}
+            >
+              Try again
+            </button>
+          </div>
+        ) : rows.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-secondary)' }}>
             <Trophy size={32} style={{ opacity: 0.3, marginBottom: 8 }} />
             <p style={{ margin: 0, fontWeight: 600 }}>No ranks found matching the filters.</p>
@@ -401,7 +425,7 @@ const LeaderboardPage = ({ token, user }) => {
                 </tr>
               </thead>
               <tbody>
-                {leaderboardData.map((row, index) => {
+                {rows.map((row, index) => {
                   const medal = (row.rank === 1 || row.rank === 2 || row.rank === 3)
                     ? <CustomPodiumMedal rank={row.rank} size={22} />
                     : `#${row.rank}`;
@@ -512,14 +536,14 @@ const LeaderboardPage = ({ token, user }) => {
           <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-secondary)', fontWeight: 600 }}>
             Sorting rankings...
           </div>
-        ) : leaderboardData.length === 0 ? (
+        ) : rows.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-secondary)' }}>
             <Trophy size={28} style={{ opacity: 0.3, marginBottom: 8 }} />
             <p style={{ margin: 0, fontWeight: 600, fontSize: 13 }}>No ranks found.</p>
           </div>
         ) : (
           <div className="mobile-ranking-list" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {leaderboardData.map((row) => {
+            {rows.map((row) => {
               const isGold = row.rank === 1;
               const isSilver = row.rank === 2;
               const isBronze = row.rank === 3;

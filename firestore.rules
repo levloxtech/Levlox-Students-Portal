@@ -1,8 +1,21 @@
 rules_version = '2';
+
+/**
+ * Firestore security rules — Levlox Student Portal.
+ *
+ * Model:
+ *   - Every request must be authenticated. There is no public data.
+ *   - An "admin" is anyone with a document at admins/{uid}.
+ *   - Students read their own records only; shared course content is readable
+ *     by any signed-in user.
+ *   - All administrative writes are admin-only.
+ *
+ * The catch-all at the bottom denies anything not explicitly matched above.
+ */
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
+    // ── Helpers ────────────────────────────────────────────────────────────
     function isAuthenticated() {
       return request.auth != null;
     }
@@ -12,62 +25,159 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isAuthenticated() && (
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
-        request.auth.token.role == 'admin'
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    /** Fields changed by this write. */
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    // ── Students ───────────────────────────────────────────────────────────
+    // A student may edit their own profile fields only. Identity, status,
+    // batch and fee amounts stay under administrative control, so a student
+    // cannot mark their own fees as paid or reactivate a disabled account.
+    match /students/{studentId} {
+      allow get: if isOwner(studentId) || isAdmin();
+      allow list: if isAdmin();
+      allow create, delete: if isAdmin();
+
+      allow update: if isAdmin() || (
+        isOwner(studentId) &&
+        changedKeys().hasOnly([
+          'name', 'profile_pic', 'current_location', 'permanent_address',
+          'college', 'company', 'feesStatus', 'mustChangePassword', 'updatedAt'
+        ]) &&
+        // Requesting payment is allowed; declaring yourself paid is not.
+        (!changedKeys().hasAny(['feesStatus']) ||
+          request.resource.data.feesStatus == 'Pending Payment') &&
+        // The temporary-password flag may only be cleared, never set.
+        (!changedKeys().hasAny(['mustChangePassword']) ||
+          request.resource.data.mustChangePassword == false)
       );
     }
 
-    // Students Collection
-    match /students/{studentId} {
-      allow read: if isOwner(studentId) || isAdmin();
-      allow write: if isAdmin();
-      allow update: if isOwner(studentId) && 
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'role', 'batch']);
-    }
-
-    // Admins Collection
+    // ── Admins ─────────────────────────────────────────────────────────────
+    // Self-read is required to answer "am I an admin?" at sign-in.
+    // Creating admins is a server-side operation (see backend/seed_admin.py).
     match /admins/{adminId} {
-      allow read: if isOwner(adminId) || isAdmin();
-      allow write: if isAdmin();
+      allow get: if isOwner(adminId) || isAdmin();
+      allow list: if isAdmin();
+      allow update: if isOwner(adminId) || isAdmin();
+      allow create, delete: if isAdmin();
     }
 
-    // Courses, Recorded Classes, Study Materials
+    // ── Shared course content (readable by any signed-in user) ─────────────
     match /courses/{courseId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
 
-    match /recorded_classes/{classId} {
+    match /liveClasses/{classId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
 
-    match /study_materials/{materialId} {
+    match /recordedClasses/{classId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
 
-    // Attendance Records
+    match /studyMaterials/{materialId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /announcements/{announcementId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /assignments/{assignmentId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /leaderboard/{entryId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // ── Batches ────────────────────────────────────────────────────────────
+    // Students need batch names for display; only admins manage rosters.
+    match /batches/{batchId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // ── Per-student records ────────────────────────────────────────────────
+    // On a list query Firestore evaluates the rule against every candidate
+    // document, so a query that is not filtered to the caller's own uid fails
+    // outright. That is what confines students to their own rows.
+    function ownsStudentRow() {
+      return isAuthenticated() && resource.data.studentId == request.auth.uid;
+    }
+
     match /attendance/{attendanceId} {
-      allow read: if isAuthenticated() && (resource.data.studentId == request.auth.uid || isAdmin());
+      allow get, list: if isAdmin() || ownsStudentRow();
       allow write: if isAdmin();
     }
 
-    // Notifications
+    match /submissions/{submissionId} {
+      allow get, list: if isAdmin() || ownsStudentRow();
+      // A student may submit their own work but never edit a grade afterwards.
+      allow create: if isAdmin() ||
+        (isAuthenticated() && request.resource.data.studentId == request.auth.uid);
+      allow update, delete: if isAdmin();
+    }
+
+    match /enrollments/{enrollmentId} {
+      allow get, list: if isAdmin() || ownsStudentRow();
+      allow write: if isAdmin();
+    }
+
+    match /payments/{paymentId} {
+      allow get, list: if isAdmin() || ownsStudentRow();
+      allow write: if isAdmin();
+    }
+
+    match /activityScores/{scoreId} {
+      allow get, list: if isAdmin() || ownsStudentRow();
+      allow write: if isAdmin();
+    }
+
+    match /activityPresets/{presetId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /analytics/{studentId} {
+      allow read: if isOwner(studentId) || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // ── Notifications ──────────────────────────────────────────────────────
+    // The recipient may only flip their own `read` flag.
     match /notifications/{notificationId} {
-      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow write: if isAdmin();
-      allow update: if isOwner(resource.data.userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow get, list: if isAdmin() ||
+        (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        isAuthenticated() &&
+        resource.data.userId == request.auth.uid &&
+        changedKeys().hasOnly(['read', 'updatedAt'])
+      );
     }
 
-    // Leaderboard
-    match /leaderboard/{docId} {
+    // ── Settings ───────────────────────────────────────────────────────────
+    // settings/global is portal-wide config; settings/{uid} is personal.
+    match /settings/{settingsId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow write: if isAdmin() || (settingsId != 'global' && isOwner(settingsId));
     }
 
-    // Fallback security rule
+    // ── Default deny ───────────────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
     }

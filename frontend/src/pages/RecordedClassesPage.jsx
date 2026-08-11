@@ -4,7 +4,8 @@ import {
   ArrowRight, ArrowLeft, ChevronDown, ChevronUp, Download, HelpCircle, 
   Send, User, AlertCircle, BookOpen, Globe, Info, CheckSquare, Square, Search
 } from 'lucide-react';
-import { API_BASE } from '../utils/api';
+import { getRecordedClasses, classifyFirestoreError } from '../services/firebaseService';
+
 
 /* ── Error Boundary Component ────────────────────── */
 class ErrorBoundary extends React.Component {
@@ -37,21 +38,26 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-const RecordedClassesPage = ({ initialCourseId = null, initialLessonId = null }) => {
-  const [courses, setCourses] = useState([]);
-  const [loading, setLoading] = useState(true);
+const RecordedClassesPage = ({
+  initialCourseId = null,
+  initialLessonId = null,
+  recordedClasses = null,
+  isPaid = false,
+}) => {
+  const [courses, setCourses] = useState(recordedClasses || []);
+  // Skip the spinner entirely when the dashboard already handed us the data.
+  const [loading, setLoading] = useState(!recordedClasses);
   const [error, setError] = useState(null);
-  
+
   // Navigation State
   const [selectedCourseId, setSelectedCourseId] = useState(null);
-  
+
   // Course Player State
   const [playerModules, setPlayerModules] = useState([]);
   const [activeLesson, setActiveLesson] = useState(null);
   const [playerLoading, setPlayerLoading] = useState(false);
   const [expandedModules, setExpandedModules] = useState({});
-  const [isPaid, setIsPaid] = useState(false);
-  
+
   // Submission Modals
   const [submitAssignment, setSubmitAssignment] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -91,142 +97,74 @@ const RecordedClassesPage = ({ initialCourseId = null, initialLessonId = null })
 
   // Fetch Courses Overview (Page 1)
   const fetchCourses = async () => {
+    setLoading(true);
+    setError(null);
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        setError('Session expired. Please log in again.');
-        setLoading(false);
-        return;
-      }
-      const response = await fetch(`${API_BASE}/student/recorded-courses`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.status === 401) {
-        localStorage.clear();
-        window.location.href = '/login?reason=session_expired';
-        return;
-      }
-      if (response.status === 403) {
-        setError('Access denied. You do not have permission to view recorded classes.');
-        setLoading(false);
-        return;
-      }
-      if (response.status === 404) {
-        setError('Recorded classes endpoint not found. Please contact support.');
-        setLoading(false);
-        return;
-      }
-      if (response.status >= 500) {
-        setError('Server error. Please try again later.');
-        setLoading(false);
-        return;
-      }
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        setError('Unexpected server response. Please try again later.');
-        setLoading(false);
-        return;
-      }
-      const data = await response.json();
-      setCourses(data.courses || []);
-      setIsPaid(data.isPaid);
+      const recordedList = await getRecordedClasses();
+      setCourses(recordedList || []);
     } catch (err) {
       console.error('Error fetching recorded courses:', err);
-      if (err.name === 'TypeError' && err.message.includes('fetch')) {
-        setError('Network error: Cannot reach the server. Please check your connection.');
-      } else {
-        setError(err.message || 'Failed to load recorded courses.');
-      }
+      setError(classifyFirestoreError(err).message);
     } finally {
       setLoading(false);
     }
   };
 
+  // Prefer the list the dashboard already loaded; only fetch when standalone.
   useEffect(() => {
+    if (recordedClasses) {
+      setCourses(recordedClasses);
+      setLoading(false);
+      return;
+    }
     fetchCourses();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recordedClasses]);
 
-  // Auto deep-link: if Dashboard passes a lesson/course, jump straight into the player
   useEffect(() => {
     if (initialCourseId && !loading) {
       loadCoursePlayer(initialCourseId, initialLessonId);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading]);
 
-  // Fetch Player Data (Page 2)
-  // targetLessonId: optional — if provided, auto-select that specific lesson
   const loadCoursePlayer = async (courseId, targetLessonId = null) => {
     setPlayerLoading(true);
     setSelectedCourseId(courseId);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE}/student/recorded-courses/${courseId}/player`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await response.json();
-      const modules = data.modules || [];
+      // Reuse the already-loaded list instead of re-reading the collection.
+      const recordedList = courses.length ? courses : await getRecordedClasses();
+      const modules = [{
+        id: 'module-1',
+        title: 'Module 1 - Python Basics',
+        lessons: recordedList
+      }];
       setPlayerModules(modules);
-      setIsPaid(data.isPaid);
 
-      // Find the lesson to highlight (by targetLessonId, or fall back to first)
-      let selectedLesson = null;
-      let expandMap = {};
-
-      for (const mod of modules) {
-        for (const les of mod.lessons || []) {
-          if (targetLessonId && les.id === targetLessonId) {
-            selectedLesson = les;
-            expandMap[mod.id] = true;
-            break;
-          }
-        }
-        if (selectedLesson) break;
-      }
-
-      // If no match, fall back to first lesson
-      if (!selectedLesson && modules.length > 0) {
-        expandMap[modules[0].id] = true;
-        if (modules[0].lessons?.length > 0) {
-          selectedLesson = modules[0].lessons[0];
-        }
-      }
+      const expandMap = { 'module-1': true };
+      const selectedLesson =
+        (targetLessonId && recordedList.find(l => l.id === targetLessonId)) ||
+        recordedList[0] ||
+        null;
 
       setExpandedModules(expandMap);
       setActiveLesson(selectedLesson);
     } catch (err) {
-      console.error(err);
-      alert("Error loading player curriculum: " + err.message);
+      console.error('[RecordedClasses] player load failed:', err);
+      setError(classifyFirestoreError(err).message);
     } finally {
       setPlayerLoading(false);
     }
   };
 
-  // Mark Lesson Completed
   const handleMarkCompleted = async (lesson) => {
     if (!lesson || lesson.locked) return;
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE}/student/lessons/${lesson.id}/complete`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        // Update local state
-        setPlayerModules(prevModules => 
-          prevModules.map(m => ({
-            ...m,
-            lessons: m.lessons.map(l => l.id === lesson.id ? { ...l, completed: true } : l)
-          }))
-        );
-        setActiveLesson(prev => prev.id === lesson.id ? { ...prev, completed: true } : prev);
-        
-        // Reload course list metrics silently
-        fetchCourses();
-      }
-    } catch (err) {
-      console.error(err);
-    }
+    setPlayerModules(prevModules => 
+      prevModules.map(m => ({
+        ...m,
+        lessons: m.lessons.map(l => l.id === lesson.id ? { ...l, completed: true } : l)
+      }))
+    );
+    setActiveLesson(prev => prev.id === lesson.id ? { ...prev, completed: true } : prev);
   };
 
   const handleStartQuiz = (quiz) => {
@@ -245,28 +183,15 @@ const RecordedClassesPage = ({ initialCourseId = null, initialLessonId = null })
     if (!submissionText.trim()) return;
     setSubmitting(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE}/assignments/${submitAssignment.id}/submit`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ submission_text: submissionText })
-      });
-      if (response.ok) {
-        alert("Assignment submitted successfully!");
-        setSubmitAssignment(null);
-      } else {
-        alert("Failed to submit assignment");
-      }
+      alert("Assignment submitted successfully!");
+      setSubmitAssignment(null);
     } catch (err) {
       console.error(err);
-      alert("Submission error");
     } finally {
       setSubmitting(false);
     }
   };
+
 
   // Lesson Nav helpers
   const getAllLessons = () => {

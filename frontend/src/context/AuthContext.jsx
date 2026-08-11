@@ -1,9 +1,21 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '../firebase';
 import { getStudent, getAdmin } from '../services/firebaseService';
 
 const AuthContext = createContext(null);
+
+/** Cache key for the last known profile — used only to avoid a blank first paint. */
+const PROFILE_CACHE_KEY = 'levlox_profile_cache';
+
+const readCachedProfile = () => {
+  try {
+    const raw = localStorage.getItem(PROFILE_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
 
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
@@ -12,103 +24,154 @@ export const AuthProvider = ({ children }) => {
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (!firebaseUser) {
-        setCurrentUser(null);
-        setUserProfile(null);
-        setUserRole(null);
-        // Clear legacy localStorage
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        setAuthLoading(false);
-        return;
-      }
+  // Tracks the uid whose profile is currently loaded, so refreshProfile and the
+  // auth listener never race each other into writing a mismatched profile.
+  const loadedUidRef = useRef(null);
 
-      try {
-        setCurrentUser(firebaseUser);
+  /** Resolve a signed-in Firebase user to their Firestore profile + role. */
+  const resolveProfile = useCallback(async (uid) => {
+    // A user is either an admin or a student — check both in parallel and let
+    // the admin record win, since admins are the smaller, privileged set.
+    const [adminDoc, studentDoc] = await Promise.all([
+      getAdmin(uid).catch(() => null),
+      getStudent(uid).catch(() => null),
+    ]);
 
-        // Try admin first (smaller collection), then student
-        const [adminDoc, studentDoc] = await Promise.all([
-          getAdmin(firebaseUser.uid).catch(() => null),
-          getStudent(firebaseUser.uid).catch(() => null),
-        ]);
-
-        let profile = null;
-        let role = null;
-
-        if (adminDoc) {
-          profile = adminDoc;
-          role = 'admin';
-        } else if (studentDoc) {
-          profile = studentDoc;
-          role = studentDoc.role || 'student';
-        }
-
-        setUserProfile(profile);
-        setUserRole(role);
-
-        // Keep localStorage in sync for legacy code paths still reading it
-        if (profile) {
-          localStorage.setItem('user', JSON.stringify({ ...profile, role }));
-        }
-        // Store Firebase ID token
-        const idToken = await firebaseUser.getIdToken();
-        localStorage.setItem('token', idToken);
-      } catch (err) {
-        console.error('[AuthContext] Error loading user profile:', err);
-        setAuthError(err.message);
-        setUserProfile(null);
-        setUserRole(null);
-      } finally {
-        setAuthLoading(false);
-      }
-    });
-
-    return () => unsubscribe();
+    if (adminDoc) return { profile: adminDoc, role: 'admin' };
+    if (studentDoc) return { profile: studentDoc, role: studentDoc.role || 'student' };
+    return { profile: null, role: null };
   }, []);
 
-  const logout = async () => {
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      async (firebaseUser) => {
+        if (!firebaseUser) {
+          loadedUidRef.current = null;
+          setCurrentUser(null);
+          setUserProfile(null);
+          setUserRole(null);
+          setAuthError(null);
+          localStorage.removeItem(PROFILE_CACHE_KEY);
+          setAuthLoading(false);
+          return;
+        }
+
+        setCurrentUser(firebaseUser);
+
+        // Paint immediately from cache when it belongs to this same user; the
+        // authoritative read below still runs and overwrites it.
+        const cached = readCachedProfile();
+        if (cached?.uid === firebaseUser.uid) {
+          setUserProfile(cached.profile);
+          setUserRole(cached.role);
+        }
+
+        try {
+          const { profile, role } = await resolveProfile(firebaseUser.uid);
+
+          // A newer auth event may have landed while this awaited — ignore stale results.
+          if (auth.currentUser?.uid !== firebaseUser.uid) return;
+
+          loadedUidRef.current = firebaseUser.uid;
+          setUserProfile(profile);
+          setUserRole(role);
+          setAuthError(null);
+
+          if (profile && role) {
+            localStorage.setItem(
+              PROFILE_CACHE_KEY,
+              JSON.stringify({ uid: firebaseUser.uid, profile, role })
+            );
+          } else {
+            // Signed in to Firebase Auth but no matching Firestore record.
+            localStorage.removeItem(PROFILE_CACHE_KEY);
+            setAuthError('no_profile');
+          }
+        } catch (err) {
+          console.error('[AuthContext] Error loading user profile:', err);
+          setAuthError(err?.code || err?.message || 'profile_load_failed');
+        } finally {
+          setAuthLoading(false);
+        }
+      },
+      (err) => {
+        console.error('[AuthContext] Auth state error:', err);
+        setAuthError(err?.code || 'auth_state_error');
+        setAuthLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [resolveProfile]);
+
+  const logout = useCallback(async () => {
     try {
       await signOut(auth);
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
     } catch (err) {
       console.error('[AuthContext] logout error:', err);
+    } finally {
+      // Clear locally regardless — a failed network sign-out must not leave the
+      // UI showing a signed-in state.
+      loadedUidRef.current = null;
+      setCurrentUser(null);
+      setUserProfile(null);
+      setUserRole(null);
+      localStorage.removeItem(PROFILE_CACHE_KEY);
     }
-  };
+  }, []);
 
-  const refreshProfile = async () => {
-    if (!currentUser) return;
+  const refreshProfile = useCallback(async () => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return null;
     try {
-      const [adminDoc, studentDoc] = await Promise.all([
-        getAdmin(currentUser.uid).catch(() => null),
-        getStudent(currentUser.uid).catch(() => null),
-      ]);
-      const profile = adminDoc || studentDoc;
-      const role = adminDoc ? 'admin' : (studentDoc?.role || 'student');
+      const { profile, role } = await resolveProfile(uid);
+      if (auth.currentUser?.uid !== uid) return null;
+
       setUserProfile(profile);
       setUserRole(role);
-      if (profile) {
-        localStorage.setItem('user', JSON.stringify({ ...profile, role }));
+      if (profile && role) {
+        localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify({ uid, profile, role }));
       }
+      return profile;
     } catch (err) {
       console.error('[AuthContext] refreshProfile error:', err);
+      setAuthError(err?.code || 'profile_refresh_failed');
+      return null;
     }
-  };
+  }, [resolveProfile]);
 
-  const value = {
-    currentUser,
-    userProfile,
-    userRole,
-    authLoading,
-    authError,
-    logout,
-    refreshProfile,
-    isAdmin: userRole === 'admin',
-    isStudent: userRole === 'student',
-    uid: currentUser?.uid || null,
-  };
+  /** Merge fields into the in-memory profile after a successful Firestore write. */
+  const applyProfilePatch = useCallback((patch) => {
+    setUserProfile((prev) => {
+      const next = { ...(prev || {}), ...patch };
+      const uid = auth.currentUser?.uid;
+      if (uid) {
+        setUserRole((role) => {
+          localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify({ uid, profile: next, role }));
+          return role;
+        });
+      }
+      return next;
+    });
+  }, []);
+
+  const value = useMemo(
+    () => ({
+      currentUser,
+      userProfile,
+      userRole,
+      authLoading,
+      authError,
+      logout,
+      refreshProfile,
+      applyProfilePatch,
+      isAdmin: userRole === 'admin',
+      isStudent: userRole === 'student',
+      uid: currentUser?.uid || null,
+    }),
+    [currentUser, userProfile, userRole, authLoading, authError, logout, refreshProfile, applyProfilePatch]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

@@ -48,11 +48,28 @@ import {
   addDocument,
   setDocument,
   getDocuments,
+  getDocument,
   classifyFirestoreError,
+  getBatches,
+  addBatch,
+  updateBatch,
+  deleteBatch as deleteBatchDoc,
+  assignStudentsToBatch,
+  getStudentsByBatch,
+  getActivityLogs,
+  awardActivityScore,
+  getActivityPresets,
+  addActivityPreset,
+  deleteActivityPreset,
+  uploadProfileImage,
 } from '../services/firebaseService';
-import { createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
-import { auth } from '../firebase';
-import { serverTimestamp } from 'firebase/firestore';
+import {
+  changeOwnPassword,
+  sendResetEmail,
+  validatePasswordStrength,
+  describeAuthError,
+} from '../services/authService';
+import { createAuthUserDetached } from '../firebase';
 
 
 const CustomDropdown = ({ label, value, options, onChange, placeholder, width = '120px' }) => {
@@ -167,14 +184,20 @@ const ExportDropdown = ({ onExportCSV, onExportExcel, onExportPDF }) => {
   );
 };
 
+/**
+ * Login URL used in the credential messages an admin sends to a new student.
+ * Derived from wherever the dashboard is actually running, so it is correct in
+ * local development and on the deployed domain without a hardcoded host.
+ */
+const loginUrl = `${window.location.origin}/login`;
+
 const AdminDashboard = () => {
   const navigate = useNavigate();
-  const { currentUser, userProfile, logout: authLogout, uid } = useAuth();
-  const user = userProfile || JSON.parse(localStorage.getItem('user') || '{}');
+  const { currentUser, userProfile, logout: authLogout, uid, applyProfilePatch } = useAuth();
+  const user = userProfile || {};
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [students, setStudents] = useState([]);
   const [sessionSearch, setSessionSearch] = useState('');
   const [dateFilter, setDateFilter] = useState('Today');
   const [customStartDate, setCustomStartDate] = useState('');
@@ -182,8 +205,22 @@ const AdminDashboard = () => {
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // ─── Parallel initial data load via Firestore ───────────────────────────────
-  const { data: adminData = null } = useQuery({
+  // Batches are loaded separately so the roster editor and the stats card can
+  // refresh independently.
+  const { data: firestoreBatches = [] } = useQuery({
+    queryKey: ['adminBatches'],
+    queryFn: getBatches,
+    staleTime: 3 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
+  // ─── Parallel initial data load from Firestore ────────────────────────────
+  const {
+    data: adminData = null,
+    isPending: adminLoading,
+    error: adminError,
+    refetch: refetchAdminData,
+  } = useQuery({
     queryKey: ['adminDashboardAll'],
     queryFn: async () => {
       const [
@@ -196,31 +233,17 @@ const AdminDashboard = () => {
         paymentList,
         globalSettings,
       ] = await Promise.all([
-        listStudents().catch(() => []),
-        getLiveClasses().catch(() => []),
-        getRecordedClasses().catch(() => []),
-        getAnnouncements().catch(() => []),
-        getCourses().catch(() => []),
-        getLeaderboard().catch(() => []),
-        getAllPayments().catch(() => []),
+        listStudents(),
+        getLiveClasses(),
+        getRecordedClasses(),
+        getAnnouncements(),
+        getCourses(),
+        getLeaderboard(),
+        getAllPayments(),
         getGlobalSettings().catch(() => ({})),
       ]);
 
-      const totalStudents = studentList.length;
-      const activeStudents = studentList.filter(s => s.status === 'active' || s.status === 'Active').length;
-      const feesPending = studentList.filter(s => s.feesStatus !== 'Paid').length;
-      const stats = {
-        total_students: totalStudents,
-        active_students: activeStudents,
-        fees_pending: feesPending,
-        live_classes_today: liveClassList.filter(c => c.status === 'live' || c.status === 'Live').length,
-        total_recorded: recordedList.length,
-        total_announcements: announcementList.length,
-        total_courses: courseList.length,
-      };
-
       return {
-        stats,
         studentList,
         liveClassList,
         recordedList,
@@ -236,17 +259,52 @@ const AdminDashboard = () => {
   });
 
   // Derive named data from adminData
-  const stats = adminData?.stats || null;
   const liveClasses = adminData?.liveClassList || [];
   const recordedClasses = adminData?.recordedList || [];
   const announcements = adminData?.announcementList || [];
   const courses = adminData?.courseList || [];
-  const batches = []; // Batches managed via 'batches' Firestore collection
-  const { data: firestoreBatches = [] } = useQuery({
-    queryKey: ['adminBatches'],
-    queryFn: () => getDocuments('batches').catch(() => []),
-    staleTime: 3 * 60 * 1000,
-  });
+  const batches = firestoreBatches;
+  const allStudents = adminData?.studentList || [];
+
+  // Stats are computed from the data already loaded above — no extra reads.
+  const stats = React.useMemo(() => {
+    if (!adminData) return null;
+    const { studentList, liveClassList, courseList, announcementList } = adminData;
+
+    const paidStudents = studentList.filter(s => s.feesStatus === 'Paid').length;
+    const pendingStudents = studentList.length - paidStudents;
+    const totalCollected = studentList.reduce((acc, s) => acc + (parseFloat(s.feesPaidAmount) || 0), 0);
+    const totalPending = studentList.reduce((acc, s) => acc + (parseFloat(s.feesRemainingAmount) || 0), 0);
+
+    return {
+      totalStudents: studentList.length,
+      totalBatches: firestoreBatches.length,
+      liveClassesToday: liveClassList.filter(c => (c.status || '').toLowerCase() === 'live').length,
+      recordedCourses: courseList.length,
+      feesCollected: totalCollected,
+      pendingPaymentsCount: pendingStudents,
+      pendingAmount: totalPending,
+
+      recentStudents: studentList.slice(0, 5).map(s => ({
+        id: s.id,
+        name: s.name,
+        profile_pic: s.profile_pic || '',
+        course: s.course || 'Fullstack Engineering',
+        batch_name: s.batch_name || 'Not Assigned',
+        join_date: s.join_date || 'Recently'
+      })),
+      todayLiveClasses: liveClassList.slice(0, 5),
+      recentAnnouncements: announcementList.slice(0, 5),
+
+      feeOverview: {
+        totalCollected,
+        pendingAmount: totalPending,
+        paidStudents,
+        pendingStudentsCount: pendingStudents
+      },
+      recentActivity: []
+    };
+  }, [adminData, firestoreBatches]);
 
   const [selectedBatchId, setSelectedBatchId] = useState('');
   const [batchName, setBatchName] = useState('');
@@ -1569,8 +1627,6 @@ const AdminDashboard = () => {
   const [editAnnPinned, setEditAnnPinned] = useState(false);
 
   // Portal settings states
-  const [portalName, setPortalName] = useState('Levlox Student Portal');
-  const [portalLogo, setPortalLogo] = useState('');
 
   // Admin Profile and settings states
   const [adminProfileData, setAdminProfileData] = useState(null);
@@ -1593,13 +1649,12 @@ const AdminDashboard = () => {
   const [showAdminNewPassword, setShowAdminNewPassword] = useState(false);
   const [showAdminConfirmPassword, setShowAdminConfirmPassword] = useState(false);
 
-  // Admin Phone Update OTP State
+  // Admin Phone Update State
   const [isAdminUpdatingPhone, setIsAdminUpdatingPhone] = useState(false);
   const [adminTempPhone, setAdminTempPhone] = useState('');
-  const [adminPhoneOtp, setAdminPhoneOtp] = useState('');
-  const [adminPhoneOtpSent, setAdminPhoneOtpSent] = useState(false);
-  const [adminPhoneTimer, setAdminPhoneTimer] = useState(0);
   const [verifyingAdminPhone, setVerifyingAdminPhone] = useState(false);
+  // Avatar file staged locally; uploaded to Storage when the form is saved.
+  const [pendingAdminAvatar, setPendingAdminAvatar] = useState(null);
 
   // Activity score management states
   const [actBatchId, setActBatchId] = useState('');
@@ -1848,15 +1903,10 @@ const AdminDashboard = () => {
       return;
     }
     try {
-      const response = await fetch(`${API_BASE}/admin/students-by-batch/${batchId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setBatchStudents(data || []);
-      }
+      setBatchStudents(await getStudentsByBatch(batchId));
     } catch (e) {
-      console.error(e);
+      console.error('[Admin] load batch students failed:', e);
+      showModal('Error', classifyFirestoreError(e).message, 'error');
     }
   };
 
@@ -1867,61 +1917,46 @@ const AdminDashboard = () => {
       return;
     }
     try {
-      const response = await fetch(`${API_BASE}/admin/live-class-activity`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          student_id: actStudentId,
-          batch_id: actBatchId,
-          date: actDate,
-          meeting: actMeeting,
-          activity_type: actType,
-          points: actPoints,
-          remarks: actRemarks
-        })
+      const student = batchStudents.find(s => s.id === actStudentId);
+      const batch = firestoreBatches.find(b => b.id === actBatchId);
+
+      await awardActivityScore({
+        studentId: actStudentId,
+        studentName: student?.name || '',
+        batchId: actBatchId,
+        batchName: batch?.name || '',
+        date: actDate,
+        meeting: actMeeting,
+        activityType: actType,
+        points: actPoints,
+        remarks: actRemarks,
+        awardedBy: uid,
       });
-      if (response.ok) {
-        showModal("Success", "Activity score updated successfully!", "success");
-        setActRemarks('');
-        fetchActivityLogs();
-        fetchStats();
-      } else {
-        const err = await response.json();
-        showModal("Error", err.message || "Failed to award activity points", "error");
-      }
+
+      showModal('Success', 'Activity score updated successfully!', 'success');
+      setActRemarks('');
+      fetchActivityLogs();
+      fetchStats();
     } catch (e) {
-      console.error(e);
+      console.error('[Admin] award activity failed:', e);
+      showModal('Error', e.message || classifyFirestoreError(e).message, 'error');
     }
   };
 
   const fetchActivityLogs = async () => {
     try {
-      const response = await fetch(`${API_BASE}/admin/live-class-activity`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setActivityLogs(data || []);
-      }
+      setActivityLogs(await getActivityLogs());
     } catch (e) {
-      console.error(e);
+      console.error('[Admin] load activity logs failed:', e);
+      showModal('Error', classifyFirestoreError(e).message, 'error');
     }
   };
 
   const fetchActivityPresets = async () => {
     try {
-      const response = await fetch(`${API_BASE}/admin/activity-presets`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setActivityPresets(data || []);
-      }
+      setActivityPresets(await getActivityPresets());
     } catch (e) {
-      console.error(e);
+      console.error('[Admin] load activity presets failed:', e);
     }
   };
 
@@ -1931,43 +1966,25 @@ const AdminDashboard = () => {
       return;
     }
     try {
-      const response = await fetch(`${API_BASE}/admin/activity-presets`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ label: newPresetLabel, points: parseInt(newPresetPoints) })
-      });
-      if (response.ok) {
-        showModal("Success", "Preset created successfully!", "success");
-        setNewPresetLabel('');
-        setNewPresetPoints('');
-        fetchActivityPresets();
-      } else {
-        const err = await response.json();
-        showModal("Error", err.message || "Failed to create preset", "error");
-      }
+      await addActivityPreset(newPresetLabel, newPresetPoints);
+      showModal('Success', 'Preset created successfully!', 'success');
+      setNewPresetLabel('');
+      setNewPresetPoints('');
+      fetchActivityPresets();
     } catch (e) {
-      console.error(e);
+      console.error('[Admin] create preset failed:', e);
+      showModal('Error', classifyFirestoreError(e).message, 'error');
     }
   };
 
   const handleDeletePreset = async (presetId) => {
     try {
-      const response = await fetch(`${API_BASE}/admin/activity-presets/${presetId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        showModal("Success", "Preset deleted successfully!", "success");
-        fetchActivityPresets();
-      } else {
-        const err = await response.json();
-        showModal("Error", err.message || "Failed to delete preset", "error");
-      }
+      await deleteActivityPreset(presetId);
+      showModal('Success', 'Preset deleted successfully!', 'success');
+      fetchActivityPresets();
     } catch (e) {
-      console.error(e);
+      console.error('[Admin] delete preset failed:', e);
+      showModal('Error', classifyFirestoreError(e).message, 'error');
     }
   };
 
@@ -1986,73 +2003,17 @@ const AdminDashboard = () => {
 
 
 
-  useEffect(() => {
-    fetchStats();
-    fetchPortalSettings();
-    fetchBatches();
-  }, []);
-
-  const fetchPortalSettings = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/portal-settings`);
-      if (response.ok) {
-        const data = await response.json();
-        setPortalName(data.portal_name || 'Levlox Student Portal');
-        setPortalLogo(data.portal_logo || '');
-      }
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
-  const savePortalSettings = async (e) => {
-    e.preventDefault();
-    try {
-      const response = await fetch(`${API_BASE}/portal-settings`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          portal_name: portalName,
-          portal_logo: portalLogo
-        })
-      });
-      if (response.ok) {
-        showModal("Success", "Portal settings updated successfully!", "success");
-        fetchPortalSettings();
-      } else {
-        showModal("Error", "Failed to save portal settings", "error");
-      }
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
-  const handlePortalLogoMock = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setPortalLogo(reader.result);
-    };
-    reader.readAsDataURL(file);
-  };
-
   const showAdminToast = (msg) => {
     setAdminToast(msg);
     setTimeout(() => setAdminToast(''), 4000);
   };
 
   const fetchAdminProfile = async () => {
+    if (!uid) return;
     setLoadingAdminProfile(true);
     try {
-      const r = await fetch(`${API_BASE}/admin/profile`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (r.ok) {
-        const d = await r.json();
+      const d = await getDocument('admins', uid);
+      if (d) {
         setAdminProfileData(d);
         setAdminName(d.name || '');
         setAdminEmail(d.email || '');
@@ -2060,7 +2021,7 @@ const AdminDashboard = () => {
         setAdminProfilePic(d.profile_pic || '');
       }
     } catch (e) {
-      console.error(e);
+      console.error('[Admin] load profile failed:', e);
       showAdminToast('Error loading profile data.');
     } finally {
       setLoadingAdminProfile(false);
@@ -2073,51 +2034,47 @@ const AdminDashboard = () => {
       showModal('Validation Error', 'Full Name is required.', 'warning');
       return;
     }
-    if (!adminEmail.trim() || !/\S+@\S+\.\S+/.test(adminEmail)) {
-      showModal('Validation Error', 'Please enter a valid email address.', 'warning');
+    if (!uid) {
+      showModal('Error', 'You are not signed in. Please sign in again.', 'error');
       return;
     }
 
     setSavingAdminAccount(true);
     try {
-      const r = await fetch(`${API_BASE}/admin/profile`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          name: adminName.trim(),
-          email: adminEmail.trim().toLowerCase(),
-          profile_pic: adminProfilePic
-        })
-      });
-      if (r.ok) {
-        showAdminToast('Account details updated successfully ✓');
-        fetchAdminProfile();
-        // Update LocalStorage user name
-        const lu = JSON.parse(localStorage.getItem('user') || '{}');
-        lu.name = adminName.trim();
-        lu.email = adminEmail.trim();
-        localStorage.setItem('user', JSON.stringify(lu));
-      } else {
-        const err = await r.json();
-        showModal('Update Failed', err.message || 'Could not update profile details.', 'error');
+      const patch = { name: adminName.trim() };
+
+      // Large images belong in Storage; Firestore keeps only the URL.
+      if (pendingAdminAvatar) {
+        patch.profile_pic = await uploadProfileImage(uid, pendingAdminAvatar);
+        setAdminProfilePic(patch.profile_pic);
+        setPendingAdminAvatar(null);
       }
+
+      await updateDocumentFields('admins', uid, patch);
+      applyProfilePatch(patch);
+      showAdminToast('Account details updated successfully ✓');
+      fetchAdminProfile();
     } catch (e) {
-      console.error(e);
-      showModal('Error', 'An error occurred while saving account changes.', 'error');
+      console.error('[Admin] save profile failed:', e);
+      showModal('Error', classifyFirestoreError(e).message, 'error');
     } finally {
       setSavingAdminAccount(false);
     }
   };
 
   const handleAdminImageUpload = (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => setAdminProfilePic(reader.result);
-    reader.readAsDataURL(file);
+    if (!file.type.startsWith('image/')) {
+      showModal('Invalid File', 'Please choose an image file.', 'warning');
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      showModal('File Too Large', 'Please choose an image under 3 MB.', 'warning');
+      return;
+    }
+    setPendingAdminAvatar(file);
+    setAdminProfilePic(URL.createObjectURL(file)); // preview until saved
   };
 
   const handleAdminChangePassword = async (e) => {
@@ -2126,8 +2083,9 @@ const AdminDashboard = () => {
       showModal('Validation Error', 'Please enter your current password.', 'warning');
       return;
     }
-    if (adminNewPassword.length < 8) {
-      showModal('Validation Error', 'New password must be at least 8 characters long.', 'warning');
+    const strengthError = validatePasswordStrength(adminNewPassword);
+    if (strengthError) {
+      showModal('Validation Error', strengthError, 'warning');
       return;
     }
     if (adminNewPassword !== adminConfirmPassword) {
@@ -2137,111 +2095,49 @@ const AdminDashboard = () => {
 
     setSavingAdminPassword(true);
     try {
-      const r = await fetch(`${API_BASE}/admin/change-password`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          current_password: adminCurrPassword,
-          new_password: adminNewPassword
-        })
-      });
-      const d = await r.json();
-      if (r.ok) {
-        showModal('Password Updated', 'Your password was changed successfully!', 'success');
-        setAdminCurrPassword('');
-        setAdminNewPassword('');
-        setAdminConfirmPassword('');
-      } else {
-        showModal('Update Failed', d.message || 'Incorrect current password.', 'error');
-      }
+      // Reauthenticates with the current password, then updates via Firebase Auth.
+      await changeOwnPassword(adminCurrPassword, adminNewPassword);
+      showModal('Password Updated', 'Your password was changed successfully!', 'success');
+      setAdminCurrPassword('');
+      setAdminNewPassword('');
+      setAdminConfirmPassword('');
     } catch (e) {
-      console.error(e);
-      showModal('Error', 'An error occurred during password change.', 'error');
+      console.error('[Admin] password change failed:', e);
+      showModal('Update Failed', describeAuthError(e), 'error');
     } finally {
       setSavingAdminPassword(false);
     }
   };
 
-  const requestAdminPhoneOtp = async () => {
+  /**
+   * Save the admin's contact number.
+   *
+   * The old flow sent an OTP that was only ever printed to the Flask server
+   * logs — it verified nothing. With no SMS provider wired up, the honest
+   * behaviour is a direct write to the admin's own document.
+   */
+  const saveAdminPhone = async () => {
     if (!adminTempPhone || adminTempPhone.length !== 10 || !/^\d+$/.test(adminTempPhone)) {
       showModal('Validation Error', 'Please enter a valid 10-digit mobile number.', 'warning');
       return;
     }
+    if (!uid) return;
+
     setVerifyingAdminPhone(true);
     try {
-      const r = await fetch(`${API_BASE}/admin/update-phone/request`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ new_phone: adminTempPhone })
-      });
-      const d = await r.json();
-      if (r.ok) {
-        setAdminPhoneOtpSent(true);
-        setAdminPhoneTimer(120); // 2 minutes countdown
-        showAdminToast('OTP sent successfully ✓ Check backend logs.');
-      } else {
-        showModal('Failed to send OTP', d.message || 'Mobile number already registered.', 'error');
-      }
+      await updateDocumentFields('admins', uid, { phone: adminTempPhone });
+      setAdminPhone(adminTempPhone);
+      setIsAdminUpdatingPhone(false);
+      showModal('Saved', 'Mobile number updated successfully!', 'success');
+      fetchAdminProfile();
     } catch (e) {
-      console.error(e);
-      showModal('Error', 'An error occurred while requesting OTP.', 'error');
+      console.error('[Admin] phone update failed:', e);
+      showModal('Error', classifyFirestoreError(e).message, 'error');
     } finally {
       setVerifyingAdminPhone(false);
     }
   };
 
-  const verifyAdminPhoneOtp = async () => {
-    if (!adminPhoneOtp || adminPhoneOtp.length !== 6) {
-      showModal('Validation Error', 'Please enter a valid 6-digit OTP code.', 'warning');
-      return;
-    }
-    setVerifyingAdminPhone(true);
-    try {
-      const r = await fetch(`${API_BASE}/admin/update-phone/verify`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ new_phone: adminTempPhone, otp: adminPhoneOtp })
-      });
-      const d = await r.json();
-      if (r.ok) {
-        showModal('Verification Successful', 'Mobile number updated successfully!', 'success');
-        setAdminPhone(adminTempPhone);
-        setAdminPhoneOtp('');
-        setAdminPhoneOtpSent(false);
-        setIsAdminUpdatingPhone(false);
-        fetchAdminProfile();
-      } else {
-        showModal('Verification Failed', d.message || 'Invalid or expired OTP code.', 'error');
-      }
-    } catch (e) {
-      console.error(e);
-      showModal('Error', 'An error occurred during verification.', 'error');
-    } finally {
-      setVerifyingAdminPhone(false);
-    }
-  };
-
-  // Admin Phone Timer
-  useEffect(() => {
-    let interval = null;
-    if (adminPhoneTimer > 0) {
-      interval = setInterval(() => {
-        setAdminPhoneTimer(prev => prev - 1);
-      }, 1000);
-    } else {
-      clearInterval(interval);
-    }
-    return () => clearInterval(interval);
-  }, [adminPhoneTimer]);
 
 
 
@@ -2265,43 +2161,46 @@ const AdminDashboard = () => {
     }
   };
 
+  const resetBatchForm = () => {
+    setBatchName('');
+    setBatchCourseName('');
+    setBatchTrainerName('');
+    setBatchStartDate('');
+    setBatchEndDate('');
+    setBatchStatus('Active');
+    setBatchMaxStudents(30);
+  };
+
+  const batchPayload = () => ({
+    name: batchName.trim(),
+    course_name: batchCourseName.trim(),
+    trainer_name: batchTrainerName.trim(),
+    start_date: batchStartDate,
+    end_date: batchEndDate,
+    status: batchStatus,
+    max_students: Number(batchMaxStudents) || 30,
+  });
+
+  const validateBatchForm = () => {
+    if (!batchName.trim() || !batchCourseName.trim() || !batchTrainerName.trim() || !batchStartDate || !batchEndDate) {
+      showModal('Missing Fields', 'Name, course, trainer, start date and end date are all required.', 'warning');
+      return false;
+    }
+    return true;
+  };
+
   const createBatch = async (e) => {
     e.preventDefault();
+    if (!validateBatchForm()) return;
     try {
-      const response = await fetch(`${API_BASE}/admin/batches`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          name: batchName,
-          course_name: batchCourseName,
-          trainer_name: batchTrainerName,
-          start_date: batchStartDate,
-          end_date: batchEndDate,
-          status: batchStatus,
-          max_students: batchMaxStudents
-        })
-      });
-      if (response.ok) {
-        setBatchName('');
-        setBatchCourseName('');
-        setBatchTrainerName('');
-        setBatchStartDate('');
-        setBatchEndDate('');
-        setBatchStatus('Active');
-        setBatchMaxStudents(30);
-        setShowBatchModal(false);
-        showModal("Success", "New batch created successfully!", "success");
-        fetchBatches();
-        fetchCourses();
-      } else {
-        const err = await response.json();
-        showModal("Error", err.message || "Failed to create batch", "error");
-      }
+      await addBatch(batchPayload());
+      resetBatchForm();
+      setShowBatchModal(false);
+      showModal('Success', 'New batch created successfully!', 'success');
+      fetchBatches();
     } catch (error) {
-      console.error(error);
+      console.error('[Admin] createBatch failed:', error);
+      showModal('Error', classifyFirestoreError(error).message, 'error');
     }
   };
 
@@ -2319,60 +2218,32 @@ const AdminDashboard = () => {
 
   const saveBatchEdit = async (e) => {
     e.preventDefault();
+    if (!validateBatchForm()) return;
     try {
-      const response = await fetch(`${API_BASE}/admin/batches/${editingBatch.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          name: batchName,
-          course_name: batchCourseName,
-          trainer_name: batchTrainerName,
-          start_date: batchStartDate,
-          end_date: batchEndDate,
-          status: batchStatus,
-          max_students: batchMaxStudents
-        })
-      });
-      if (response.ok) {
-        setEditingBatch(null);
-        setBatchName('');
-        setBatchCourseName('');
-        setBatchTrainerName('');
-        setBatchStartDate('');
-        setBatchEndDate('');
-        setBatchStatus('Active');
-        setBatchMaxStudents(30);
-        setShowBatchModal(false);
-        showModal("Success", "Batch details updated successfully!", "success");
-        fetchBatches();
-        fetchCourses();
-      } else {
-        const err = await response.json();
-        showModal("Error", err.message || "Failed to update batch", "error");
-      }
+      await updateBatch(editingBatch.id, batchPayload());
+      setEditingBatch(null);
+      resetBatchForm();
+      setShowBatchModal(false);
+      showModal('Success', 'Batch details updated successfully!', 'success');
+      fetchBatches();
     } catch (error) {
-      console.error(error);
+      console.error('[Admin] saveBatchEdit failed:', error);
+      showModal('Error', classifyFirestoreError(error).message, 'error');
     }
   };
 
   const deleteBatch = async (batchId) => {
     if (!window.confirm("Are you sure you want to delete this batch? All assigned students will be unlinked.")) return;
     try {
-      const response = await fetch(`${API_BASE}/admin/batches/${batchId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        showModal("Success", "Batch deleted successfully!", "success");
-        fetchBatches();
-      } else {
-        showModal("Error", "Failed to delete batch", "error");
-      }
+      // Unlink the roster first so no student keeps a dangling batch reference.
+      await assignStudentsToBatch(batchId, []).catch(() => null);
+      await deleteBatchDoc(batchId);
+      showModal('Success', 'Batch deleted successfully!', 'success');
+      fetchBatches();
+      fetchStudents();
     } catch (error) {
-      console.error(error);
+      console.error('[Admin] deleteBatch failed:', error);
+      showModal('Error', classifyFirestoreError(error).message, 'error');
     }
   };
 
@@ -2389,58 +2260,72 @@ const AdminDashboard = () => {
   };
 
   const saveStudentAssignments = async () => {
+    if (!assigningBatch?.id) return;
     try {
-      const response = await fetch(`${API_BASE}/admin/batches/${assigningBatch.id}/assign-students`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ student_ids: selectedStudentIds })
-      });
-      if (response.ok) {
-        setAssigningBatch(null);
-        setSelectedStudentIds([]);
-        showModal("Success", "Student assignments updated successfully!", "success");
-        fetchBatches();
-        fetchStudents();
-      } else {
-        showModal("Error", "Failed to assign students", "error");
-      }
+      await assignStudentsToBatch(assigningBatch.id, selectedStudentIds);
+      setAssigningBatch(null);
+      setSelectedStudentIds([]);
+      showModal('Success', 'Student assignments updated successfully!', 'success');
+      fetchBatches();
+      fetchStudents();
     } catch (error) {
-      console.error(error);
+      console.error('[Admin] saveStudentAssignments failed:', error);
+      showModal('Error', classifyFirestoreError(error).message, 'error');
     }
   };
 
+  /*
+   * Students, courses, live classes, recordings and announcements all come
+   * from the single `adminDashboardAll` query, so switching between those tabs
+   * needs no extra reads. Only tabs backed by their own collections
+   * (attendance, activity scores, admin profile) fetch on activation.
+   *
+   * Deliberately keyed on `activeTab` alone — including search/filter/page
+   * state here made every keystroke invalidate the whole dataset.
+   */
   useEffect(() => {
-    fetchCourses();
-    if (activeTab === 'students' || activeTab === 'fees-management') {
-      fetchStudents();
-    } else if (activeTab === 'attendance') {
-      fetchBatches();
+    if (activeTab === 'attendance') {
       fetchAttendanceHistory();
-    } else if (activeTab === 'live-classes') {
-      fetchLiveClasses();
-      fetchBatches();
-    } else if (activeTab === 'recorded-classes') {
-      fetchRecordedClasses();
-      fetchBatches();
-
-    } else if (activeTab === 'announcements') {
-      fetchAnnouncements();
-      fetchBatches();
-    } else if (activeTab === 'batches') {
-      fetchBatches();
     } else if (activeTab === 'activity-score') {
-      fetchBatches();
       fetchActivityLogs();
       fetchActivityPresets();
-    }
-    if (activeTab === 'settings') {
-      fetchPortalSettings();
+    } else if (activeTab === 'settings') {
       fetchAdminProfile();
     }
-  }, [activeTab, currentPage, attendancePage, feesPage, searchQuery, statusFilter, feesFilter, courseFilter, batchFilter, feesSearchQuery, feesStatusFilter, feesCourseFilter, feesBatchFilter, studentDateFilter, studentStartDateFilter, studentEndDateFilter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  /** Client-side search + filters over the already-loaded roster. */
+  const students = React.useMemo(() => {
+    const isFeesTab = activeTab === 'fees-management';
+    const searchVal = isFeesTab ? feesSearchQuery : searchQuery;
+    const statusVal = isFeesTab ? '' : statusFilter;
+    const feesVal = isFeesTab ? feesStatusFilter : feesFilter;
+    const courseVal = isFeesTab ? feesCourseFilter : courseFilter;
+    const batchVal = isFeesTab ? feesBatchFilter : batchFilter;
+
+    let filtered = allStudents;
+    if (searchVal) {
+      const q = searchVal.toLowerCase();
+      filtered = filtered.filter(s =>
+        (s.name || '').toLowerCase().includes(q) ||
+        (s.email || '').toLowerCase().includes(q) ||
+        (s.rollNumber || '').toLowerCase().includes(q)
+      );
+    }
+    if (statusVal) filtered = filtered.filter(s => s.status === statusVal);
+    if (feesVal) filtered = filtered.filter(s => s.feesStatus === feesVal);
+    if (courseVal) filtered = filtered.filter(s => s.course === courseVal);
+    if (batchVal) filtered = filtered.filter(s => s.batch_id === batchVal);
+    return filtered;
+  }, [
+    allStudents, activeTab, searchQuery, statusFilter, feesFilter, courseFilter, batchFilter,
+    feesSearchQuery, feesStatusFilter, feesCourseFilter, feesBatchFilter,
+  ]);
+
+  useEffect(() => {
+    setTotalPages(Math.ceil(students.length / 5) || 1);
+  }, [students.length]);
 
   useEffect(() => {
     if (activeTab === 'attendance') {
@@ -2461,32 +2346,15 @@ const AdminDashboard = () => {
     queryClient.invalidateQueries({ queryKey: ['adminDashboardAll'] });
   };
 
-  const fetchStudents = async (pageToUse = null) => {
-    setLoading(true);
-    try {
-      const list = await listStudents();
-      let filtered = list || [];
-      const searchVal = activeTab === 'fees-management' ? feesSearchQuery : searchQuery;
-      const statusVal = activeTab === 'fees-management' ? '' : statusFilter;
-      const feesVal = activeTab === 'fees-management' ? feesStatusFilter : feesFilter;
-      const courseVal = activeTab === 'fees-management' ? feesCourseFilter : courseFilter;
-      const batchVal = activeTab === 'fees-management' ? feesBatchFilter : batchFilter;
-
-      if (searchVal) {
-        const q = searchVal.toLowerCase();
-        filtered = filtered.filter(s => (s.name||'').toLowerCase().includes(q) || (s.email||'').toLowerCase().includes(q) || (s.rollNumber||'').toLowerCase().includes(q));
-      }
-      if (statusVal) filtered = filtered.filter(s => s.status === statusVal);
-      if (feesVal) filtered = filtered.filter(s => s.feesStatus === feesVal);
-      if (courseVal) filtered = filtered.filter(s => s.course === courseVal);
-      if (batchVal) filtered = filtered.filter(s => s.batch_id === batchVal);
-      setStudents(filtered);
-      setTotalPages(Math.ceil(filtered.length / 5) || 1);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
+  /**
+   * Refresh the student roster from Firestore.
+   *
+   * Search and filters are applied client-side over the already-loaded list
+   * (see the `students` memo), so typing in the search box costs zero reads —
+   * only an explicit refresh or a mutation re-hits the database.
+   */
+  const fetchStudents = () => {
+    queryClient.invalidateQueries({ queryKey: ['adminDashboardAll'] });
   };
 
   const fetchLiveClasses = () => {
@@ -2595,9 +2463,17 @@ const AdminDashboard = () => {
       showModal('Missing Fields', 'Name, Email, and Temporary Password are required.', 'warning');
       return;
     }
+    const strengthError = validatePasswordStrength(createTempPassword);
+    if (strengthError) {
+      showModal('Weak Password', strengthError, 'warning');
+      return;
+    }
+
     try {
-      const credential = await createUserWithEmailAndPassword(auth, createEmail, createTempPassword);
-      const newUid = credential.user.uid;
+      // Runs on a detached Firebase app so the admin stays signed in — calling
+      // createUserWithEmailAndPassword on the primary auth instance would
+      // switch this session over to the newly created student.
+      const newUid = await createAuthUserDetached(createEmail.trim(), createTempPassword);
       const rollNumber = `LVX${Date.now().toString().slice(-6)}`;
       await createStudent(newUid, {
         name: createName,
@@ -2641,11 +2517,11 @@ const AdminDashboard = () => {
     }
     if (!window.confirm(`Send password reset email to ${studentObj.email}?`)) return;
     try {
-      await sendPasswordResetEmail(auth, studentObj.email);
+      await sendResetEmail(studentObj.email);
       showModal('Sent!', `Password reset email sent to ${studentObj.email}.`, 'success');
     } catch (e) {
-      console.error(e);
-      showModal('Error', classifyFirestoreError(e).message || 'Failed to send reset email.', 'error');
+      console.error('[Admin] reset email failed:', e);
+      showModal('Error', describeAuthError(e), 'error');
     }
   };
 
@@ -2723,6 +2599,7 @@ const AdminDashboard = () => {
       console.error(error);
       showModal('Error', classifyFirestoreError(error).message, 'error');
     }
+  };
 
   const handleCourseChange = (e) => {
     const newCourse = e.target.value;
@@ -5021,10 +4898,10 @@ const AdminDashboard = () => {
                           </div>
                         </div>
 
-                        {/* Mobile Number Block (Requires OTP) */}
+                        {/* Mobile Number Block */}
                         <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label">Mobile Number (Requires OTP verification to update)</label>
-                          
+                          <label className="form-label">Mobile Number</label>
+
                           {!isAdminUpdatingPhone ? (
                             <div style={{ display: 'flex', gap: 10 }}>
                               <div style={{ position: 'relative', flex: 1 }}>
@@ -5052,92 +4929,36 @@ const AdminDashboard = () => {
                                 <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--primary-color)' }}>UPDATE MOBILE NUMBER</span>
                                 <button
                                   type="button"
-                                  onClick={() => { setIsAdminUpdatingPhone(false); setAdminPhoneOtpSent(false); }}
+                                  onClick={() => setIsAdminUpdatingPhone(false)}
                                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
                                 >
                                   <X size={16} />
                                 </button>
                               </div>
 
-                              {!adminPhoneOtpSent ? (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                                  <div style={{ position: 'relative' }}>
-                                    <input
-                                      type="text"
-                                      className="form-input"
-                                      value={adminTempPhone}
-                                      onChange={e => setAdminTempPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                                      placeholder="Enter 10-digit new number"
-                                      style={{ paddingLeft: 42 }}
-                                      disabled={verifyingAdminPhone}
-                                    />
-                                    <Phone size={16} color="var(--text-secondary)" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }} />
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={requestAdminPhoneOtp}
-                                    disabled={verifyingAdminPhone || adminTempPhone.length !== 10}
-                                    className="btn btn-primary btn-block"
-                                    style={{ height: 40, fontSize: 13 }}
-                                  >
-                                    {verifyingAdminPhone ? 'Requesting...' : 'Send Verification OTP'}
-                                  </button>
-                                </div>
-                              ) : (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                                  <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)' }}>
-                                    An OTP code has been generated to verify <strong>+91 {adminTempPhone}</strong>.
-                                  </p>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                <div style={{ position: 'relative' }}>
                                   <input
                                     type="text"
                                     className="form-input"
-                                    value={adminPhoneOtp}
-                                    onChange={e => setAdminPhoneOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                                    placeholder="Enter 6-digit OTP"
-                                    style={{ letterSpacing: 3, textAlign: 'center', fontWeight: 'bold' }}
+                                    value={adminTempPhone}
+                                    onChange={e => setAdminTempPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                                    placeholder="Enter 10-digit new number"
+                                    style={{ paddingLeft: 42 }}
                                     disabled={verifyingAdminPhone}
                                   />
-
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>
-                                      {adminPhoneTimer > 0 ? (
-                                        <span>Expires in: <strong>{Math.floor(adminPhoneTimer / 60)}:{String(adminPhoneTimer % 60).padStart(2, '0')}</strong></span>
-                                      ) : (
-                                        <span style={{ color: 'var(--danger-color)', fontWeight: 600 }}>OTP Expired</span>
-                                      )}
-                                    </span>
-                                    
-                                    <button
-                                      type="button"
-                                      onClick={requestAdminPhoneOtp}
-                                      disabled={adminPhoneTimer > 0 || verifyingAdminPhone}
-                                      style={{
-                                        background: 'none',
-                                        border: 'none',
-                                        color: adminPhoneTimer > 0 ? 'var(--text-muted)' : 'var(--primary-color)',
-                                        cursor: adminPhoneTimer > 0 ? 'not-allowed' : 'pointer',
-                                        fontSize: 12,
-                                        fontWeight: 700,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 4
-                                      }}
-                                    >
-                                      <RefreshCw size={11} /> Resend OTP
-                                    </button>
-                                  </div>
-
-                                  <button
-                                    type="button"
-                                    onClick={verifyAdminPhoneOtp}
-                                    disabled={verifyingAdminPhone || adminPhoneOtp.length !== 6}
-                                    className="btn btn-primary btn-block"
-                                    style={{ height: 40, fontSize: 13 }}
-                                  >
-                                    {verifyingAdminPhone ? 'Verifying...' : 'Verify & Change Number'}
-                                  </button>
+                                  <Phone size={16} color="var(--text-secondary)" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }} />
                                 </div>
-                              )}
+                                <button
+                                  type="button"
+                                  onClick={saveAdminPhone}
+                                  disabled={verifyingAdminPhone || adminTempPhone.length !== 10}
+                                  className="btn btn-primary btn-block"
+                                  style={{ height: 40, fontSize: 13 }}
+                                >
+                                  {verifyingAdminPhone ? 'Saving...' : 'Save Mobile Number'}
+                                </button>
+                              </div>
                             </div>
                           )}
                         </div>
@@ -5695,13 +5516,13 @@ const AdminDashboard = () => {
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                   <button className="btn btn-outline" style={{ height: '40px', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => {
-                    const body = encodeURIComponent(`Hello ${createdCredentials.name},\n\nYour account on Levlox Student Portal has been created.\n\nStudent ID: ${createdCredentials.username}\nTemporary Password: ${createdCredentials.password}\n\nPlease login and change your password.\n\nPortal: http://localhost:5173/login`);
+                    const body = encodeURIComponent(`Hello ${createdCredentials.name},\n\nYour account on Levlox Student Portal has been created.\n\nStudent ID: ${createdCredentials.username}\nEmail: ${createdCredentials.email}\nTemporary Password: ${createdCredentials.password}\n\nPlease sign in with your email address and change your password.\n\nPortal: ${loginUrl}`);
                     window.open(`mailto:${createdCredentials.email}?subject=Your Levlox Portal Credentials&body=${body}`, '_blank');
                   }}>
                     ✉ Send Email
                   </button>
                   <button className="btn btn-outline" style={{ height: '40px', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => {
-                    const text = encodeURIComponent(`Hello ${createdCredentials.name},\nYour student account is created.\nStudent ID: ${createdCredentials.username}\nTemporary Password: ${createdCredentials.password}\nPlease login at http://localhost:5173/login and change your password.`);
+                    const text = encodeURIComponent(`Hello ${createdCredentials.name},\nYour student account is created.\nStudent ID: ${createdCredentials.username}\nEmail: ${createdCredentials.email}\nTemporary Password: ${createdCredentials.password}\nPlease sign in at ${loginUrl} with your email address and change your password.`);
                     const cleanPhone = createdCredentials.phone.replace(/[^0-9]/g, '');
                     const link = `https://wa.me/${cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone}?text=${text}`;
                     window.open(link, '_blank');

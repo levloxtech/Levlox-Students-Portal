@@ -1,42 +1,82 @@
-import os
+"""
+One-off administrative tooling for the Levlox Student Portal.
+
+This is NOT a web server and the portal does not call it at runtime — the React
+app talks to Firebase Authentication and Cloud Firestore directly. It exists
+only for operations that require the Firebase Admin SDK, such as bootstrapping
+the first administrator account (a chicken-and-egg problem: you need an admin
+to create an admin).
+
+Run it from a trusted machine that has the service-account credentials.
+Never ship the service-account JSON to the frontend or commit it to git.
+
+Usage:
+    python seed_admin.py --email admin@levlox.com --name "Super Admin" --phone 9876543210
+"""
+
+import argparse
 import sys
-import bcrypt
-import datetime
 
-# Add directory to sys.path so we can import db
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+import firebase_init
+from firebase_admin import auth as firebase_auth
+from firebase_admin import firestore
 
-from db import db
 
-def seed_admin():
-    print("Seeding initial super admin account...")
-    
-    phone = "+919876543210"
-    email = "admin@levlox.com"
-    name = "Super Admin"
-    password = "ChangeThisPassword123"
-    
-    # Clean existing conflicting records to allow clean seed
-    db._db.admins.delete_many({"$or": [{"phone": phone}, {"email": email}]})
-    db._db.students.delete_many({"$or": [{"phone": phone}, {"email": email}]})
-    
-    password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-    
-    admin_doc = {
-        "name": name,
-        "phone": phone,
-        "email": email,
-        "password_hash": password_hash,
-        "role": "admin",
-        "created_by": "system",
-        "created_at": datetime.datetime.utcnow()
-    }
-    
-    db.users.insert_one(admin_doc)
-    print(f"Successfully seeded admin account!")
-    print(f"Name: {name}")
-    print(f"Phone: {phone}")
-    print(f"Password: {password}")
+def seed_admin(email: str, name: str, phone: str = "", password: str | None = None) -> None:
+    if not firebase_init.firebase_initialized or firebase_init.db_firestore is None:
+        sys.exit(
+            "Firebase Admin SDK is not initialized. Set FIREBASE_SERVICE_ACCOUNT "
+            "(path to the service-account JSON) or FIREBASE_CREDENTIALS_JSON and retry."
+        )
+
+    db = firestore.client()
+
+    # 1. Find or create the Firebase Auth user. Passwords live in Firebase Auth
+    #    only — never in Firestore.
+    try:
+        user = firebase_auth.get_user_by_email(email)
+        print(f"Found existing Auth user for {email} (uid={user.uid}).")
+        if password:
+            firebase_auth.update_user(user.uid, password=password)
+            print("Password updated.")
+    except firebase_auth.UserNotFoundError:
+        if not password:
+            sys.exit("No existing account for that email — pass --password to create one.")
+        user = firebase_auth.create_user(email=email, password=password, display_name=name)
+        print(f"Created Auth user {email} (uid={user.uid}).")
+
+    # 2. Create the admins/{uid} document the security rules check for.
+    #    `merge=True` so re-running never clobbers fields set elsewhere.
+    db.collection("admins").document(user.uid).set(
+        {
+            "name": name,
+            "email": email,
+            "phone": phone,
+            "role": "admin",
+            "status": "active",
+            "createdBy": "seed_admin_script",
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+        },
+        merge=True,
+    )
+
+    print(f"admins/{user.uid} written. This account can now sign in to /admin.")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Bootstrap a Levlox portal administrator.")
+    parser.add_argument("--email", required=True, help="Admin sign-in email address")
+    parser.add_argument("--name", default="Super Admin", help="Display name")
+    parser.add_argument("--phone", default="", help="Contact number (optional)")
+    parser.add_argument(
+        "--password",
+        default=None,
+        help="Password to set. Required when the account does not exist yet.",
+    )
+    args = parser.parse_args()
+
+    seed_admin(email=args.email, name=args.name, phone=args.phone, password=args.password)
+
 
 if __name__ == "__main__":
-    seed_admin()
+    main()

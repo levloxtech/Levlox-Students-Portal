@@ -4,41 +4,42 @@ import {
   GraduationCap, MapPin, Building2, Briefcase, CheckCircle,
   FileText, Calendar, Award, BookOpen, Percent, Users, UserCheck
 } from 'lucide-react';
-import { API_BASE } from '../utils/api';
+import { useAuth } from '../context/AuthContext';
+import { updateStudent, uploadProfileImage, classifyFirestoreError } from '../services/firebaseService';
 
+const MAX_AVATAR_BYTES = 3 * 1024 * 1024; // 3 MB
 
-const StudentProfile = ({ dashboardData, enrolledCourses = [], token, onProfileUpdate }) => {
+const StudentProfile = ({ dashboardData, enrolledCourses = [], onProfileUpdate }) => {
+  const { uid, applyProfilePatch } = useAuth();
   const [profileData, setProfileData] = useState(null);
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
+  const [saveError, setSaveError] = useState('');
   const [paying, setPaying] = useState(false);
+  const [pendingAvatar, setPendingAvatar] = useState(null);
 
+  /**
+   * Fees are settled with the administrator offline; this only flags the
+   * student's intent so an admin can confirm the payment.
+   */
   const handlePayNow = async () => {
+    if (!uid) return;
     setPaying(true);
     try {
-      const r = await fetch(`${API_BASE}/student/pay-fees`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        }
-      });
-      if (r.ok) {
-        showToast('Payment successful ✓');
-        fetchProfile();
-      } else {
-        const err = await r.json();
-        showToast(err.message || 'Payment failed');
-      }
+      await updateStudent(uid, { feesStatus: 'Pending Payment' });
+      applyProfilePatch({ feesStatus: 'Pending Payment' });
+      if (onProfileUpdate) onProfileUpdate({ feesStatus: 'Pending Payment' });
+      showToast('Payment request sent — please complete it with the administrator.');
     } catch (e) {
-      console.error(e);
-      showToast('Error completing payment');
+      console.error('[StudentProfile] payment request failed:', e);
+      showToast(classifyFirestoreError(e).message);
     } finally {
       setPaying(false);
     }
   };
+
 
   // Editable fields
   const [name, setName] = useState('');
@@ -62,11 +63,8 @@ const StudentProfile = ({ dashboardData, enrolledCourses = [], token, onProfileU
   const fetchProfile = async () => {
     setLoading(true);
     try {
-      const r = await fetch(`${API_BASE}/student/profile`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (r.ok) {
-        const d = await r.json();
+      if (dashboardData?.student) {
+        const d = dashboardData.student;
         setProfileData(d);
         setName(d.name || '');
         setEmail(d.email || '');
@@ -86,39 +84,44 @@ const StudentProfile = ({ dashboardData, enrolledCourses = [], token, onProfileU
 
   const handleSave = async (e) => {
     e.preventDefault();
+    setSaveError('');
+
+    if (!name.trim()) {
+      setSaveError('Full name is required.');
+      return;
+    }
+    if (!uid) {
+      setSaveError('You are not signed in. Please sign in again.');
+      return;
+    }
+
     setSaving(true);
     try {
-      const r = await fetch(`${API_BASE}/student/profile`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          name,
-          email,
-          phone,
-          profile_pic: profilePic,
-          current_location: currentLocation,
-          permanent_address: permanentAddress,
-          college,
-          company
-        })
-      });
-      if (r.ok) {
-        showToast('Profile updated successfully ✓');
-        fetchProfile();
-        setEditing(false);
-        if (onProfileUpdate) {
-          onProfileUpdate({ name, profile_pic: profilePic });
-        }
-      } else {
-        const err = await r.json();
-        showToast(err.message || 'Failed to save');
+      const patch = {
+        name: name.trim(),
+        current_location: currentLocation.trim(),
+        permanent_address: permanentAddress.trim(),
+        college: college.trim(),
+        company: company.trim(),
+      };
+
+      // Files go to Firebase Storage; Firestore only holds the download URL.
+      if (pendingAvatar) {
+        patch.profile_pic = await uploadProfileImage(uid, pendingAvatar);
       }
+
+      await updateStudent(uid, patch);
+
+      setProfileData(prev => ({ ...(prev || {}), ...patch }));
+      if (patch.profile_pic) setProfilePic(patch.profile_pic);
+      setPendingAvatar(null);
+      applyProfilePatch(patch);
+      setEditing(false);
+      showToast('Profile updated successfully ✓');
+      if (onProfileUpdate) onProfileUpdate(patch);
     } catch (e) {
-      console.error(e);
-      showToast('Error updating profile');
+      console.error('[StudentProfile] save failed:', e);
+      setSaveError(classifyFirestoreError(e).message);
     } finally {
       setSaving(false);
     }
@@ -135,15 +138,28 @@ const StudentProfile = ({ dashboardData, enrolledCourses = [], token, onProfileU
       setCollege(profileData.college || 'Levlox Technical Institute');
       setCompany(profileData.company || '');
     }
+    setPendingAvatar(null);
+    setSaveError('');
     setEditing(false);
   };
 
+
   const handleImageUpload = (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => setProfilePic(reader.result);
-    reader.readAsDataURL(file);
+
+    if (!file.type.startsWith('image/')) {
+      setSaveError('Please choose an image file.');
+      return;
+    }
+    if (file.size > MAX_AVATAR_BYTES) {
+      setSaveError('Image is too large. Please choose a file under 3 MB.');
+      return;
+    }
+
+    setSaveError('');
+    setPendingAvatar(file);
+    setProfilePic(URL.createObjectURL(file)); // preview until saved
   };
 
   if (loading) {
@@ -201,6 +217,21 @@ const StudentProfile = ({ dashboardData, enrolledCourses = [], token, onProfileU
           Manage your personal details and view your locked academic profile.
         </p>
       </div>
+
+      {saveError && (
+        <div style={{
+          background: '#FEF2F2',
+          border: '1px solid #FCA5A5',
+          color: '#991B1B',
+          borderRadius: 10,
+          padding: '11px 15px',
+          fontSize: 13,
+          fontWeight: 600,
+          marginBottom: 20,
+        }}>
+          {saveError}
+        </div>
+      )}
 
       {/* Clean Two Column Layout */}
       <div className="dashboard-main-grid" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 24, alignItems: 'start' }}>

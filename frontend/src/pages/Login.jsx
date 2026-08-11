@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   signInWithEmailAndPassword,
@@ -42,7 +42,6 @@ const Login = () => {
   const [isLocked, setIsLocked] = useState(false);
 
   const navigate = useNavigate();
-  const inactivityTimer = useRef(null);
 
   /* ════ LOAD REMEMBERED EMAIL ════ */
   useEffect(() => {
@@ -69,6 +68,7 @@ const Login = () => {
       session_revoked: ['Session Revoked', 'You have been logged out because this session was revoked.', 'warning'],
       session_expired: ['Session Expired', 'Your session has expired. Please sign in again.', 'info'],
       inactivity: ['Session Timeout', 'You were logged out due to 30 minutes of inactivity.', 'info'],
+      no_profile: ['Profile Not Found', 'Your sign-in succeeded but no portal profile is linked to this account. Please contact your Levlox administrator.', 'warning'],
     };
     if (reason && reasonMessages[reason]) {
       const [title, text, type] = reasonMessages[reason];
@@ -124,15 +124,29 @@ const Login = () => {
     const map = {
       'auth/user-not-found': 'No account found with this email address.',
       'auth/wrong-password': 'Incorrect password. Please try again.',
+      // Returned for both a bad password and an unknown email when email
+      // enumeration protection is on (the default for new Firebase projects).
       'auth/invalid-credential': 'Invalid email or password. Please try again.',
+      'auth/invalid-login-credentials': 'Invalid email or password. Please try again.',
+      'auth/missing-password': 'Please enter your password.',
       'auth/invalid-email': 'Please enter a valid email address.',
       'auth/user-disabled': 'This account has been disabled. Contact your administrator.',
       'auth/too-many-requests': 'Too many failed attempts. Please try again later.',
       'auth/network-request-failed': 'Network error. Please check your connection.',
       'auth/internal-error': 'An internal error occurred. Please try again.',
+      // Raised when the Email/Password provider is not enabled on the Firebase
+      // project — a console configuration problem, not a user mistake.
+      'auth/configuration-not-found':
+        'Email sign-in is not enabled for this portal yet. Please contact your administrator.',
+      'auth/operation-not-allowed':
+        'Email sign-in is not enabled for this portal yet. Please contact your administrator.',
     };
     return map[code] || 'Authentication failed. Please try again.';
   };
+
+  /** Configuration problems must not burn a user's login attempt allowance. */
+  const isConfigError = (code) =>
+    code === 'auth/configuration-not-found' || code === 'auth/operation-not-allowed';
 
   /* ════ LOGIN SUBMIT ════ */
   const handleLoginSubmit = async (e) => {
@@ -142,8 +156,17 @@ const Login = () => {
     if (isLocked) return;
 
     let valid = true;
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setEmailError('Please enter a valid email address.');
+    const inputVal = email.trim();
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inputVal);
+
+    if (!isEmail) {
+      // Firebase Authentication signs in by email address. Phone numbers used to
+      // work through the old Flask backend, which no longer handles auth.
+      setEmailError(
+        /^[0-9+\-\s]{7,15}$/.test(inputVal)
+          ? 'Please sign in with your registered email address, not your phone number.'
+          : 'Please enter a valid email address.'
+      );
       valid = false;
     }
     if (password.length < 6) {
@@ -154,32 +177,29 @@ const Login = () => {
 
     setLoading(true);
     try {
-      const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      const credential = await signInWithEmailAndPassword(auth, inputVal, password);
       const firebaseUser = credential.user;
 
-      // Fetch role from Firestore (admin takes priority)
+      // Resolve the account's role from Firestore. Admin records take priority.
       const [adminDoc, studentDoc] = await Promise.all([
         getAdmin(firebaseUser.uid).catch(() => null),
         getStudent(firebaseUser.uid).catch(() => null),
       ]);
 
-      let profile = null;
       let role = null;
-
       if (adminDoc) {
-        profile = adminDoc;
         role = 'admin';
       } else if (studentDoc) {
         if (studentDoc.status === 'disabled' || studentDoc.status === 'inactive') {
           await signOut(auth);
           throw new Error('Your account has been disabled. Please contact your administrator.');
         }
-        profile = studentDoc;
         role = 'student';
       } else {
-        // Firebase Auth account exists but no Firestore profile — could be first admin setup
         await signOut(auth);
-        throw new Error('Account profile not found. Please contact your administrator.');
+        throw new Error(
+          'No portal profile is linked to this account. Please contact your Levlox administrator.'
+        );
       }
 
       // Clear failed attempts on success
@@ -187,18 +207,24 @@ const Login = () => {
       sessionStorage.removeItem('loginAttempts');
       sessionStorage.removeItem('loginLockoutEnd');
 
-      // Remember email if checked
-      if (rememberMe) localStorage.setItem('rememberedEmail', email.trim());
+      // Remember the email if requested (never the password)
+      if (rememberMe) localStorage.setItem('rememberedEmail', inputVal);
       else localStorage.removeItem('rememberedEmail');
 
-      // Persist to localStorage for legacy reads
-      const idToken = await firebaseUser.getIdToken();
-      localStorage.setItem('token', idToken);
-      localStorage.setItem('user', JSON.stringify({ ...profile, role }));
-
-      navigate(role === 'admin' ? '/admin' : '/student');
+      // AuthContext's onAuthStateChanged listener loads the profile from here.
+      navigate(role === 'admin' ? '/admin' : '/student', { replace: true });
 
     } catch (err) {
+      console.warn('[Login] sign-in failed:', err?.code || err?.message);
+
+      // A misconfigured project is not a wrong password — don't count it as a
+      // failed attempt or lock the user out over it.
+      if (isConfigError(err?.code)) {
+        showToast('Sign-In Unavailable', getFirebaseAuthError(err.code), 'error');
+        setLoading(false);
+        return;
+      }
+
       const locked = recordFailedAttempt();
       if (locked) {
         showToast(
@@ -210,15 +236,16 @@ const Login = () => {
         return;
       }
 
+      // Errors we raised ourselves already carry a user-facing message; Firebase
+      // errors carry a code that needs mapping.
+      const isOwnError = !err.code;
       const remaining = MAX_ATTEMPTS - (failedAttempts + 1);
-      const errorMsg = getFirebaseAuthError(err.code) +
-        (remaining > 0 && !err.message?.includes('disabled') && !err.message?.includes('profile')
-          ? ` (${remaining} attempt${remaining > 1 ? 's' : ''} remaining)`
-          : '');
-
-      showToast('Sign-In Failed', err.message?.includes('disabled') || err.message?.includes('profile')
+      const errorMsg = isOwnError
         ? err.message
-        : errorMsg, 'error');
+        : getFirebaseAuthError(err.code) +
+          (remaining > 0 ? ` (${remaining} attempt${remaining > 1 ? 's' : ''} remaining)` : '');
+
+      showToast('Sign-In Failed', errorMsg, 'error');
     } finally {
       setLoading(false);
     }
@@ -341,11 +368,11 @@ const Login = () => {
                     id="email"
                     className="premium-input"
                     type="email"
-                    placeholder="Enter your email"
+                    placeholder="Enter your registered email"
                     value={email}
                     onChange={e => { setEmail(e.target.value); setEmailError(''); }}
                     disabled={isLocked}
-                    autoComplete="email"
+                    autoComplete="username"
                     required
                     style={{ cursor: isLocked ? 'not-allowed' : 'text', paddingLeft: '48px', paddingRight: '18px' }}
                   />

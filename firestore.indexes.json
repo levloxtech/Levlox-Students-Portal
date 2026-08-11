@@ -1,0 +1,51 @@
+{
+  "//": "Composite indexes only. Single-field indexes (e.g. courses ordered by createdAt) are created automatically by Firestore and are deliberately not listed here.",
+  "indexes": [
+    {
+      "//": "getUpcomingLiveClasses(): where status in [...] + orderBy date asc",
+      "collectionGroup": "liveClasses",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "//": "getAttendanceForStudent(): where studentId == uid + orderBy date desc",
+      "collectionGroup": "attendance",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "studentId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "//": "getNotificationsForUser(): where userId == uid + orderBy createdAt desc",
+      "collectionGroup": "notifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "//": "getPaymentsForStudent(): where studentId == uid + orderBy createdAt desc",
+      "collectionGroup": "payments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "studentId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "//": "getAssignmentsForCourse(): where courseId == id + orderBy dueDate asc",
+      "collectionGroup": "assignments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "courseId", "order": "ASCENDING" },
+        { "fieldPath": "dueDate", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

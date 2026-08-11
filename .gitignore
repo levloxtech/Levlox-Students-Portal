@@ -20,6 +20,11 @@ __pycache__/
 .env.test.local
 .env.production.local
 
+# Firebase service-account credentials — must never be committed
+secrets/
+*-service-account.json
+serviceAccountKey.json
+
 # IDEs and OS files
 .vscode/
 .idea/
@@ -29,3 +34,7 @@ Thumbs.db
 # Agent workspaces
 .gemini/
 .antigravity/
+
+# Claude Code — editor tooling only, machine-specific. Not needed to build,
+# run or deploy the portal.
+.claude/

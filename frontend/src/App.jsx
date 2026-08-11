@@ -1,10 +1,15 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './pages/Login';
-import AdminDashboard from './pages/AdminDashboard';
-import StudentDashboard from './pages/StudentDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
+import ErrorBoundary from './components/ErrorBoundary';
+import FullScreenLoader from './components/FullScreenLoader';
+
+// Dashboards are large and mutually exclusive — split them so a student never
+// downloads the admin bundle (and vice versa).
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
+const StudentDashboard = lazy(() => import('./pages/StudentDashboard'));
 
 /**
  * Root redirect — uses Firebase Auth state to send users to the right place.
@@ -12,26 +17,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 const RootRedirect = () => {
   const { currentUser, userRole, authLoading } = useAuth();
 
-  if (authLoading) {
-    return (
-      <div style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'linear-gradient(135deg, #050308 0%, #0D0A1A 50%, #070510 100%)',
-      }}>
-        <div style={{
-          width: 44, height: 44,
-          border: '3px solid rgba(108,60,240,0.2)',
-          borderTopColor: '#6C3CF0',
-          borderRadius: '50%',
-          animation: 'spin 0.8s linear infinite',
-        }} />
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
-    );
-  }
+  if (authLoading) return <FullScreenLoader />;
 
   if (!currentUser) return <Navigate to="/login" replace />;
   if (userRole === 'admin') return <Navigate to="/admin" replace />;
@@ -41,11 +27,14 @@ const RootRedirect = () => {
 
 /**
  * Inactivity auto-logout — signs out after 30 minutes of no activity.
+ * Only armed while a user is actually signed in.
  */
 const InactivityWatcher = () => {
-  const { logout } = useAuth();
+  const { logout, currentUser } = useAuth();
 
   useEffect(() => {
+    if (!currentUser) return undefined;
+
     let timer;
     const reset = () => {
       clearTimeout(timer);
@@ -63,47 +52,55 @@ const InactivityWatcher = () => {
       clearTimeout(timer);
       events.forEach(e => document.removeEventListener(e, reset));
     };
-  }, [logout]);
+  }, [logout, currentUser]);
 
   return null;
 };
 
 function App() {
   return (
-    <AuthProvider>
-      <Router>
-        <InactivityWatcher />
-        <div className="app-container">
-          <Routes>
-            {/* Public Route */}
-            <Route path="/login" element={<Login />} />
+    <ErrorBoundary>
+      <AuthProvider>
+        <Router>
+          <InactivityWatcher />
+          <div className="app-container">
+            <Suspense fallback={<FullScreenLoader />}>
+              <Routes>
+                {/* Public Route */}
+                <Route path="/login" element={<Login />} />
 
-            {/* Protected Student Routes */}
-            <Route
-              path="/student"
-              element={
-                <ProtectedRoute allowedRoles={['student']}>
-                  <StudentDashboard />
-                </ProtectedRoute>
-              }
-            />
+                {/* Protected Student Routes */}
+                <Route
+                  path="/student"
+                  element={
+                    <ProtectedRoute allowedRoles={['student']}>
+                      <ErrorBoundary>
+                        <StudentDashboard />
+                      </ErrorBoundary>
+                    </ProtectedRoute>
+                  }
+                />
 
-            {/* Protected Admin Routes */}
-            <Route
-              path="/admin"
-              element={
-                <ProtectedRoute allowedRoles={['admin']}>
-                  <AdminDashboard />
-                </ProtectedRoute>
-              }
-            />
+                {/* Protected Admin Routes */}
+                <Route
+                  path="/admin"
+                  element={
+                    <ProtectedRoute allowedRoles={['admin']}>
+                      <ErrorBoundary>
+                        <AdminDashboard />
+                      </ErrorBoundary>
+                    </ProtectedRoute>
+                  }
+                />
 
-            {/* Catch-all → smart redirect */}
-            <Route path="*" element={<RootRedirect />} />
-          </Routes>
-        </div>
-      </Router>
-    </AuthProvider>
+                {/* Catch-all → smart redirect */}
+                <Route path="*" element={<RootRedirect />} />
+              </Routes>
+            </Suspense>
+          </div>
+        </Router>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

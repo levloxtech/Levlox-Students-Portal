@@ -10,6 +10,7 @@
 import {
   collection,
   doc,
+  documentId,
   getDoc,
   getDocs,
   addDoc,
@@ -24,6 +25,8 @@ import {
   onSnapshot,
   serverTimestamp,
   getCountFromServer,
+  writeBatch,
+  increment,
 } from "firebase/firestore";
 import {
   ref,
@@ -32,6 +35,22 @@ import {
   deleteObject,
 } from "firebase/storage";
 import { db, storage } from "../firebase";
+
+/**
+ * Safety cap for list reads. Every collection query gets a bound so a growing
+ * database can never turn one page load into thousands of document reads.
+ * Screens that need more use the paginated helpers below.
+ */
+export const DEFAULT_LIST_LIMIT = 200;
+
+/** Firestore allows at most 30 values in an `in` / `documentId() in` filter. */
+const IN_QUERY_CHUNK_SIZE = 30;
+
+const chunk = (arr, size) => {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Error Classification
@@ -192,11 +211,29 @@ export const updateStudent = (uid, data) => updateDocumentFields("students", uid
 export const createStudent = (uid, data) =>
   setDocument("students", uid, { ...data, role: "student", status: "active", createdAt: serverTimestamp() }, false);
 
-export const listStudents = (constraints = []) => getDocuments("students", constraints);
+export const listStudents = (constraints = []) =>
+  getDocuments("students", [...constraints, limit(DEFAULT_LIST_LIMIT)]);
 
+/** Server-side count — one read instead of downloading the collection. */
 export const getStudentCount = async () => {
   const snap = await getCountFromServer(collection(db, "students"));
   return snap.data().count;
+};
+
+/**
+ * Fetch specific students by document ID. Splits into chunks because Firestore
+ * caps `in` filters at 30 values, and runs the chunks in parallel.
+ */
+export const getStudentsByIds = async (ids = []) => {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (unique.length === 0) return [];
+
+  const groups = await Promise.all(
+    chunk(unique, IN_QUERY_CHUNK_SIZE).map((group) =>
+      getDocuments("students", [where(documentId(), "in", group)])
+    )
+  );
+  return groups.flat();
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -214,7 +251,8 @@ export const listAdmins = () => getDocuments("admins");
 // COURSES
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const getCourses = () => getDocuments("courses", [orderBy("createdAt", "desc")]);
+export const getCourses = () =>
+  getDocuments("courses", [orderBy("createdAt", "desc"), limit(DEFAULT_LIST_LIMIT)]);
 
 export const getCourse = (id) => getDocument("courses", id);
 
@@ -229,10 +267,15 @@ export const deleteCourse = (id) => deleteDocument("courses", id);
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const getLiveClasses = (constraints = []) =>
-  getDocuments("liveClasses", [orderBy("date", "asc"), ...constraints]);
+  getDocuments("liveClasses", [orderBy("date", "asc"), ...constraints, limit(DEFAULT_LIST_LIMIT)]);
 
-export const getUpcomingLiveClasses = () =>
-  getDocuments("liveClasses", [where("status", "in", ["scheduled", "live"]), orderBy("date", "asc")]);
+/** Students only need the next few sessions, not the entire schedule history. */
+export const getUpcomingLiveClasses = (max = 20) =>
+  getDocuments("liveClasses", [
+    where("status", "in", ["scheduled", "live"]),
+    orderBy("date", "asc"),
+    limit(max),
+  ]);
 
 export const addLiveClass = (data) => addDocument("liveClasses", data);
 
@@ -245,7 +288,7 @@ export const deleteLiveClass = (id) => deleteDocument("liveClasses", id);
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const getRecordedClasses = (constraints = []) =>
-  getDocuments("recordedClasses", [orderBy("createdAt", "desc"), ...constraints]);
+  getDocuments("recordedClasses", [orderBy("createdAt", "desc"), ...constraints, limit(DEFAULT_LIST_LIMIT)]);
 
 export const addRecordedClass = (data) => addDocument("recordedClasses", data);
 
@@ -258,7 +301,7 @@ export const deleteRecordedClass = (id) => deleteDocument("recordedClasses", id)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const getAnnouncements = (constraints = []) =>
-  getDocuments("announcements", [orderBy("createdAt", "desc"), ...constraints]);
+  getDocuments("announcements", [orderBy("createdAt", "desc"), ...constraints, limit(DEFAULT_LIST_LIMIT)]);
 
 export const addAnnouncement = (data) => addDocument("announcements", data);
 
@@ -274,10 +317,15 @@ export const subscribeAnnouncements = (callback, onError) =>
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const getAttendanceForStudent = (studentId, constraints = []) =>
-  getDocuments("attendance", [where("studentId", "==", studentId), orderBy("date", "desc"), ...constraints]);
+  getDocuments("attendance", [
+    where("studentId", "==", studentId),
+    orderBy("date", "desc"),
+    ...constraints,
+    limit(DEFAULT_LIST_LIMIT),
+  ]);
 
 export const getAttendanceSheet = (constraints = []) =>
-  getDocuments("attendance", [orderBy("date", "desc"), ...constraints]);
+  getDocuments("attendance", [orderBy("date", "desc"), ...constraints, limit(DEFAULT_LIST_LIMIT)]);
 
 export const markAttendance = (data) => addDocument("attendance", data);
 
@@ -317,8 +365,8 @@ export const updateSubmission = (id, data) => updateDocumentFields("submissions"
 // LEADERBOARD
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const getLeaderboard = (constraints = []) =>
-  getDocuments("leaderboard", [orderBy("score", "desc"), ...constraints]);
+export const getLeaderboard = (max = 100, constraints = []) =>
+  getDocuments("leaderboard", [orderBy("score", "desc"), ...constraints, limit(max)]);
 
 export const updateLeaderboardEntry = (id, data) => updateDocumentFields("leaderboard", id, data);
 
@@ -373,7 +421,7 @@ export const getPaymentsForStudent = (studentId) =>
   getDocuments("payments", [where("studentId", "==", studentId), orderBy("createdAt", "desc")]);
 
 export const getAllPayments = (constraints = []) =>
-  getDocuments("payments", [orderBy("createdAt", "desc"), ...constraints]);
+  getDocuments("payments", [orderBy("createdAt", "desc"), ...constraints, limit(DEFAULT_LIST_LIMIT)]);
 
 export const recordPayment = (data) => addDocument("payments", data);
 
@@ -393,6 +441,129 @@ export const enrollStudent = (studentId, courseId, data = {}) =>
   addDocument("enrollments", { studentId, courseId, enrolledAt: serverTimestamp(), ...data });
 
 export const unenrollStudent = (enrollmentId) => deleteDocument("enrollments", enrollmentId);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BATCHES
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const getBatches = () => getDocuments("batches", [limit(DEFAULT_LIST_LIMIT)]);
+
+export const addBatch = (data) =>
+  addDocument("batches", {
+    ...data,
+    code: data.code || `BAT-${Math.floor(1000 + Math.random() * 9000)}`,
+    student_ids: data.student_ids || [],
+  });
+
+export const updateBatch = (id, data) => updateDocumentFields("batches", id, data);
+
+export const deleteBatch = (id) => deleteDocument("batches", id);
+
+/** Students assigned to a batch, resolved from the batch's student_ids array. */
+export const getStudentsByBatch = async (batchId) => {
+  const batch = await getDocument("batches", batchId);
+  if (!batch) return [];
+  return getStudentsByIds(batch.student_ids || []);
+};
+
+/**
+ * Replace a batch's student roster and keep each student's `batch_id` in sync.
+ * Runs as an atomic batched write so the two sides can never diverge.
+ */
+export const assignStudentsToBatch = async (batchId, studentIds = []) => {
+  const existing = await getDocument("batches", batchId);
+  const previousIds = existing?.student_ids || [];
+  const removed = previousIds.filter((id) => !studentIds.includes(id));
+
+  const batch = writeBatch(db);
+  batch.update(doc(db, "batches", batchId), {
+    student_ids: studentIds,
+    updatedAt: serverTimestamp(),
+  });
+
+  studentIds.forEach((sid) => {
+    batch.update(doc(db, "students", sid), {
+      batch_id: batchId,
+      batch_name: existing?.name || "",
+      updatedAt: serverTimestamp(),
+    });
+  });
+
+  removed.forEach((sid) => {
+    batch.update(doc(db, "students", sid), {
+      batch_id: "",
+      batch_name: "",
+      updatedAt: serverTimestamp(),
+    });
+  });
+
+  await batch.commit();
+  return { batchId, studentIds };
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LIVE CLASS ACTIVITY SCORES
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const getActivityLogs = (max = 100) =>
+  getDocuments("activityScores", [orderBy("createdAt", "desc"), limit(max)]);
+
+/**
+ * Record an activity award and bump the student's cached points in one atomic
+ * write, so the log and the running total cannot drift apart.
+ */
+export const awardActivityScore = async ({
+  studentId,
+  studentName,
+  batchId,
+  batchName,
+  date,
+  meeting,
+  activityType,
+  points,
+  remarks = "",
+  awardedBy,
+}) => {
+  const numericPoints = Number.parseInt(points, 10);
+  if (Number.isNaN(numericPoints)) throw new Error("Points must be a whole number.");
+
+  const batch = writeBatch(db);
+  const logRef = doc(collection(db, "activityScores"));
+
+  batch.set(logRef, {
+    studentId,
+    studentName: studentName || "",
+    batchId,
+    batchName: batchName || "",
+    date,
+    meeting,
+    activityType,
+    points: numericPoints,
+    remarks,
+    awardedBy: awardedBy || null,
+    createdAt: serverTimestamp(),
+  });
+
+  batch.update(doc(db, "students", studentId), {
+    activityPoints: increment(numericPoints),
+    updatedAt: serverTimestamp(),
+  });
+
+  await batch.commit();
+  return { id: logRef.id, points: numericPoints };
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ACTIVITY PRESETS
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const getActivityPresets = () =>
+  getDocuments("activityPresets", [orderBy("points", "desc"), limit(50)]);
+
+export const addActivityPreset = (label, points) =>
+  addDocument("activityPresets", { label: String(label).trim(), points: Number.parseInt(points, 10) });
+
+export const deleteActivityPreset = (id) => deleteDocument("activityPresets", id);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FIREBASE STORAGE

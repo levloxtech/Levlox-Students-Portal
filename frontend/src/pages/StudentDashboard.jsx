@@ -12,10 +12,11 @@ import {
 } from 'lucide-react';
 
 import CustomModal from '../components/Modal';
+import ErrorBoundary from '../components/ErrorBoundary';
+import { CardSkeleton, DashboardSkeleton } from '../components/Skeleton';
 import leveloxIcon from '../assets/levelox-icon-transparent.png';
 import { useAuth } from '../context/AuthContext';
 import {
-  getStudent,
   getEnrollmentsForStudent,
   getCourses,
   getUpcomingLiveClasses,
@@ -26,7 +27,6 @@ import {
   getAssignmentsForCourse,
   submitAssignment as submitAssignmentToFirestore,
   updateStudent,
-  getStudentAnalytics,
   classifyFirestoreError,
 } from '../services/firebaseService';
 
@@ -175,48 +175,10 @@ const MockBarChart = memo(({ data = [0, 0, 0, 0] }) => {
 
 /* ─── Main Component ───────────────────────────────── */
 const StudentDashboard = () => {
-  const defaultDummyAnalytics = {
-    has_data: true,
-    overall_progress: {
-      percentage: 78,
-      completed_modules: 11,
-      remaining_modules: 3
-    },
-    weekly_learning: [3.5, 4.2, 2.0, 5.5, 6.0, 1.5, 4.0],
-    mock_interviews: {
-      total: 6,
-      completed: 4,
-      pending: 2,
-      average_score: 82,
-      best_score: 95,
-      latest_date: "July 06, 2026",
-      scores: [70, 78, 85, 95]
-    },
-    coding_practice: {
-      solved: 142,
-      streak: 12,
-      hours: 58
-    },
-    assignments: {
-      completed: 8,
-      pending: 2,
-      submission_rate: 80
-    },
-    attendance: {
-      percentage: 92,
-      present: 46,
-      absent: 4
-    },
-    milestones: {
-      beginner: "Completed",
-      intermediate: "In Progress",
-      advanced: "Pending"
-    }
-  };
-
   const navigate = useNavigate();
-  const { currentUser, userProfile, logout: authLogout, uid } = useAuth();
-  const user = userProfile || JSON.parse(localStorage.getItem('user') || '{}');
+  const { currentUser, userProfile, logout: authLogout, uid, refreshProfile } = useAuth();
+  // AuthContext already loaded students/{uid}; reuse it instead of re-reading.
+  const user = userProfile || {};
   const [activeTab, setActiveTab] = useState('dashboard');
   const queryClient = useQueryClient();
 
@@ -245,8 +207,9 @@ const StudentDashboard = () => {
   const handleProfileUpdate = (updatedData) => {
     if (updatedData.name) setProfileName(updatedData.name);
     if (updatedData.profile_pic) setProfilePic(updatedData.profile_pic);
-    fetchDashboard();
-    queryClient.invalidateQueries({ queryKey: ['studentDashboard'] });
+    // AuthContext holds the student record, so no dashboard refetch is needed;
+    // only the derived widgets are invalidated.
+    queryClient.invalidateQueries({ queryKey: ['studentDashboardExtras', uid] });
   };
 
   useEffect(() => {
@@ -259,79 +222,36 @@ const StudentDashboard = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Consolidated Firestore Dashboard Query — parallel reads with Promise.all
-  const { data: dashboardData = null, refetch: fetchDashboard } = useQuery({
-    queryKey: ['studentDashboard', uid],
+  /*
+   * Dashboard data is split into two independent queries so the main content
+   * paints as soon as the essentials arrive, instead of waiting on every
+   * secondary widget. Both start together on mount — this is a split, not a
+   * waterfall.
+   */
+
+  // CORE — what the dashboard shell and the primary cards need.
+  const {
+    data: coreData,
+    isPending: coreLoading,
+    error: coreError,
+    refetch: refetchCore,
+  } = useQuery({
+    queryKey: ['studentDashboardCore', uid],
     queryFn: async () => {
-      if (!uid) return null;
-      try {
-        const [
-          studentDoc,
-          enrollments,
-          courses,
-          liveClasses,
-          recordings,
-          announcements,
-          leaderboard,
-          submissions,
-          analytics,
-        ] = await Promise.all([
-          getStudent(uid).catch(() => userProfile || {}),
-          getEnrollmentsForStudent(uid).catch(() => []),
-          getCourses().catch(() => []),
-          getUpcomingLiveClasses().catch(() => []),
-          getRecordedClasses().catch(() => []),
-          getAnnouncements().catch(() => []),
-          getLeaderboard().catch(() => []),
-          getSubmissionsForStudent(uid).catch(() => []),
-          getStudentAnalytics(uid).catch(() => null),
-        ]);
+      const [enrollments, courses, liveClasses, announcements] = await Promise.all([
+        getEnrollmentsForStudent(uid),
+        getCourses(),
+        getUpcomingLiveClasses(),
+        getAnnouncements(),
+      ]);
 
-        const enrolledCourseIds = enrollments.map(e => e.courseId);
-        const enrolledCourses = courses.filter(c => enrolledCourseIds.includes(c.id));
-        const latestReplays = recordings.slice(0, 5).map(r => ({ ...r, access: studentDoc?.feesStatus === 'Paid' }));
-
-        // Build leaderboard ranking for current student
-        const sortedLeaderboard = [...leaderboard].sort((a, b) => (b.score || 0) - (a.score || 0));
-        const myRank = sortedLeaderboard.findIndex(e => e.id === uid) + 1;
-        const topPerformers = sortedLeaderboard.slice(0, 3).map((p, i) => ({ ...p, is_current: p.id === uid }));
-        const currentStudent = myRank > 0 ? { ...sortedLeaderboard[myRank - 1], rank: myRank } : null;
-
-        // Update localStorage to keep in sync
-        if (studentDoc) {
-          localStorage.setItem('user', JSON.stringify({ ...studentDoc, role: 'student' }));
-        }
-
-        return {
-          student: studentDoc || userProfile || {},
-          courses,
-          enrolledCourses,
-          submissions,
-          latestReplays,
-          upcomingLiveClasses: liveClasses,
-          todayLiveClass: liveClasses[0] || null,
-          announcements,
-          leaderboard,
-          learningRanking: { topPerformers, currentStudent },
-          analytics: analytics || defaultDummyAnalytics,
-        };
-      } catch (err) {
-        const classified = classifyFirestoreError(err);
-        console.error('[StudentDashboard] load error:', classified);
-        // Graceful fallback — show what we know from auth context
-        return {
-          student: userProfile || {},
-          courses: [],
-          enrolledCourses: [],
-          submissions: [],
-          latestReplays: [],
-          upcomingLiveClasses: [],
-          announcements: [],
-          leaderboard: [],
-          learningRanking: null,
-          analytics: defaultDummyAnalytics,
-        };
-      }
+      const enrolledCourseIds = new Set(enrollments.map(e => e.courseId));
+      return {
+        courses,
+        enrolledCourses: courses.filter(c => enrolledCourseIds.has(c.id)),
+        upcomingLiveClasses: liveClasses,
+        announcements,
+      };
     },
     enabled: !!uid,
     staleTime: 1000 * 60 * 5,
@@ -339,35 +259,85 @@ const StudentDashboard = () => {
     refetchOnWindowFocus: false,
   });
 
+  // SECONDARY — ranking, replays and submissions. A failure here degrades a
+  // widget, it does not blank the dashboard.
+  const {
+    data: extrasData,
+    isPending: extrasLoading,
+    error: extrasError,
+    refetch: refetchExtras,
+  } = useQuery({
+    queryKey: ['studentDashboardExtras', uid],
+    queryFn: async () => {
+      const [recordings, leaderboard, submissions] = await Promise.all([
+        getRecordedClasses(),
+        getLeaderboard(),
+        getSubmissionsForStudent(uid),
+      ]);
+
+      // getLeaderboard() already returns score-descending from Firestore.
+      const myIndex = leaderboard.findIndex(e => e.id === uid);
+      const topPerformers = leaderboard.slice(0, 3).map(p => ({ ...p, is_current: p.id === uid }));
+      const currentStudent = myIndex >= 0 ? { ...leaderboard[myIndex], rank: myIndex + 1 } : null;
+
+      return {
+        recordings,
+        leaderboard,
+        submissions,
+        learningRanking: { topPerformers, currentStudent },
+      };
+    },
+    enabled: !!uid,
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
+    refetchOnWindowFocus: false,
+  });
+
+  const refetchAll = React.useCallback(() => {
+    refetchCore();
+    refetchExtras();
+  }, [refetchCore, refetchExtras]);
+
+  const isPaid = user?.feesStatus === 'Paid';
+
+  // Single merged shape so child pages keep their existing props contract.
+  const dashboardData = React.useMemo(() => {
+    if (!coreData && !extrasData) return null;
+    const liveClasses = coreData?.upcomingLiveClasses || [];
+    return {
+      student: user,
+      courses: coreData?.courses || [],
+      enrolledCourses: coreData?.enrolledCourses || [],
+      announcements: coreData?.announcements || [],
+      upcomingLiveClasses: liveClasses,
+      todayLiveClass: liveClasses[0] || null,
+      recordedClasses: extrasData?.recordings || [],
+      latestReplays: (extrasData?.recordings || []).slice(0, 5).map(r => ({ ...r, access: isPaid })),
+      leaderboard: extrasData?.leaderboard || [],
+      learningRanking: extrasData?.learningRanking || null,
+      submissions: extrasData?.submissions || [],
+    };
+  }, [coreData, extrasData, user, isPaid]);
+
   const courses = dashboardData?.courses || [];
   const enrolledCourses = dashboardData?.enrolledCourses || [];
   const submissions = dashboardData?.submissions || [];
   const latestReplays = dashboardData?.latestReplays || [];
-  const liveClassesList = dashboardData?.upcomingLiveClasses ? [dashboardData.todayLiveClass, ...dashboardData.upcomingLiveClasses].filter(Boolean) : [];
-  const analytics = dashboardData?.analytics || null;
-  const overallLeaderboard = dashboardData?.leaderboard || [];
+  // `todayLiveClass` is upcomingLiveClasses[0]; listing both would duplicate it.
+  const liveClassesList = dashboardData?.upcomingLiveClasses || [];
   const learningRanking = dashboardData?.learningRanking ?? null;
 
-  const mustChangePassword = Boolean(
-    dashboardData?.student?.mustChangePassword ??
-    user?.mustChangePassword ??
-    user?.must_change_password ??
-    false
-  );
+  const mustChangePassword = Boolean(user?.mustChangePassword);
 
   const [selectedCourse, setSelectedCourse] = useState(null);
 
-  const { data: assignments = [], isFetching: loadingAssignments } = useQuery({
+  // Assignments load only once a course is opened — never on the initial paint.
+  const { data: assignments = [] } = useQuery({
     queryKey: ['assignments', selectedCourse?.id],
     queryFn: () => getAssignmentsForCourse(selectedCourse.id),
     enabled: !!selectedCourse?.id,
+    staleTime: 1000 * 60 * 5,
   });
-
-  const selectCourse = (course) => {
-    setSelectedCourse(course);
-  };
-
-  const loading = loadingAssignments;
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -378,49 +348,20 @@ const StudentDashboard = () => {
   const [vidCourse, setVidCourse] = useState('');
   const [matQuery, setMatQuery] = useState('');
 
-  const [profileName, setProfileName] = useState(dashboardData?.student?.name || '');
-  const [profilePhone, setProfilePhone] = useState(dashboardData?.student?.phone || '');
-  const [profileCollege, setProfileCollege] = useState(dashboardData?.student?.college || '');
-  const [profileCourse, setProfileCourse] = useState(dashboardData?.student?.course || '');
-  const [profilePic, setProfilePic] = useState(dashboardData?.student?.profile_pic || '');
+  // Header/avatar values, seeded from the authenticated profile and kept in
+  // sync when a child page saves a change.
+  const [profileName, setProfileName] = useState(user?.name || '');
+  const [profileCourse, setProfileCourse] = useState(user?.course || '');
+  const [profilePic, setProfilePic] = useState(user?.profile_pic || '');
 
-  const profileData = dashboardData?.student ? {
-    name: dashboardData.student.name,
-    email: dashboardData.student.email,
-    phone: dashboardData.student.phone,
-    college: dashboardData.student.college,
-    course: dashboardData.student.course,
-    feesStatus: dashboardData.student.feesStatus,
-    feesTotal: dashboardData.student.feesTotal,
-    feesPaidAmount: dashboardData.student.feesPaidAmount,
-    feesRemainingAmount: dashboardData.student.feesRemainingAmount,
-    feesDueDate: dashboardData.student.feesDueDate,
-    attendance: dashboardData.student.attendance?.percentage || 92,
-    profile_pic: dashboardData.student.profile_pic,
-    rollNumber: dashboardData.student.rollNumber
-  } : null;
+  useEffect(() => {
+    setProfileName(user?.name || '');
+    setProfileCourse(user?.course || '');
+    setProfilePic(user?.profile_pic || '');
+  }, [user?.name, user?.course, user?.profile_pic]);
 
-  const fetchProfile = fetchDashboard;
-  const fetchCourses = fetchDashboard;
-  const fetchEnrolledCourses = fetchDashboard;
-  const fetchMySubmissions = fetchDashboard;
-  const fetchLiveClasses = fetchDashboard;
-  const fetchAnalytics = fetchDashboard;
-  const fetchLeaderboards = fetchDashboard;
-  const fetchLatestReplays = fetchDashboard;
-  const replaysLoading = false;
-
-  const saveProfile = (e) => {
-    e.preventDefault();
-    saveProfileMutation.mutate({ name: profileName, phone: profilePhone, college: profileCollege, course: profileCourse, profile_pic: profilePic });
-  };
-
-  const handleProfileImageMock = (e) => {
-    const file = e.target.files[0]; if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => setProfilePic(reader.result);
-    reader.readAsDataURL(file);
-  };
+  const fetchLiveClasses = refetchCore;
+  const replaysLoading = extrasLoading;
 
   const handleJoinLiveClass = (liveClass) => {
     if (!isPaid) {
@@ -443,21 +384,17 @@ const StudentDashboard = () => {
   };
 
   const payFeesMutation = useMutation({
-    mutationFn: () => updateStudent(uid, { feesStatus: 'Pending Payment', updatedAt: new Date() }),
+    mutationFn: () => updateStudent(uid, { feesStatus: 'Pending Payment' }),
     onSuccess: () => {
       showModal('Payment Initiated', 'Please complete your payment with the administrator. Your status will be updated shortly.', 'info');
-      queryClient.invalidateQueries({ queryKey: ['studentDashboard'] });
+      // The student record lives in AuthContext — refresh it so the fee badge updates.
+      refreshProfile();
     },
-    onError: () => showModal('Error', 'Could not initiate payment. Please contact admin.', 'error'),
+    onError: (err) => showModal('Error', classifyFirestoreError(err).message, 'error'),
   });
 
   const payFees = () => payFeesMutation.mutate();
   const paying = payFeesMutation.isPending;
-
-  const enrollInCourse = (courseId) => {
-    // Enrollment is handled by admin via Firestore; students see their enrolled courses
-    showModal('Enrollment', 'Please contact your administrator to enroll in this course.', 'info');
-  };
 
   const submitAssignmentMutation = useMutation({
     mutationFn: async ({ assignmentId, submissionText }) => {
@@ -471,7 +408,7 @@ const StudentDashboard = () => {
     onSuccess: () => {
       setSubmitModalAssignment(null);
       setSubmissionText('');
-      queryClient.invalidateQueries({ queryKey: ['studentDashboard', uid] });
+      queryClient.invalidateQueries({ queryKey: ['studentDashboardExtras', uid] });
       showModal('Submitted!', 'Your assignment has been submitted successfully.', 'success');
     },
     onError: (err) => {
@@ -484,9 +421,6 @@ const StudentDashboard = () => {
     e.preventDefault();
     submitAssignmentMutation.mutate({ assignmentId: submitModalAssignment.id || submitModalAssignment._id, submissionText });
   };
-
-  const getSubmissionStatus = (id) => submissions.find(s => s.assignmentId === id || s.assignment_id === id) || null;
-  const isPaid = dashboardData?.student?.feesStatus === 'Paid';
 
   const navigateToPaymentDetails = () => {
     setActiveTab('profile');
@@ -506,14 +440,6 @@ const StudentDashboard = () => {
         }, 1500);
       }
     }, 200);
-  };
-
-  /* ── Profile Completion ── */
-  const calcCompletion = () => {
-    if (!profileData) return 0;
-    const fields = [profileName, profilePhone, profileCollege, profileCourse, profilePic];
-    const filled = fields.filter(Boolean).length;
-    return Math.round((filled / fields.length) * 100);
   };
 
   /* ── Greeting ── */
@@ -692,7 +618,33 @@ const StudentDashboard = () => {
         {/* ══════════════════════════════════════════
             DASHBOARD TAB — PREMIUM LAYOUT
         ═══════════════════════════════════════════ */}
-        {activeTab === 'dashboard' && dashboardData && (
+        {/* Core data still loading — show the shell with placeholders rather
+            than an empty content area. */}
+        {activeTab === 'dashboard' && coreLoading && <DashboardSkeleton />}
+
+        {/* Core load failed — explain it and offer a retry instead of a blank page. */}
+        {activeTab === 'dashboard' && !coreLoading && coreError && (
+          <div style={{
+            background: '#FFF',
+            border: '1.5px solid #FCA5A5',
+            borderRadius: 18,
+            padding: '32px 28px',
+            textAlign: 'center',
+          }}>
+            <TriangleAlert size={26} color="#EF4444" style={{ marginBottom: 10 }} />
+            <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 800, color: 'var(--text-primary)' }}>
+              Could not load your dashboard
+            </h3>
+            <p style={{ margin: '0 0 18px', fontSize: 13.5, color: 'var(--text-secondary)' }}>
+              {classifyFirestoreError(coreError).message}
+            </p>
+            <button className="btn btn-primary" onClick={() => refetchCore()} style={{ padding: '9px 20px' }}>
+              Try again
+            </button>
+          </div>
+        )}
+
+        {activeTab === 'dashboard' && !coreLoading && !coreError && dashboardData && (
           <div className="animate-fade-in">
             {/* ── WELCOME CARD ── */}
             <div className="welcome-card-premium" style={{
@@ -764,6 +716,27 @@ const StudentDashboard = () => {
                       Live Batch Stats
                     </span>
                   </div>
+
+                  {/* Ranking is a secondary widget — it fills in independently. */}
+                  {extrasLoading && <CardSkeleton lines={3} title={false} height={150} />}
+
+                  {!extrasLoading && extrasError && (
+                    <p style={{ fontSize: 13, color: 'var(--text-secondary)', textAlign: 'center', padding: '24px 0', margin: 0 }}>
+                      Rankings are unavailable right now.{' '}
+                      <button
+                        onClick={() => refetchExtras()}
+                        style={{ background: 'none', border: 'none', color: 'var(--primary-color)', fontWeight: 700, cursor: 'pointer', fontSize: 13, fontFamily: 'inherit' }}
+                      >
+                        Retry
+                      </button>
+                    </p>
+                  )}
+
+                  {!extrasLoading && !extrasError && !learningRanking?.topPerformers?.length && (
+                    <p style={{ fontSize: 13, color: 'var(--text-secondary)', textAlign: 'center', padding: '24px 0', margin: 0 }}>
+                      No rankings published yet.
+                    </p>
+                  )}
 
                   {/* Top Performers Grid (1st, 2nd, 3rd) */}
                   <div className="top-performers-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 20 }}>
@@ -1209,7 +1182,7 @@ const StudentDashboard = () => {
           {/* RECORDED CLASSES TAB */}
           {activeTab === 'recorded-classes-tab' && (
             <RecordedClassesPage
-              dashboardData={dashboardData}
+              recordedClasses={dashboardData?.recordedClasses || null}
               isPaid={isPaid}
               initialCourseId={replayTarget?.courseId || null}
               initialLessonId={replayTarget?.lessonId || null}
@@ -1247,7 +1220,11 @@ const StudentDashboard = () => {
 
           {/* LEADERBOARD TAB */}
           {activeTab === 'leaderboard-tab' && (
-            <LeaderboardPage user={user} />
+            <LeaderboardPage
+              user={user}
+              currentUid={uid}
+              leaderboard={dashboardData?.leaderboard || null}
+            />
           )}
 
           {/* PROFILE TAB */}
@@ -1282,6 +1259,7 @@ const StudentDashboard = () => {
               )}
               <StudentSettings
                 user={user}
+                onProfileUpdate={handleProfileUpdate}
               />
             </div>
           )}
