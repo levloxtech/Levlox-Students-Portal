@@ -51,14 +51,16 @@ export const storage = getStorage(app);
  * builds never set it, so this branch is dead code there. Emulators run the same
  * Auth and Firestore behaviour locally without touching the live project.
  */
-if (import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true') {
-  const authHost = import.meta.env.VITE_EMULATOR_AUTH_URL || 'http://127.0.0.1:9099';
+const USE_EMULATOR = import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true';
+const EMULATOR_AUTH_URL = import.meta.env.VITE_EMULATOR_AUTH_URL || 'http://127.0.0.1:9099';
+
+if (USE_EMULATOR) {
   const firestoreHost = import.meta.env.VITE_EMULATOR_FIRESTORE_HOST || '127.0.0.1';
   const firestorePort = Number(import.meta.env.VITE_EMULATOR_FIRESTORE_PORT || 8080);
 
-  connectAuthEmulator(auth, authHost, { disableWarnings: true });
+  connectAuthEmulator(auth, EMULATOR_AUTH_URL, { disableWarnings: true });
   connectFirestoreEmulator(db, firestoreHost, firestorePort);
-  console.info(`[Firebase] Using local emulators — Auth ${authHost}, Firestore ${firestoreHost}:${firestorePort}`);
+  console.info(`[Firebase] Using local emulators — Auth ${EMULATOR_AUTH_URL}, Firestore ${firestoreHost}:${firestorePort}`);
 }
 
 // Keep the session across reloads/tabs. Fire-and-forget: onAuthStateChanged
@@ -82,6 +84,14 @@ export const createAuthUserDetached = async (email, password) => {
   try {
     // initializeAuth with no persistence — nothing is written to local storage.
     const secondaryAuth = initializeAuth(secondaryApp, {});
+
+    // The secondary app is a separate Firebase instance and does NOT inherit the
+    // primary app's emulator wiring. Without this it would create real accounts
+    // in the production project while developing locally.
+    if (USE_EMULATOR) {
+      connectAuthEmulator(secondaryAuth, EMULATOR_AUTH_URL, { disableWarnings: true });
+    }
+
     const { createUserWithEmailAndPassword } = await import("firebase/auth");
     const credential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
     const { uid } = credential.user;

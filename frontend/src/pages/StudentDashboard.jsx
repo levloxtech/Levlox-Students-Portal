@@ -173,12 +173,17 @@ const MockBarChart = memo(({ data = [0, 0, 0, 0] }) => {
   );
 });
 
+/** Stable fallbacks — fresh literals would break memo dependencies. */
+const EMPTY_PROFILE = {};
+
 /* ─── Main Component ───────────────────────────────── */
 const StudentDashboard = () => {
   const navigate = useNavigate();
   const { currentUser, userProfile, logout: authLogout, uid, refreshProfile } = useAuth();
   // AuthContext already loaded students/{uid}; reuse it instead of re-reading.
-  const user = userProfile || {};
+  // Stable fallback — a fresh `{}` each render would invalidate every memo
+  // and query key that depends on `user`.
+  const user = userProfile || EMPTY_PROFILE;
   const [activeTab, setActiveTab] = useState('dashboard');
   const queryClient = useQueryClient();
 

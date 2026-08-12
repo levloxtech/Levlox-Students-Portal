@@ -191,6 +191,9 @@ const ExportDropdown = ({ onExportCSV, onExportExcel, onExportPDF }) => {
  */
 const loginUrl = `${window.location.origin}/login`;
 
+/** Stable empty array — a fresh `[]` literal would break memo dependencies. */
+const EMPTY_LIST = [];
+
 const AdminDashboard = () => {
   const navigate = useNavigate();
   const { currentUser, userProfile, logout: authLogout, uid, applyProfilePatch } = useAuth();
@@ -259,12 +262,14 @@ const AdminDashboard = () => {
   });
 
   // Derive named data from adminData
-  const liveClasses = adminData?.liveClassList || [];
-  const recordedClasses = adminData?.recordedList || [];
-  const announcements = adminData?.announcementList || [];
-  const courses = adminData?.courseList || [];
+  const liveClasses = adminData?.liveClassList || EMPTY_LIST;
+  const recordedClasses = adminData?.recordedList || EMPTY_LIST;
+  const announcements = adminData?.announcementList || EMPTY_LIST;
+  const courses = adminData?.courseList || EMPTY_LIST;
   const batches = firestoreBatches;
-  const allStudents = adminData?.studentList || [];
+  // Falls back to a module-level constant rather than a fresh `[]` each render,
+  // so the students memo below is not invalidated on every render.
+  const allStudents = adminData?.studentList || EMPTY_LIST;
 
   // Stats are computed from the data already loaded above — no extra reads.
   const stats = React.useMemo(() => {
@@ -360,6 +365,52 @@ const AdminDashboard = () => {
   const [feesStartDateFilter, setFeesStartDateFilter] = useState('');
   const [feesEndDateFilter, setFeesEndDateFilter] = useState('');
   const [feesDateFilter, setFeesDateFilter] = useState('Today');
+
+  /*
+   * getCourses() returns course DOCUMENTS ({id, title, ...}). Every dropdown
+   * and filter here needs the course *name*, and student records store the
+   * course as a title string — so derive a de-duplicated title list once.
+   * Rendering the raw objects crashed the admin dashboard.
+   */
+  const courseTitles = React.useMemo(
+    () => Array.from(new Set(
+      courses.map(c => (typeof c === 'string' ? c : c?.title)).filter(Boolean)
+    )),
+    [courses]
+  );
+
+  /** Client-side search + filters over the already-loaded roster. */
+  const students = React.useMemo(() => {
+    const isFeesTab = activeTab === 'fees-management';
+    const searchVal = isFeesTab ? feesSearchQuery : searchQuery;
+    const statusVal = isFeesTab ? '' : statusFilter;
+    const feesVal = isFeesTab ? feesStatusFilter : feesFilter;
+    const courseVal = isFeesTab ? feesCourseFilter : courseFilter;
+    const batchVal = isFeesTab ? feesBatchFilter : batchFilter;
+
+    let filtered = allStudents;
+    if (searchVal) {
+      const q = searchVal.toLowerCase();
+      filtered = filtered.filter(s =>
+        (s.name || '').toLowerCase().includes(q) ||
+        (s.email || '').toLowerCase().includes(q) ||
+        (s.rollNumber || '').toLowerCase().includes(q)
+      );
+    }
+    if (statusVal) filtered = filtered.filter(s => s.status === statusVal);
+    if (feesVal) filtered = filtered.filter(s => s.feesStatus === feesVal);
+    if (courseVal) filtered = filtered.filter(s => s.course === courseVal);
+    if (batchVal) filtered = filtered.filter(s => s.batch_id === batchVal);
+    return filtered;
+  }, [
+    allStudents, activeTab, searchQuery, statusFilter, feesFilter, courseFilter, batchFilter,
+    feesSearchQuery, feesStatusFilter, feesCourseFilter, feesBatchFilter,
+  ]);
+
+  useEffect(() => {
+    setTotalPages(Math.ceil(students.length / 5) || 1);
+  }, [students.length]);
+
 
   // Student Date filters
   const [studentDateFilter, setStudentDateFilter] = useState('Today');
@@ -2295,38 +2346,6 @@ const AdminDashboard = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
-  /** Client-side search + filters over the already-loaded roster. */
-  const students = React.useMemo(() => {
-    const isFeesTab = activeTab === 'fees-management';
-    const searchVal = isFeesTab ? feesSearchQuery : searchQuery;
-    const statusVal = isFeesTab ? '' : statusFilter;
-    const feesVal = isFeesTab ? feesStatusFilter : feesFilter;
-    const courseVal = isFeesTab ? feesCourseFilter : courseFilter;
-    const batchVal = isFeesTab ? feesBatchFilter : batchFilter;
-
-    let filtered = allStudents;
-    if (searchVal) {
-      const q = searchVal.toLowerCase();
-      filtered = filtered.filter(s =>
-        (s.name || '').toLowerCase().includes(q) ||
-        (s.email || '').toLowerCase().includes(q) ||
-        (s.rollNumber || '').toLowerCase().includes(q)
-      );
-    }
-    if (statusVal) filtered = filtered.filter(s => s.status === statusVal);
-    if (feesVal) filtered = filtered.filter(s => s.feesStatus === feesVal);
-    if (courseVal) filtered = filtered.filter(s => s.course === courseVal);
-    if (batchVal) filtered = filtered.filter(s => s.batch_id === batchVal);
-    return filtered;
-  }, [
-    allStudents, activeTab, searchQuery, statusFilter, feesFilter, courseFilter, batchFilter,
-    feesSearchQuery, feesStatusFilter, feesCourseFilter, feesBatchFilter,
-  ]);
-
-  useEffect(() => {
-    setTotalPages(Math.ceil(students.length / 5) || 1);
-  }, [students.length]);
-
   useEffect(() => {
     if (activeTab === 'attendance') {
       if (attBatchId) {
@@ -3576,7 +3595,7 @@ const AdminDashboard = () => {
                   label: 'Course',
                   value: courseFilter,
                   onChange: (val) => { setCourseFilter(val); setCurrentPage(1); },
-                  options: courses.map(c => ({ value: c, label: c }))
+                  options: courseTitles.map(c => ({ value: c, label: c }))
                 },
                 {
                   label: 'Batch',
@@ -4436,7 +4455,7 @@ const AdminDashboard = () => {
                   label: 'Course',
                   value: annCourseFilter,
                   onChange: (val) => { setAnnCourseFilter(val); setAnnouncementsPage(1); },
-                  options: courses.map(c => ({ value: c, label: c }))
+                  options: courseTitles.map(c => ({ value: c, label: c }))
                 },
                 {
                   label: 'Batch',
@@ -4557,7 +4576,7 @@ const AdminDashboard = () => {
                   label: 'Course',
                   value: feesCourseFilter,
                   onChange: (val) => { setFeesCourseFilter(val); setFeesPage(1); },
-                  options: courses.map(c => ({ value: c, label: c }))
+                  options: courseTitles.map(c => ({ value: c, label: c }))
                 },
                 {
                   label: 'Batch',
@@ -5219,12 +5238,12 @@ const AdminDashboard = () => {
                   <div className="form-group">
                     <label className="form-label" htmlFor="editCourse">Course Name</label>
                     <select id="editCourse" className="form-select" value={editCourse} onChange={(e) => setEditCourse(e.target.value)}>
-                      {courses.length === 0 ? (
+                      {courseTitles.length === 0 ? (
                         <option value="">No courses available</option>
                       ) : (
                         <>
                           <option value="">-- Select Course --</option>
-                          {courses.map(c => (
+                          {courseTitles.map(c => (
                             <option key={c} value={c}>{c}</option>
                           ))}
                         </>
@@ -5476,12 +5495,12 @@ const AdminDashboard = () => {
                   <div className="form-group">
                     <label className="form-label" htmlFor="createCourse">Course *</label>
                     <select id="createCourse" className="form-select" value={createCourse} onChange={(e) => setCreateCourse(e.target.value)} required>
-                      {courses.length === 0 ? (
+                      {courseTitles.length === 0 ? (
                         <option value="">No courses available</option>
                       ) : (
                         <>
                           <option value="">-- Select Course --</option>
-                          {courses.map(c => (
+                          {courseTitles.map(c => (
                             <option key={c} value={c}>{c}</option>
                           ))}
                         </>

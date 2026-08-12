@@ -179,13 +179,17 @@ const MaterialCard = ({ material, viewMode, isPaid }) => {
 };
 
 /* ─── Main Component ─────────────────────────────── */
+/** Stable fallback — a fresh literal would break memo dependencies. */
+const EMPTY_MATERIALS = [];
+
 const StudyMaterialsPage = ({ dashboardData, isPaid }) => {
   const [search, setSearch]     = useState('');
   const [subject, setSubject]   = useState('all');
   const [viewMode, setViewMode] = useState('grid');
   const [sortBy, setSortBy]     = useState('recent');
 
-  const materials = dashboardData?.studyMaterials || [];
+  // Stable fallback so the memos below are not invalidated every render.
+  const materials = dashboardData?.studyMaterials || EMPTY_MATERIALS;
 
   /* ── Derive subject list ── */
   const subjects = useMemo(() => {

@@ -77,7 +77,17 @@ const LeaderboardPage = ({ user, currentUid = null, leaderboard = null }) => {
    * student's row here — Firestore does not store a per-viewer `is_current`.
    */
   const rows = React.useMemo(
-    () => leaderboardData.map(r => ({ ...r, is_current: !!currentUid && r.id === currentUid })),
+    () => leaderboardData.map(r => ({
+      ...r,
+      is_current: !!currentUid && r.id === currentUid,
+      // `score` is the canonical field the leaderboard collection is ordered by
+      // (see getLeaderboard). The per-tab metrics fall back to it so a document
+      // that only carries `score` renders a number instead of "undefined pts".
+      overall_score: r.overall_score ?? r.score ?? 0,
+      activity_points: r.activity_points ?? r.score ?? 0,
+      average_score: r.average_score ?? 0,
+      completed_assignments: r.completed_assignments ?? 0,
+    })),
     [leaderboardData, currentUid]
   );
 
@@ -433,7 +443,7 @@ const LeaderboardPage = ({ user, currentUid = null, leaderboard = null }) => {
                   
                   return (
                     <tr
-                      key={row.student_id}
+                      key={row.id || row.student_id}
                       style={{
                         borderBottom: '1px solid var(--border-color)',
                         background: row.is_current ? 'rgba(108,60,240,0.04)' : 'transparent',
@@ -568,7 +578,7 @@ const LeaderboardPage = ({ user, currentUid = null, leaderboard = null }) => {
 
               return (
                 <div
-                  key={row.student_id}
+                  key={row.id || row.student_id}
                   className="mobile-ranking-card clickable-card-hover"
                   style={{
                     background: 'white',

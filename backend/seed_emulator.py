@@ -52,6 +52,15 @@ DEMO_ADMIN = {
     "name": "Demo Admin",
 }
 
+# A second student, used to verify that one student cannot read another's data.
+OTHER_STUDENT = {
+    "mobile": "9555500001",
+    "password": "OtherPass1",
+    "name": "Other Student",
+    "course": "Data Engineering",
+    "rollNumber": "LVX000002",
+}
+
 
 def upsert_account(mobile: str, password: str, name: str) -> str:
     """Create (or update) the emulator Auth account for a mobile number."""
@@ -142,7 +151,108 @@ def main() -> None:
     db.collection("leaderboard").document(student_uid).set(
         {"name": s["name"], "score": 480, "badge": "Top Performer"}, merge=True
     )
-    print("  content  courses / announcements / enrollments / leaderboard")
+
+    # ── Second student — used to prove cross-student isolation ─────────────
+    o = OTHER_STUDENT
+    other_uid = upsert_account(o["mobile"], o["password"], o["name"])
+    db.collection("students").document(other_uid).set(
+        {
+            "name": o["name"],
+            "phone": normalize_mobile(o["mobile"]),
+            "role": "student",
+            "status": "active",
+            "course": o["course"],
+            "rollNumber": o["rollNumber"],
+            "feesStatus": "Pending",
+            "mustChangePassword": False,
+            # A private value the first student must never be able to read.
+            "permanent_address": "PRIVATE-ADDRESS-OF-OTHER-STUDENT",
+        },
+        merge=True,
+    )
+    db.collection("leaderboard").document(other_uid).set(
+        {"name": o["name"], "score": 310, "badge": "Rising Star"}, merge=True
+    )
+    print(f"  student2 {o['mobile']} / {o['password']}  -> students/{other_uid}")
+
+    # ── Per-student records, for the dashboard tabs ────────────────────────
+    db.collection("liveClasses").document("demo-live").set(
+        {
+            "title": "React Fundamentals — Live Session",
+            "instructor": "Levlox Trainer",
+            "date": "2026-08-20",
+            "time": "18:00",
+            "status": "scheduled",
+            "meet_link": "https://meet.example.com/levlox-demo",
+            "description": "Components, props and state.",
+        },
+        merge=True,
+    )
+    db.collection("recordedClasses").document("demo-recording").set(
+        {
+            "title": "Introduction to JavaScript",
+            "trainer": "Levlox Trainer",
+            "batch": "Demo Batch",
+            "subject": "JavaScript",
+            "course_id": "demo-course",
+            "createdAt": firestore.SERVER_TIMESTAMP,
+        },
+        merge=True,
+    )
+    for i, (date, status) in enumerate(
+        [("2026-08-10", "Present"), ("2026-08-09", "Present"), ("2026-08-08", "Absent")]
+    ):
+        db.collection("attendance").document(f"{student_uid}_{i}").set(
+            {"studentId": student_uid, "date": date, "status": status}, merge=True
+        )
+    db.collection("notifications").document(f"{student_uid}_n1").set(
+        {
+            "userId": student_uid,
+            "title": "Fees receipt available",
+            "read": False,
+            "createdAt": firestore.SERVER_TIMESTAMP,
+        },
+        merge=True,
+    )
+    db.collection("assignments").document("demo-assignment").set(
+        {
+            "title": "Build a To-Do App",
+            "courseId": "demo-course",
+            "dueDate": "2026-08-25",
+        },
+        merge=True,
+    )
+    db.collection("submissions").document(f"{student_uid}_demo-assignment").set(
+        {
+            "studentId": student_uid,
+            "assignmentId": "demo-assignment",
+            "submissionText": "https://github.com/demo/todo",
+            "submittedAt": firestore.SERVER_TIMESTAMP,
+        },
+        merge=True,
+    )
+    db.collection("payments").document(f"{student_uid}_p1").set(
+        {
+            "studentId": student_uid,
+            "amount": 20000,
+            "method": "UPI",
+            "createdAt": firestore.SERVER_TIMESTAMP,
+        },
+        merge=True,
+    )
+    db.collection("batches").document("demo-batch").set(
+        {
+            "name": "Demo Batch",
+            "course_name": "Fullstack Engineering",
+            "trainer_name": "Levlox Trainer",
+            "status": "Active",
+            "student_ids": [student_uid],
+        },
+        merge=True,
+    )
+    print("  content  courses / announcements / enrollments / leaderboard /")
+    print("           liveClasses / recordedClasses / attendance / notifications /")
+    print("           assignments / submissions / payments / batches")
 
     print("\nDone. Sign in at http://localhost:5173/login")
 

@@ -1,4 +1,7 @@
 import React, { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '../context/AuthContext';
+import { getAttendanceForStudent, classifyFirestoreError } from '../services/firebaseService';
 import {
   ChevronLeft,
   ChevronRight,
@@ -97,13 +100,41 @@ const DayTooltip = ({ day }) => (
 /* ══════════════════════════════════════════════════
    MAIN COMPONENT
 ══════════════════════════════════════════════════ */
+/** Stable fallback — a fresh literal would break memo dependencies. */
+const EMPTY_HISTORY = [];
+
 const AttendancePage = ({ dashboardData }) => {
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [hoveredDay, setHoveredDay] = useState(null);
+  const { uid } = useAuth();
 
   const student = dashboardData?.student || {};
   const attendance = student.attendance || {};
-  const history = student.attendanceHistory || [];
+
+  /*
+   * Attendance lives in its own `attendance` collection, written per student by
+   * an administrator. It is loaded here rather than in the dashboard query so
+   * the cost is only paid when this tab is actually opened.
+   *
+   * `attendanceHistory` on the student document is the legacy shape kept as a
+   * fallback for records created before attendance moved to its own collection.
+   */
+  const {
+    data: fetchedHistory,
+    isPending: historyLoading,
+    error: historyError,
+    refetch: refetchHistory,
+  } = useQuery({
+    queryKey: ['studentAttendance', uid],
+    queryFn: () => getAttendanceForStudent(uid),
+    enabled: !!uid,
+    staleTime: 1000 * 60 * 5,
+    refetchOnWindowFocus: false,
+  });
+
+  const history = fetchedHistory?.length
+    ? fetchedHistory
+    : (student.attendanceHistory || EMPTY_HISTORY);
 
   /* ─── Build date → record map ─── */
   const attendanceMap = useMemo(() => {
@@ -164,6 +195,27 @@ const AttendancePage = ({ dashboardData }) => {
 
   const pctColor = percentage >= 75 ? '#10B981' : percentage >= 50 ? '#F59E0B' : '#EF4444';
   const pctLabel = percentage >= 75 ? 'Excellent' : percentage >= 50 ? 'Average' : 'Low';
+
+  if (historyLoading) {
+    return (
+      <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+        Loading your attendance…
+      </div>
+    );
+  }
+
+  if (historyError) {
+    return (
+      <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+        <p style={{ margin: '0 0 14px', fontWeight: 600, color: '#991B1B' }}>
+          {classifyFirestoreError(historyError).message}
+        </p>
+        <button type="button" onClick={() => refetchHistory()} className="btn btn-primary" style={{ padding: '9px 20px' }}>
+          Try again
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div
