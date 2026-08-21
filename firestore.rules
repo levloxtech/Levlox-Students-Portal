@@ -116,7 +116,10 @@ service cloud.firestore {
     // document, so a query that is not filtered to the caller's own uid fails
     // outright. That is what confines students to their own rows.
     function ownsStudentRow() {
-      return isAuthenticated() && resource.data.studentId == request.auth.uid;
+      return isAuthenticated() && (
+        resource.data.studentId == request.auth.uid ||
+        resource.data.student_id == request.auth.uid
+      );
     }
 
     match /attendance/{attendanceId} {

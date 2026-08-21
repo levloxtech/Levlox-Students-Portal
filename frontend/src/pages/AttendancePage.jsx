@@ -106,31 +106,25 @@ const EMPTY_HISTORY = [];
 const AttendancePage = ({ dashboardData }) => {
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [hoveredDay, setHoveredDay] = useState(null);
-  const { uid } = useAuth();
+  const { uid, authLoading } = useAuth();
 
   const student = dashboardData?.student || {};
   const attendance = student.attendance || {};
 
-  /*
-   * Attendance lives in its own `attendance` collection, written per student by
-   * an administrator. It is loaded here rather than in the dashboard query so
-   * the cost is only paid when this tab is actually opened.
-   *
-   * `attendanceHistory` on the student document is the legacy shape kept as a
-   * fallback for records created before attendance moved to its own collection.
-   */
   const {
     data: fetchedHistory,
-    isPending: historyLoading,
+    isLoading: historyFetching,
     error: historyError,
     refetch: refetchHistory,
   } = useQuery({
     queryKey: ['studentAttendance', uid],
     queryFn: () => getAttendanceForStudent(uid),
-    enabled: !!uid,
+    enabled: Boolean(uid),
     staleTime: 1000 * 60 * 5,
     refetchOnWindowFocus: false,
   });
+
+  const historyLoading = authLoading || (Boolean(uid) && historyFetching);
 
   const history = fetchedHistory?.length
     ? fetchedHistory

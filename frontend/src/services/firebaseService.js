@@ -328,13 +328,34 @@ export const subscribeAnnouncements = (callback, onError) =>
 // ATTENDANCE
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const getAttendanceForStudent = (studentId, constraints = []) =>
-  getDocuments("attendance", [
-    where("studentId", "==", studentId),
-    orderBy("date", "desc"),
-    ...constraints,
-    limit(DEFAULT_LIST_LIMIT),
-  ]);
+export const getAttendanceForStudent = async (studentId, constraints = []) => {
+  if (!studentId) return [];
+  try {
+    // 1. Primary query: studentId field
+    return await getDocuments("attendance", [
+      where("studentId", "==", studentId),
+      orderBy("date", "desc"),
+      ...constraints,
+      limit(DEFAULT_LIST_LIMIT),
+    ]);
+  } catch (error) {
+    console.warn('[firebaseService] Primary getAttendanceForStudent query failed, trying fallback query:', error);
+    try {
+      // 2. Fallback query: check both studentId & student_id without orderBy (prevents index errors)
+      const [byStudentId, byStudent_id] = await Promise.all([
+        getDocuments("attendance", [where("studentId", "==", studentId), limit(DEFAULT_LIST_LIMIT)]).catch(() => []),
+        getDocuments("attendance", [where("student_id", "==", studentId), limit(DEFAULT_LIST_LIMIT)]).catch(() => []),
+      ]);
+      const merged = [...byStudentId, ...byStudent_id];
+      const unique = Array.from(new Map(merged.map(item => [item.id, item])).values());
+      unique.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      return unique;
+    } catch (fallbackError) {
+      console.error('[firebaseService] getAttendanceForStudent fallback failed:', fallbackError);
+      throw error;
+    }
+  }
+};
 
 export const getAttendanceSheet = (constraints = []) =>
   getDocuments("attendance", [orderBy("date", "desc"), ...constraints, limit(DEFAULT_LIST_LIMIT)]);
