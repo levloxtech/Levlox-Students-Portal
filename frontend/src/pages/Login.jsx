@@ -2,12 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   signInWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
+  sendPasswordResetEmail,
   signOut,
 } from 'firebase/auth';
 import { auth } from '../firebase';
 import { getStudent, getAdmin } from '../services/firebaseService';
 import {
-  Eye, EyeOff, Lock, Smartphone, Check, X,
+  Eye, EyeOff, Lock, Smartphone, Check, X, Mail,
   ShieldCheck, AlertTriangle, Shield, Loader2,
   GraduationCap, Sparkles
 } from 'lucide-react';
@@ -20,20 +23,26 @@ const LOCKOUT_SECONDS = 30;
 
 const Login = () => {
   /* ─── Form state ─── */
-  const [mobile, setMobile] = useState('');
+  const [identifier, setIdentifier] = useState(''); // Email or Mobile
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
 
+  /* ─── Reset Password Modal State ─── */
+  const [resetModalOpen, setResetModalOpen] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+
   /* ─── Loading & modals ─── */
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalText, setModalText] = useState('');
   const [modalType, setModalType] = useState('info');
 
   /* ─── Validation feedback ─── */
-  const [mobileError, setMobileError] = useState('');
+  const [identifierError, setIdentifierError] = useState('');
   const [passError, setPassError] = useState('');
 
   /* ─── Rate limiting ─── */
@@ -44,10 +53,10 @@ const Login = () => {
 
   const navigate = useNavigate();
 
-  /* ════ LOAD REMEMBERED MOBILE ════ */
+  /* ════ LOAD REMEMBERED IDENTIFIER ════ */
   useEffect(() => {
-    const saved = localStorage.getItem('rememberedMobile');
-    if (saved) { setMobile(saved); setRememberMe(true); }
+    const saved = localStorage.getItem('rememberedMobile') || localStorage.getItem('rememberedIdentifier');
+    if (saved) { setIdentifier(saved); setRememberMe(true); }
 
     const savedLockout = sessionStorage.getItem('loginLockoutEnd');
     if (savedLockout) {
@@ -123,48 +132,118 @@ const Login = () => {
 
   const getFirebaseAuthError = (code) => {
     const map = {
-      'auth/user-not-found': 'No account found with this mobile number.',
+      'auth/user-not-found': 'No account found with this email or mobile number.',
       'auth/wrong-password': 'Incorrect password. Please try again.',
-      // Firebase returns this for BOTH an unregistered number and a wrong
-      // password when email enumeration protection is on (the default). The
-      // wording stays deliberately ambiguous so it cannot be used to discover
-      // which mobile numbers are registered.
-      'auth/invalid-credential': 'Incorrect mobile number or password. Please try again.',
-      'auth/invalid-login-credentials': 'Incorrect mobile number or password. Please try again.',
+      'auth/invalid-credential': 'Incorrect email/mobile number or password. Please try again.',
+      'auth/invalid-login-credentials': 'Incorrect email/mobile number or password. Please try again.',
       'auth/missing-password': 'Please enter your password.',
-      'auth/invalid-email': 'Please enter a valid 10-digit mobile number.',
+      'auth/invalid-email': 'Please enter a valid email address or 10-digit mobile number.',
       'auth/user-disabled': 'This account has been disabled. Contact your administrator.',
       'auth/too-many-requests': 'Too many failed attempts. Please try again later.',
       'auth/network-request-failed': 'Network error. Please check your connection.',
       'auth/internal-error': 'An internal error occurred. Please try again.',
-      // Raised when the Email/Password provider is not enabled on the Firebase
-      // project — a console configuration problem, not a user mistake.
       'auth/configuration-not-found':
         'Sign-in is not enabled for this portal yet. Please contact your administrator.',
       'auth/operation-not-allowed':
         'Sign-in is not enabled for this portal yet. Please contact your administrator.',
+      'auth/popup-closed-by-user': 'Google sign-in popup was closed before completing.',
     };
     return map[code] || 'Authentication failed. Please try again.';
   };
 
-  /** Configuration problems must not burn a user's login attempt allowance. */
   const isConfigError = (code) =>
     code === 'auth/configuration-not-found' || code === 'auth/operation-not-allowed';
+
+  /* ════ GOOGLE OAUTH SIGN IN ════ */
+  const handleGoogleSignIn = async () => {
+    if (isLocked) return;
+    setGoogleLoading(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      const credential = await signInWithPopup(auth, provider);
+      const firebaseUser = credential.user;
+
+      const [adminDoc, studentDoc] = await Promise.all([
+        getAdmin(firebaseUser.uid).catch(() => null),
+        getStudent(firebaseUser.uid).catch(() => null),
+      ]);
+
+      let role = null;
+      if (adminDoc) {
+        role = 'admin';
+      } else if (studentDoc) {
+        if (studentDoc.status === 'disabled' || studentDoc.status === 'inactive') {
+          await signOut(auth);
+          throw new Error('Your account has been disabled. Please contact your administrator.');
+        }
+        role = 'student';
+      } else {
+        await signOut(auth);
+        throw new Error(
+          `No portal profile is linked to ${firebaseUser.email}. Please contact your Levlox administrator.`
+        );
+      }
+
+      navigate(role === 'admin' ? '/admin' : '/student', { replace: true });
+    } catch (err) {
+      console.warn('[Login] Google sign-in failed:', err?.code || err?.message);
+      if (err.code !== 'auth/popup-closed-by-user') {
+        showToast('Google Sign-In Failed', getFirebaseAuthError(err.code || err.message), 'error');
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  /* ════ PASSWORD RESET VIA EMAIL ════ */
+  const handleSendPasswordReset = async (e) => {
+    e.preventDefault();
+    if (!resetEmail || !resetEmail.includes('@')) {
+      showToast('Invalid Email', 'Please enter a valid email address to receive the password reset link.', 'warning');
+      return;
+    }
+    setResetLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, resetEmail.trim());
+      setResetModalOpen(false);
+      showToast('Email Sent', `A password reset link has been sent to ${resetEmail}. Check your inbox!`, 'success');
+      setResetEmail('');
+    } catch (err) {
+      console.error('[Login] Password reset failed:', err);
+      showToast('Reset Failed', getFirebaseAuthError(err.code || err.message), 'error');
+    } finally {
+      setResetLoading(false);
+    }
+  };
 
   /* ════ LOGIN SUBMIT ════ */
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
-    setMobileError(''); setPassError('');
+    setIdentifierError(''); setPassError('');
 
     if (isLocked) return;
 
     let valid = true;
-    const nationalNumber = normalizeMobile(mobile);
+    const cleanId = identifier.trim();
+    let authEmail = '';
 
-    if (!nationalNumber) {
-      setMobileError('Please enter a valid 10-digit mobile number.');
+    if (!cleanId) {
+      setIdentifierError('Please enter your email address or 10-digit mobile number.');
       valid = false;
+    } else if (cleanId.includes('@')) {
+      // Direct Email login
+      authEmail = cleanId;
+    } else {
+      // Mobile number login
+      const nationalNumber = normalizeMobile(cleanId);
+      if (!nationalNumber) {
+        setIdentifierError('Please enter a valid email address or 10-digit mobile number.');
+        valid = false;
+      } else {
+        authEmail = mobileToAuthId(nationalNumber);
+      }
     }
+
     if (!password) {
       setPassError('Please enter your password.');
       valid = false;
@@ -173,12 +252,9 @@ const Login = () => {
 
     setLoading(true);
     try {
-      // The mobile number is mapped to a deterministic Firebase Auth identifier.
-      // Firebase verifies the password on its own servers — this app never sees,
-      // stores or hashes it. See services/phoneIdentity.js.
       const credential = await signInWithEmailAndPassword(
         auth,
-        mobileToAuthId(nationalNumber),
+        authEmail,
         password
       );
       const firebaseUser = credential.user;
@@ -210,9 +286,9 @@ const Login = () => {
       sessionStorage.removeItem('loginAttempts');
       sessionStorage.removeItem('loginLockoutEnd');
 
-      // Remember the mobile number if requested (never the password)
-      if (rememberMe) localStorage.setItem('rememberedMobile', nationalNumber);
-      else localStorage.removeItem('rememberedMobile');
+      // Remember the identifier if requested
+      if (rememberMe) localStorage.setItem('rememberedIdentifier', cleanId);
+      else localStorage.removeItem('rememberedIdentifier');
 
       // AuthContext's onAuthStateChanged listener loads the profile from here.
       navigate(role === 'admin' ? '/admin' : '/student', { replace: true });
@@ -220,8 +296,6 @@ const Login = () => {
     } catch (err) {
       console.warn('[Login] sign-in failed:', err?.code || err?.message);
 
-      // A misconfigured project is not a wrong password — don't count it as a
-      // failed attempt or lock the user out over it.
       if (isConfigError(err?.code)) {
         showToast('Sign-In Unavailable', getFirebaseAuthError(err.code), 'error');
         setLoading(false);
@@ -239,8 +313,6 @@ const Login = () => {
         return;
       }
 
-      // Errors we raised ourselves already carry a user-facing message; Firebase
-      // errors carry a code that needs mapping.
       const isOwnError = !err.code;
       const remaining = MAX_ATTEMPTS - (failedAttempts + 1);
       const errorMsg = isOwnError
@@ -302,7 +374,7 @@ const Login = () => {
             }} />
 
             {/* LOGO */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 32 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 28 }}>
               <img
                 src={leveloxLogo}
                 alt="Levlox Logo"
@@ -358,37 +430,69 @@ const Login = () => {
               </div>
             )}
 
+            {/* GOOGLE SIGN IN BUTTON */}
+            <button
+              type="button"
+              onClick={handleGoogleSignIn}
+              disabled={googleLoading || isLocked}
+              style={{
+                width: '100%',
+                height: 48,
+                borderRadius: 14,
+                border: '1px solid rgba(255,255,255,0.12)',
+                background: 'rgba(255,255,255,0.05)',
+                color: '#FFFFFF',
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: googleLoading || isLocked ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 12,
+                marginBottom: 20,
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={e => { if (!googleLoading && !isLocked) e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                <path fill="#FBBC05" d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.62z" />
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+              </svg>
+              {googleLoading ? 'Signing in with Google…' : 'Continue with Google'}
+            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', margin: '0 0 20px 0' }}>
+              <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
+              <span style={{ padding: '0 12px', fontSize: 12, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>OR</span>
+              <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
+            </div>
+
             {/* LOGIN FORM */}
             <form onSubmit={handleLoginSubmit} noValidate className="animated-form">
-              {/* Mobile Number */}
-              <div style={{ marginBottom: mobileError ? 10 : 20 }}>
-                <label style={labelStyle} htmlFor="mobile">Mobile Number</label>
-                <div className={`input-group-relative ${mobileError ? 'error-border' : isValidMobile(mobile) ? 'success-border' : ''}`}>
+              {/* Email or Mobile */}
+              <div style={{ marginBottom: identifierError ? 10 : 20 }}>
+                <label style={labelStyle} htmlFor="identifier">Email / Mobile Number</label>
+                <div className={`input-group-relative ${identifierError ? 'error-border' : ''}`}>
                   <div className="input-icon-left">
-                    <Smartphone size={16} />
+                    {identifier.includes('@') ? <Mail size={16} /> : <Smartphone size={16} />}
                   </div>
                   <input
-                    id="mobile"
+                    id="identifier"
                     className="premium-input"
-                    type="tel"
-                    inputMode="numeric"
-                    placeholder="Enter your 10-digit mobile number"
-                    value={mobile}
-                    // Digits only, capped at 10 — matches the registered format.
-                    onChange={e => { setMobile(e.target.value.replace(/\D/g, '').slice(0, 10)); setMobileError(''); }}
+                    type="text"
+                    placeholder="Enter email or 10-digit mobile number"
+                    value={identifier}
+                    onChange={e => { setIdentifier(e.target.value); setIdentifierError(''); }}
                     disabled={isLocked}
-                    autoComplete="tel"
-                    maxLength={10}
+                    autoComplete="username"
                     required
                     style={{ cursor: isLocked ? 'not-allowed' : 'text', paddingLeft: '48px', paddingRight: '18px' }}
                   />
-                  {isValidMobile(mobile) && !mobileError && (
-                    <div style={{ paddingRight: 18, display: 'flex', alignItems: 'center', color: '#10B981', flexShrink: 0 }}>
-                      <Check size={15} />
-                    </div>
-                  )}
                 </div>
-                {mobileError && <p style={errorStyle}>{mobileError}</p>}
+                {identifierError && <p style={errorStyle}>{identifierError}</p>}
               </div>
 
               {/* Password */}
@@ -423,7 +527,7 @@ const Login = () => {
                 {passError && <p style={errorStyle}>{passError}</p>}
               </div>
 
-              {/* Remember Me */}
+              {/* Remember Me & Forgot Password */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
                   <div
@@ -441,7 +545,10 @@ const Login = () => {
                 </label>
                 <button
                   type="button"
-                  onClick={() => showToast('Password Reset', 'Please contact your administrator to reset your password.', 'info')}
+                  onClick={() => {
+                    setResetEmail(identifier.includes('@') ? identifier : '');
+                    setResetModalOpen(true);
+                  }}
                   style={{
                     background: 'none', border: 'none', cursor: 'pointer', padding: 0,
                     fontSize: 13, color: '#A78BFA', fontWeight: 600, fontFamily: 'inherit',
@@ -518,6 +625,33 @@ const Login = () => {
           </div>
         </div>
       </div>
+
+      {/* Reset Password Modal */}
+      <CustomModal
+        isOpen={resetModalOpen}
+        onClose={() => setResetModalOpen(false)}
+        title="Reset Password"
+        type="info"
+        confirmText={resetLoading ? "Sending Link..." : "Send Reset Link"}
+        onConfirm={handleSendPasswordReset}
+      >
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: '0 0 16px', lineHeight: 1.5 }}>
+          Enter your registered email address below. We will send you an email with instructions to reset your password.
+        </p>
+        <div className="input-group-relative">
+          <div className="input-icon-left">
+            <Mail size={16} />
+          </div>
+          <input
+            className="premium-input"
+            type="email"
+            placeholder="Enter your email address"
+            value={resetEmail}
+            onChange={e => setResetEmail(e.target.value)}
+            style={{ paddingLeft: '48px' }}
+          />
+        </div>
+      </CustomModal>
 
       <CustomModal
         isOpen={modalOpen}
