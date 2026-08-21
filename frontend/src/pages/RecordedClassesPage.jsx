@@ -70,9 +70,9 @@ const RecordedClassesPage = ({
     if (!searchQuery.trim()) return courses;
     const q = searchQuery.toLowerCase();
     return courses.filter(c => 
-      c.title.toLowerCase().includes(q) ||
-      c.trainer.toLowerCase().includes(q) ||
-      c.batch.toLowerCase().includes(q)
+      (c.title || '').toLowerCase().includes(q) ||
+      (c.trainer || '').toLowerCase().includes(q) ||
+      (c.batch || '').toLowerCase().includes(q)
     );
   };
 
@@ -80,12 +80,12 @@ const RecordedClassesPage = ({
     if (!searchQuery.trim()) return playerModules;
     const q = searchQuery.toLowerCase();
     return playerModules.map(m => {
-      const lessons = m.lessons.filter(l => 
-        l.title.toLowerCase().includes(q) ||
-        (l.description && l.description.toLowerCase().includes(q)) ||
-        m.title.toLowerCase().includes(q) ||
-        (l.trainer && l.trainer.toLowerCase().includes(q)) ||
-        (l.subject && l.subject.toLowerCase().includes(q))
+      const lessons = (m.lessons || []).filter(l => 
+        (l.title || '').toLowerCase().includes(q) ||
+        (l.description || '').toLowerCase().includes(q) ||
+        (m.title || '').toLowerCase().includes(q) ||
+        (l.trainer || '').toLowerCase().includes(q) ||
+        (l.subject || '').toLowerCase().includes(q)
       );
       return { ...m, lessons };
     }).filter(m => m.lessons.length > 0);
@@ -352,7 +352,7 @@ const RecordedClassesPage = ({
                   fontWeight: 900,
                   marginBottom: 16
                 }}>
-                  {course.title[0]}
+                  {(course.title || 'Course')[0]}
                 </div>
 
                 <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1E293B', margin: '0 0 12px' }}>{course.title}</h3>
