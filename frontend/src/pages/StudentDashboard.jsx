@@ -234,6 +234,13 @@ const StudentDashboard = () => {
    * waterfall.
    */
 
+  useEffect(() => {
+    if (user?.mustChangePassword) {
+      setActiveTab('settings');
+      showModal('Welcome to Levlox Student Portal!', 'You are logged in with a temporary password. Please update your password below to activate and unlock your student portal.', 'info');
+    }
+  }, [user?.mustChangePassword]);
+
   // CORE — what the dashboard shell and the primary cards need.
   const {
     data: coreData,
@@ -244,18 +251,18 @@ const StudentDashboard = () => {
     queryKey: ['studentDashboardCore', uid],
     queryFn: async () => {
       const [enrollments, courses, liveClasses, announcements] = await Promise.all([
-        getEnrollmentsForStudent(uid),
-        getCourses(),
-        getUpcomingLiveClasses(),
-        getAnnouncements(),
+        getEnrollmentsForStudent(uid).catch(() => []),
+        getCourses().catch(() => []),
+        getUpcomingLiveClasses().catch(() => []),
+        getAnnouncements().catch(() => []),
       ]);
 
-      const enrolledCourseIds = new Set(enrollments.map(e => e.courseId));
+      const enrolledCourseIds = new Set((enrollments || []).map(e => e.courseId));
       return {
-        courses,
-        enrolledCourses: courses.filter(c => enrolledCourseIds.has(c.id)),
-        upcomingLiveClasses: liveClasses,
-        announcements,
+        courses: courses || [],
+        enrolledCourses: (courses || []).filter(c => enrolledCourseIds.has(c.id)),
+        upcomingLiveClasses: liveClasses || [],
+        announcements: announcements || [],
       };
     },
     enabled: !!uid,
@@ -275,20 +282,20 @@ const StudentDashboard = () => {
     queryKey: ['studentDashboardExtras', uid],
     queryFn: async () => {
       const [recordings, leaderboard, submissions] = await Promise.all([
-        getRecordedClasses(),
-        getLeaderboard(),
-        getSubmissionsForStudent(uid),
+        getRecordedClasses().catch(() => []),
+        getLeaderboard().catch(() => []),
+        getSubmissionsForStudent(uid).catch(() => []),
       ]);
 
-      // getLeaderboard() already returns score-descending from Firestore.
-      const myIndex = leaderboard.findIndex(e => e.id === uid);
-      const topPerformers = leaderboard.slice(0, 3).map(p => ({ ...p, is_current: p.id === uid }));
-      const currentStudent = myIndex >= 0 ? { ...leaderboard[myIndex], rank: myIndex + 1 } : null;
+      const safeLeaderboard = leaderboard || [];
+      const myIndex = safeLeaderboard.findIndex(e => e.id === uid);
+      const topPerformers = safeLeaderboard.slice(0, 3).map(p => ({ ...p, is_current: p.id === uid }));
+      const currentStudent = myIndex >= 0 ? { ...safeLeaderboard[myIndex], rank: myIndex + 1 } : null;
 
       return {
-        recordings,
-        leaderboard,
-        submissions,
+        recordings: recordings || [],
+        leaderboard: safeLeaderboard,
+        submissions: submissions || [],
         learningRanking: { topPerformers, currentStudent },
       };
     },

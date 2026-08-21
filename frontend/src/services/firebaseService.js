@@ -270,12 +270,24 @@ export const getLiveClasses = (constraints = []) =>
   getDocuments("liveClasses", [orderBy("date", "asc"), ...constraints, limit(DEFAULT_LIST_LIMIT)]);
 
 /** Students only need the next few sessions, not the entire schedule history. */
-export const getUpcomingLiveClasses = (max = 20) =>
-  getDocuments("liveClasses", [
-    where("status", "in", ["scheduled", "live"]),
-    orderBy("date", "asc"),
-    limit(max),
-  ]);
+export const getUpcomingLiveClasses = async (max = 20) => {
+  try {
+    return await getDocuments("liveClasses", [
+      where("status", "in", ["scheduled", "live", "Live", "Upcoming"]),
+      limit(max),
+    ]);
+  } catch (error) {
+    console.warn("[Firestore] getUpcomingLiveClasses fallback:", error);
+    try {
+      const all = await getDocuments("liveClasses");
+      return (all || [])
+        .filter(c => ["scheduled", "live", "Live", "Upcoming"].includes(c?.status))
+        .slice(0, max);
+    } catch {
+      return [];
+    }
+  }
+};
 
 export const addLiveClass = (data) => addDocument("liveClasses", data);
 
