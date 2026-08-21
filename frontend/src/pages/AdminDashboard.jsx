@@ -373,10 +373,14 @@ const AdminDashboard = () => {
    * Rendering the raw objects crashed the admin dashboard.
    */
   const courseTitles = React.useMemo(
-    () => Array.from(new Set(
-      courses.map(c => (typeof c === 'string' ? c : c?.title)).filter(Boolean)
-    )),
-    [courses]
+    () => {
+      const dbTitles = courses.map(c => (typeof c === 'string' ? c : c?.title || c?.name || c?.course_name)).filter(Boolean);
+      const batchCourses = batches.map(b => b.course_name).filter(Boolean);
+      const recordedCourses = recordedClasses.map(r => r.course_title || r.course_name).filter(Boolean);
+      const defaultCourses = ['Fullstack Engineering', 'Python-FSD', 'Java-FSD', 'Data Science & AI', 'UI/UX Design', 'MERN Stack'];
+      return Array.from(new Set([...dbTitles, ...batchCourses, ...recordedCourses, ...defaultCourses]));
+    },
+    [courses, batches, recordedClasses]
   );
 
   /** Client-side search + filters over the already-loaded roster. */
