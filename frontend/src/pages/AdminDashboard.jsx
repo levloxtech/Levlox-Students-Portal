@@ -482,10 +482,15 @@ const AdminDashboard = () => {
   const [createdCredentials, setCreatedCredentials] = useState(null);
 
   const generateRandomPassword = () => {
-    const chars = 'ABCDEFGHJKLMNOPQRSTUVWXYZ23456789';
-    let pass = '';
-    for (let i = 0; i < 8; i++) {
-      pass += chars.charAt(Math.floor(Math.random() * chars.length));
+    const uppercase = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const lowercase = 'abcdefghijkmnpqrstuvwxyz';
+    const numbers = '23456789';
+    const all = uppercase + lowercase + numbers;
+    let pass = uppercase.charAt(Math.floor(Math.random() * uppercase.length)) +
+               lowercase.charAt(Math.floor(Math.random() * lowercase.length)) +
+               numbers.charAt(Math.floor(Math.random() * numbers.length));
+    for (let i = 3; i < 9; i++) {
+      pass += all.charAt(Math.floor(Math.random() * all.length));
     }
     return pass;
   };
