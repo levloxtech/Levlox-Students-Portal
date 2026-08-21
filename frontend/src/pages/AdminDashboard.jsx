@@ -2443,7 +2443,27 @@ const AdminDashboard = () => {
         }
       }
 
-      // 2. Delete student document from Firestore
+      // 2. Track deleted user reference so re-creation can re-link existing Firebase Auth UID
+      if (studentObj) {
+        const emailLower = studentObj.email?.trim().toLowerCase();
+        const phoneAuthId = studentObj.phone ? mobileToAuthId(studentObj.phone) : null;
+        const keysToSave = [
+          emailLower,
+          phoneAuthId
+        ].filter(Boolean);
+
+        for (const key of keysToSave) {
+          const safeKey = key.replace(/[^a-zA-Z0-9]/g, '_');
+          await setDocument('deletedUsers', safeKey, {
+            uid: studentToDelete,
+            email: studentObj.email || '',
+            phone: studentObj.phone || '',
+            deletedAt: new Date().toISOString(),
+          }).catch(err => console.warn('[Admin] Save deleted user ref failed:', err));
+        }
+      }
+
+      // 3. Delete student document from Firestore
       await deleteStudentDoc('students', studentToDelete);
 
       // 3. Refresh students & stats
@@ -2534,9 +2554,11 @@ const AdminDashboard = () => {
       } catch (authErr) {
         if (authErr?.code === 'auth/email-already-in-use') {
           // Attempt to recover UID from deletedUsers tracking
+          const emailLower = cleanEmail.toLowerCase();
+          const authEmailLower = authEmail.toLowerCase();
           const lookupKeys = [
-            authEmail,
-            cleanEmail,
+            authEmailLower,
+            emailLower,
             cleanPhone ? mobileToAuthId(cleanPhone) : null
           ].filter(Boolean);
 
@@ -2551,7 +2573,10 @@ const AdminDashboard = () => {
 
           // Check if student profile exists in loaded list
           if (!targetUid) {
-            const existingInList = allStudents.find(s => s.email === cleanEmail || (cleanPhone && s.phone === cleanPhone));
+            const existingInList = allStudents.find(s => 
+              s.email?.trim().toLowerCase() === emailLower || 
+              (cleanPhone && s.phone === cleanPhone)
+            );
             if (existingInList) targetUid = existingInList.id;
           }
 
