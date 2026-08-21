@@ -177,6 +177,11 @@ service cloud.firestore {
       allow write: if isAdmin() || (settingsId != 'global' && isOwner(settingsId));
     }
 
+    // ── Deleted Users tracking (for profile recreation) ────────────────────
+    match /deletedUsers/{docId} {
+      allow read, write: if isAdmin();
+    }
+
     // ── Default deny ───────────────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;

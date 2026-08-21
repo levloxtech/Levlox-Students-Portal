@@ -2525,12 +2525,46 @@ const AdminDashboard = () => {
     }
 
     try {
-      const newUid = await createAuthUserDetached(
-        authEmail,
-        createTempPassword
-      );
+      let targetUid;
+      try {
+        targetUid = await createAuthUserDetached(
+          authEmail,
+          createTempPassword
+        );
+      } catch (authErr) {
+        if (authErr?.code === 'auth/email-already-in-use') {
+          // Attempt to recover UID from deletedUsers tracking
+          const lookupKeys = [
+            authEmail,
+            cleanEmail,
+            cleanPhone ? mobileToAuthId(cleanPhone) : null
+          ].filter(Boolean);
+
+          for (const key of lookupKeys) {
+            const safeKey = key.replace(/[^a-zA-Z0-9]/g, '_');
+            const deletedDoc = await getDocument('deletedUsers', safeKey).catch(() => null);
+            if (deletedDoc && deletedDoc.uid) {
+              targetUid = deletedDoc.uid;
+              break;
+            }
+          }
+
+          // Check if student profile exists in loaded list
+          if (!targetUid) {
+            const existingInList = allStudents.find(s => s.email === cleanEmail || (cleanPhone && s.phone === cleanPhone));
+            if (existingInList) targetUid = existingInList.id;
+          }
+
+          if (!targetUid) {
+            throw authErr;
+          }
+        } else {
+          throw authErr;
+        }
+      }
+
       const rollNumber = `LVX${Date.now().toString().slice(-6)}`;
-      await createStudent(newUid, {
+      await createStudent(targetUid, {
         name: createName,
         email: cleanEmail || authEmail,
         phone: cleanPhone || '',
@@ -2543,11 +2577,12 @@ const AdminDashboard = () => {
         mustChangePassword: true,
         createdBy: uid,
       });
+
       setCreatedCredentials({
         username: rollNumber,
         password: createTempPassword,
         name: createName,
-        email: cleanEmail,
+        email: cleanEmail || authEmail,
         phone: createPhone ? normalizeMobile(createPhone) : '',
       });
 
@@ -2559,7 +2594,7 @@ const AdminDashboard = () => {
     } catch (e) {
       console.error('[Admin] create student failed:', e);
       const msg = e.code === 'auth/email-already-in-use'
-        ? 'This email address or mobile number is already registered in Firebase Authentication. If you deleted this student from Firestore earlier, their Firebase Auth account remains active. Please use their original temporary password to sign in or recreate the profile.'
+        ? 'This email or mobile number is registered in Firebase Auth. The profile has been restored, or you can use their existing credentials to sign in.'
         : (describeAuthError(e) || 'Failed to create student account.');
       showModal(e.code === 'auth/email-already-in-use' ? 'Account Exists in Firebase Auth' : 'Error', msg, 'warning');
     }
