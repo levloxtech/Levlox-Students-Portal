@@ -2479,11 +2479,9 @@ const AdminDashboard = () => {
   const handleCreateStudentSubmit = async (e) => {
     e.preventDefault();
 
-    // The mobile number is the student's sign-in identity, so it is required.
-    // Email is an optional contact detail and plays no part in authentication.
-    const nationalNumber = normalizeMobile(createPhone);
-    if (!createName || !nationalNumber || !createTempPassword) {
-      showModal('Missing Fields', 'Name, a valid 10-digit Mobile Number, and a Temporary Password are required.', 'warning');
+    const cleanEmail = createEmail.trim();
+    if (!createName || !cleanEmail || !cleanEmail.includes('@') || !createTempPassword) {
+      showModal('Missing Fields', 'Name, a valid Email Address (used to sign in), and a Temporary Password are required.', 'warning');
       return;
     }
     const strengthError = validatePasswordStrength(createTempPassword);
@@ -2493,18 +2491,15 @@ const AdminDashboard = () => {
     }
 
     try {
-      // Runs on a detached Firebase app so the admin stays signed in — calling
-      // createUserWithEmailAndPassword on the primary auth instance would
-      // switch this session over to the newly created student.
       const newUid = await createAuthUserDetached(
-        mobileToAuthId(nationalNumber),
+        cleanEmail,
         createTempPassword
       );
       const rollNumber = `LVX${Date.now().toString().slice(-6)}`;
       await createStudent(newUid, {
         name: createName,
-        email: createEmail.trim(),
-        phone: nationalNumber,
+        email: cleanEmail,
+        phone: createPhone ? normalizeMobile(createPhone) : '',
         course: createCourse,
         batch_id: createBatchId,
         rollNumber,
@@ -2518,8 +2513,8 @@ const AdminDashboard = () => {
         username: rollNumber,
         password: createTempPassword,
         name: createName,
-        email: createEmail.trim(),
-        phone: nationalNumber,
+        email: cleanEmail,
+        phone: createPhone ? normalizeMobile(createPhone) : '',
       });
       setCreateName(''); setCreateEmail(''); setCreatePhone('');
       setCreateCourse('Fullstack Engineering'); setCreateBatchId('');
@@ -2528,10 +2523,8 @@ const AdminDashboard = () => {
       fetchStudents(); fetchStats();
     } catch (e) {
       console.error('[Admin] create student failed:', e);
-      // Firebase enforces uniqueness on the derived identifier, so this is how
-      // a duplicate mobile number surfaces.
       const msg = e.code === 'auth/email-already-in-use'
-        ? 'A student is already registered with this mobile number.'
+        ? 'A student is already registered with this email address.'
         : (describeAuthError(e) || 'Failed to create student account.');
       showModal('Error', msg, 'error');
     }
@@ -5466,7 +5459,11 @@ const AdminDashboard = () => {
                     <input id="createName" type="text" className="form-input" placeholder="e.g. John Doe" value={createName} onChange={(e) => setCreateName(e.target.value)} required />
                   </div>
                   <div className="form-group">
-                    <label className="form-label" htmlFor="createPhone">Mobile Number * <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>(used to sign in)</span></label>
+                    <label className="form-label" htmlFor="createEmail">Email Address * <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>(used to sign in)</span></label>
+                    <input id="createEmail" type="email" className="form-input" placeholder="john.doe@example.com" value={createEmail} onChange={(e) => setCreateEmail(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="createPhone">Mobile Number <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>(optional contact)</span></label>
                     <input
                       id="createPhone"
                       type="tel"
@@ -5476,12 +5473,7 @@ const AdminDashboard = () => {
                       value={createPhone}
                       onChange={(e) => setCreatePhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
                       maxLength={10}
-                      required
                     />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="createEmail">Email Address <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>(optional, for contact only)</span></label>
-                    <input id="createEmail" type="email" className="form-input" placeholder="john.doe@example.com" value={createEmail} onChange={(e) => setCreateEmail(e.target.value)} />
                   </div>
                   <div className="form-group">
                     <label className="form-label" htmlFor="createTempPassword">Temporary Password *</label>
@@ -5537,12 +5529,12 @@ const AdminDashboard = () => {
               </div>
               <h3 style={{ fontSize: '18px', fontWeight: '800', margin: '0 0 8px' }}>Student Created Successfully</h3>
               <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5, margin: '0 0 20px' }}>
-                Account credentials have been generated. Copy or share them below.
+                Account created. Share the credentials or send a welcome email to the student below.
               </p>
               <div style={{ background: 'var(--surface-alt)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', textAlign: 'left', marginBottom: '20px' }}>
                 <div style={{ marginBottom: '12px' }}>
-                  <span style={{ fontSize: '10.5px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 700, display: 'block', marginBottom: '2px' }}>Mobile Number (sign-in)</span>
-                  <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{formatMobile(createdCredentials.phone)}</strong>
+                  <span style={{ fontSize: '10.5px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 700, display: 'block', marginBottom: '2px' }}>Email Address (sign-in)</span>
+                  <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{createdCredentials.email}</strong>
                 </div>
                 <div style={{ marginBottom: '12px' }}>
                   <span style={{ fontSize: '10.5px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 700, display: 'block', marginBottom: '2px' }}>Student ID</span>
@@ -5556,25 +5548,25 @@ const AdminDashboard = () => {
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <button className="btn btn-outline" style={{ height: '40px', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => {
-                  navigator.clipboard.writeText(`Mobile Number: ${createdCredentials.phone}\nStudent ID: ${createdCredentials.username}\nTemporary Password: ${createdCredentials.password}`);
+                  navigator.clipboard.writeText(`Email: ${createdCredentials.email}\nStudent ID: ${createdCredentials.username}\nTemporary Password: ${createdCredentials.password}`);
                   showModal("Copied", "Credentials copied to clipboard!", "success");
                 }}>
                   📋 Copy Credentials
                 </button>
 
                 <div style={{ display: 'grid', gridTemplateColumns: createdCredentials.email ? '1fr 1fr' : '1fr', gap: '10px' }}>
-                  {/* Email is optional now — only offer it when one was provided. */}
                   {createdCredentials.email && (
-                  <button className="btn btn-outline" style={{ height: '40px', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => {
-                    const body = encodeURIComponent(`Hello ${createdCredentials.name},\n\nYour account on Levlox Student Portal has been created.\n\nMobile Number: ${createdCredentials.phone}\nStudent ID: ${createdCredentials.username}\nTemporary Password: ${createdCredentials.password}\n\nPlease sign in with your mobile number and change your password.\n\nPortal: ${loginUrl}`);
-                    window.open(`mailto:${createdCredentials.email}?subject=Your Levlox Portal Credentials&body=${body}`, '_blank');
+                  <button className="btn btn-primary" style={{ height: '40px', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => {
+                    const greeting = `Welcome to Levlox Student Portal! 🎓\n\nDear ${createdCredentials.name},\n\nYour student account has been created successfully.\n\nSign-in Email: ${createdCredentials.email}\nStudent ID: ${createdCredentials.username}\nTemporary Password: ${createdCredentials.password}\n\nPlease visit the portal link to sign in and update your password:\n${loginUrl}\n\nBest regards,\nLevlox Admissions & Portal Team`;
+                    const body = encodeURIComponent(greeting);
+                    window.open(`mailto:${createdCredentials.email}?subject=${encodeURIComponent('Welcome to Levlox Student Portal - Your Credentials')}&body=${body}`, '_blank');
                   }}>
-                    ✉ Send Email
+                    ✉ Send Welcome Email
                   </button>
                   )}
                   <button className="btn btn-outline" style={{ height: '40px', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => {
-                    const text = encodeURIComponent(`Hello ${createdCredentials.name},\nYour student account is created.\nMobile Number: ${createdCredentials.phone}\nStudent ID: ${createdCredentials.username}\nTemporary Password: ${createdCredentials.password}\nPlease sign in at ${loginUrl} with your mobile number and change your password.`);
-                    const cleanPhone = createdCredentials.phone.replace(/[^0-9]/g, '');
+                    const text = encodeURIComponent(`Welcome to Levlox Student Portal! 🎓\n\nDear ${createdCredentials.name},\nYour student account is created.\nSign-in Email: ${createdCredentials.email}\nStudent ID: ${createdCredentials.username}\nTemporary Password: ${createdCredentials.password}\n\nPlease sign in at ${loginUrl} with your email address and change your password.`);
+                    const cleanPhone = (createdCredentials.phone || '').replace(/[^0-9]/g, '');
                     const link = `https://wa.me/${cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone}?text=${text}`;
                     window.open(link, '_blank');
                   }}>
