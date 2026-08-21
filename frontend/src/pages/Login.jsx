@@ -10,7 +10,7 @@ import {
 import { auth } from '../firebase';
 import { getStudent, getAdmin } from '../services/firebaseService';
 import {
-  Eye, EyeOff, Lock, Smartphone, Check, X, Mail,
+  Eye, EyeOff, Lock, Smartphone, Check, X, Mail, User,
   ShieldCheck, AlertTriangle, Shield, Loader2,
   GraduationCap, Sparkles
 } from 'lucide-react';
@@ -296,7 +296,7 @@ const Login = () => {
       sessionStorage.removeItem('loginLockoutEnd');
 
       // Remember the email if requested
-      if (rememberMe) localStorage.setItem('rememberedIdentifier', cleanEmail);
+      if (rememberMe) localStorage.setItem('rememberedIdentifier', rawInput);
       else localStorage.removeItem('rememberedIdentifier');
 
       // AuthContext's onAuthStateChanged listener loads the profile from here.
