@@ -25,6 +25,8 @@ export const describeAuthError = (error) => {
     "auth/network-request-failed": "Network error. Please check your connection.",
     "auth/user-not-found": "No account found with that email address.",
     "auth/operation-not-allowed": "This operation is not enabled for the project.",
+    "auth/unauthorized-domain": "This domain is not authorized in Firebase Console. Add levlox-students-portal.vercel.app under Firebase Auth -> Settings -> Authorized domains.",
+    "auth/popup-closed-by-user": "Sign-in window was closed before completing authentication.",
   };
   return map[code] || error?.message || "Something went wrong. Please try again.";
 };
