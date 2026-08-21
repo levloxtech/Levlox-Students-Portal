@@ -224,24 +224,11 @@ const Login = () => {
     if (isLocked) return;
 
     let valid = true;
-    const cleanId = identifier.trim();
-    let authEmail = '';
+    const cleanEmail = identifier.trim();
 
-    if (!cleanId) {
-      setIdentifierError('Please enter your email address or 10-digit mobile number.');
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      setIdentifierError('Please enter a valid email address.');
       valid = false;
-    } else if (cleanId.includes('@')) {
-      // Direct Email login
-      authEmail = cleanId;
-    } else {
-      // Mobile number login
-      const nationalNumber = normalizeMobile(cleanId);
-      if (!nationalNumber) {
-        setIdentifierError('Please enter a valid email address or 10-digit mobile number.');
-        valid = false;
-      } else {
-        authEmail = mobileToAuthId(nationalNumber);
-      }
     }
 
     if (!password) {
@@ -254,7 +241,7 @@ const Login = () => {
     try {
       const credential = await signInWithEmailAndPassword(
         auth,
-        authEmail,
+        cleanEmail,
         password
       );
       const firebaseUser = credential.user;
@@ -286,8 +273,8 @@ const Login = () => {
       sessionStorage.removeItem('loginAttempts');
       sessionStorage.removeItem('loginLockoutEnd');
 
-      // Remember the identifier if requested
-      if (rememberMe) localStorage.setItem('rememberedIdentifier', cleanId);
+      // Remember the email if requested
+      if (rememberMe) localStorage.setItem('rememberedIdentifier', cleanEmail);
       else localStorage.removeItem('rememberedIdentifier');
 
       // AuthContext's onAuthStateChanged listener loads the profile from here.
@@ -374,7 +361,7 @@ const Login = () => {
             }} />
 
             {/* LOGO */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 28 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 32 }}>
               <img
                 src={leveloxLogo}
                 alt="Levlox Logo"
@@ -430,64 +417,24 @@ const Login = () => {
               </div>
             )}
 
-            {/* GOOGLE SIGN IN BUTTON */}
-            <button
-              type="button"
-              onClick={handleGoogleSignIn}
-              disabled={googleLoading || isLocked}
-              style={{
-                width: '100%',
-                height: 48,
-                borderRadius: 14,
-                border: '1px solid rgba(255,255,255,0.12)',
-                background: 'rgba(255,255,255,0.05)',
-                color: '#FFFFFF',
-                fontSize: 14,
-                fontWeight: 600,
-                cursor: googleLoading || isLocked ? 'not-allowed' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 12,
-                marginBottom: 20,
-                transition: 'all 0.2s ease',
-              }}
-              onMouseEnter={e => { if (!googleLoading && !isLocked) e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                <path fill="#FBBC05" d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.62z" />
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-              </svg>
-              {googleLoading ? 'Signing in with Google…' : 'Continue with Google'}
-            </button>
-
-            <div style={{ display: 'flex', alignItems: 'center', margin: '0 0 20px 0' }}>
-              <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
-              <span style={{ padding: '0 12px', fontSize: 12, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>OR</span>
-              <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
-            </div>
-
             {/* LOGIN FORM */}
             <form onSubmit={handleLoginSubmit} noValidate className="animated-form">
-              {/* Email or Mobile */}
+              {/* Email Address */}
               <div style={{ marginBottom: identifierError ? 10 : 20 }}>
-                <label style={labelStyle} htmlFor="identifier">Email / Mobile Number</label>
+                <label style={labelStyle} htmlFor="identifier">Email Address</label>
                 <div className={`input-group-relative ${identifierError ? 'error-border' : ''}`}>
                   <div className="input-icon-left">
-                    {identifier.includes('@') ? <Mail size={16} /> : <Smartphone size={16} />}
+                    <Mail size={16} />
                   </div>
                   <input
                     id="identifier"
                     className="premium-input"
-                    type="text"
-                    placeholder="Enter email or 10-digit mobile number"
+                    type="email"
+                    placeholder="Enter your registered email address"
                     value={identifier}
                     onChange={e => { setIdentifier(e.target.value); setIdentifierError(''); }}
                     disabled={isLocked}
-                    autoComplete="username"
+                    autoComplete="email"
                     required
                     style={{ cursor: isLocked ? 'not-allowed' : 'text', paddingLeft: '48px', paddingRight: '18px' }}
                   />
