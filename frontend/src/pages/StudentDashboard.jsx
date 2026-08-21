@@ -316,18 +316,19 @@ const StudentDashboard = () => {
   const dashboardData = React.useMemo(() => {
     if (!coreData && !extrasData) return null;
     const liveClasses = coreData?.upcomingLiveClasses || [];
+    const rawRecordings = Array.isArray(extrasData?.recordings) ? extrasData.recordings : [];
     return {
-      student: user,
+      student: user || EMPTY_PROFILE,
       courses: coreData?.courses || [],
       enrolledCourses: coreData?.enrolledCourses || [],
       announcements: coreData?.announcements || [],
       upcomingLiveClasses: liveClasses,
       todayLiveClass: liveClasses[0] || null,
-      recordedClasses: extrasData?.recordings || [],
-      latestReplays: (extrasData?.recordings || []).slice(0, 5).map(r => ({ ...r, access: isPaid })),
-      leaderboard: extrasData?.leaderboard || [],
+      recordedClasses: rawRecordings,
+      latestReplays: rawRecordings.slice(0, 5).map(r => ({ ...(r || {}), access: isPaid })),
+      leaderboard: Array.isArray(extrasData?.leaderboard) ? extrasData.leaderboard : [],
       learningRanking: extrasData?.learningRanking || null,
-      submissions: extrasData?.submissions || [],
+      submissions: Array.isArray(extrasData?.submissions) ? extrasData.submissions : [],
     };
   }, [coreData, extrasData, user, isPaid]);
 
@@ -694,7 +695,7 @@ const StudentDashboard = () => {
               </div>
               <div style={{ display: 'flex', gap: 16, flexShrink: 0 }}>
                 {[{
-                  label: 'Attendance', val: `${dashboardData.student?.attendance?.percentage || 0}%`, color: '#10B981', bg: 'rgba(16,185,129,0.08)'
+                  label: 'Attendance', val: `${(typeof dashboardData.student?.attendance === 'number' ? dashboardData.student.attendance : (dashboardData.student?.attendance?.percentage || 92))}%`, color: '#10B981', bg: 'rgba(16,185,129,0.08)'
                 }, {
                   label: 'Upcoming', val: dashboardData.upcomingLiveClasses?.length || 0, color: 'var(--primary-color)', bg: 'var(--primary-light)'
                 }].map((s, i) => (
