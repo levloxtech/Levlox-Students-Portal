@@ -2525,6 +2525,16 @@ const AdminDashboard = () => {
         email: cleanEmail,
         phone: createPhone ? normalizeMobile(createPhone) : '',
       });
+
+      // Auto-trigger welcome email draft with credentials & greetings
+      try {
+        const greeting = `Welcome to Levlox Student Portal! 🎓\n\nDear ${createName},\n\nYour student account has been created successfully.\n\nSign-in Email: ${cleanEmail}\nStudent ID: ${rollNumber}\nTemporary Password: ${createTempPassword}\n\nPlease visit the portal link to sign in and update your password:\n${loginUrl}\n\nBest regards,\nLevlox Admissions & Portal Team`;
+        const body = encodeURIComponent(greeting);
+        window.open(`mailto:${cleanEmail}?subject=${encodeURIComponent('Welcome to Levlox Student Portal - Your Credentials')}&body=${body}`, '_blank');
+      } catch (err) {
+        console.warn('[Admin] Auto-trigger email warning:', err);
+      }
+
       setCreateName(''); setCreateEmail(''); setCreatePhone('');
       setCreateCourse('Fullstack Engineering'); setCreateBatchId('');
       setCreateTempPassword('');
@@ -5563,25 +5573,15 @@ const AdminDashboard = () => {
                   📋 Copy Credentials
                 </button>
 
-                <div style={{ display: 'grid', gridTemplateColumns: createdCredentials.email ? '1fr 1fr' : '1fr', gap: '10px' }}>
-                  {createdCredentials.email && (
-                  <button className="btn btn-primary" style={{ height: '40px', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => {
+                {createdCredentials.email && (
+                  <button className="btn btn-outline" style={{ height: '40px', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => {
                     const greeting = `Welcome to Levlox Student Portal! 🎓\n\nDear ${createdCredentials.name},\n\nYour student account has been created successfully.\n\nSign-in Email: ${createdCredentials.email}\nStudent ID: ${createdCredentials.username}\nTemporary Password: ${createdCredentials.password}\n\nPlease visit the portal link to sign in and update your password:\n${loginUrl}\n\nBest regards,\nLevlox Admissions & Portal Team`;
                     const body = encodeURIComponent(greeting);
                     window.open(`mailto:${createdCredentials.email}?subject=${encodeURIComponent('Welcome to Levlox Student Portal - Your Credentials')}&body=${body}`, '_blank');
                   }}>
-                    ✉ Send Welcome Email
+                    ✉ Resend Welcome Email
                   </button>
-                  )}
-                  <button className="btn btn-outline" style={{ height: '40px', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => {
-                    const text = encodeURIComponent(`Welcome to Levlox Student Portal! 🎓\n\nDear ${createdCredentials.name},\nYour student account is created.\nSign-in Email: ${createdCredentials.email}\nStudent ID: ${createdCredentials.username}\nTemporary Password: ${createdCredentials.password}\n\nPlease sign in at ${loginUrl} with your email address and change your password.`);
-                    const cleanPhone = (createdCredentials.phone || '').replace(/[^0-9]/g, '');
-                    const link = `https://wa.me/${cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone}?text=${text}`;
-                    window.open(link, '_blank');
-                  }}>
-                    📱 Send WhatsApp
-                  </button>
-                </div>
+                )}
 
                 <button className="btn btn-primary" style={{ height: '40px', marginTop: '4px' }} onClick={() => setCreatedCredentials(null)}>
                   ✓ Done
