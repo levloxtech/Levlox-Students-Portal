@@ -2423,21 +2423,39 @@ const AdminDashboard = () => {
     }
   };
 
+  const [isDeletingStudent, setIsDeletingStudent] = useState(false);
+
   const deleteStudent = (studentId) => {
     setStudentToDelete(studentId);
   };
 
   const executeDeleteStudent = async () => {
-    if (!studentToDelete) return;
+    if (!studentToDelete || isDeletingStudent) return;
+    setIsDeletingStudent(true);
     try {
+      // 1. Unlink student from batch if assigned
+      const studentObj = allStudents.find(s => s.id === studentToDelete);
+      if (studentObj?.batch_id) {
+        const batch = batches.find(b => b.id === studentObj.batch_id);
+        if (batch && Array.isArray(batch.student_ids)) {
+          const updatedStudentIds = batch.student_ids.filter(id => id !== studentToDelete);
+          await assignStudentsToBatch(batch.id, updatedStudentIds).catch(err => console.warn('[Admin] Unlink batch failed:', err));
+        }
+      }
+
+      // 2. Delete student document from Firestore
       await deleteStudentDoc('students', studentToDelete);
+
+      // 3. Refresh students & stats
       fetchStudents();
       fetchStats();
       showModal('Deleted', 'Student record deleted successfully.', 'success');
     } catch (error) {
-      console.error(error);
-      showModal('Error', classifyFirestoreError(error).message, 'error');
+      console.error('[Admin] Delete student error:', error);
+      const errInfo = classifyFirestoreError(error);
+      showModal('Delete Failed', errInfo.message || 'Could not delete student record from Firestore.', 'error');
     } finally {
+      setIsDeletingStudent(false);
       setStudentToDelete(null);
     }
   };
@@ -2489,8 +2507,15 @@ const AdminDashboard = () => {
     e.preventDefault();
 
     const cleanEmail = createEmail.trim();
-    if (!createName || !cleanEmail || !cleanEmail.includes('@') || !createTempPassword) {
-      showModal('Missing Fields', 'Name, a valid Email Address (used to sign in), and a Temporary Password are required.', 'warning');
+    const cleanPhone = createPhone ? normalizeMobile(createPhone) : '';
+
+    let authEmail = cleanEmail;
+    if (!authEmail && cleanPhone) {
+      authEmail = mobileToAuthId(cleanPhone);
+    }
+
+    if (!createName || !authEmail || !createTempPassword) {
+      showModal('Missing Fields', 'Name, a valid Email Address or Mobile Number, and a Temporary Password are required.', 'warning');
       return;
     }
     const strengthError = validatePasswordStrength(createTempPassword);
@@ -2501,14 +2526,14 @@ const AdminDashboard = () => {
 
     try {
       const newUid = await createAuthUserDetached(
-        cleanEmail,
+        authEmail,
         createTempPassword
       );
       const rollNumber = `LVX${Date.now().toString().slice(-6)}`;
       await createStudent(newUid, {
         name: createName,
-        email: cleanEmail,
-        phone: createPhone ? normalizeMobile(createPhone) : '',
+        email: cleanEmail || authEmail,
+        phone: cleanPhone || '',
         course: createCourse,
         batch_id: createBatchId,
         rollNumber,
@@ -2526,15 +2551,6 @@ const AdminDashboard = () => {
         phone: createPhone ? normalizeMobile(createPhone) : '',
       });
 
-      // Auto-trigger welcome email draft with credentials & greetings
-      try {
-        const greeting = `Welcome to Levlox Student Portal! 🎓\n\nDear ${createName},\n\nYour student account has been created successfully.\n\nSign-in Email: ${cleanEmail}\nStudent ID: ${rollNumber}\nTemporary Password: ${createTempPassword}\n\nPlease visit the portal link to sign in and update your password:\n${loginUrl}\n\nBest regards,\nLevlox Admissions & Portal Team`;
-        const body = encodeURIComponent(greeting);
-        window.open(`mailto:${cleanEmail}?subject=${encodeURIComponent('Welcome to Levlox Student Portal - Your Credentials')}&body=${body}`, '_blank');
-      } catch (err) {
-        console.warn('[Admin] Auto-trigger email warning:', err);
-      }
-
       setCreateName(''); setCreateEmail(''); setCreatePhone('');
       setCreateCourse('Fullstack Engineering'); setCreateBatchId('');
       setCreateTempPassword('');
@@ -2543,10 +2559,26 @@ const AdminDashboard = () => {
     } catch (e) {
       console.error('[Admin] create student failed:', e);
       const msg = e.code === 'auth/email-already-in-use'
-        ? 'A student is already registered with this email address.'
+        ? 'This email address or mobile number is already registered in Firebase Authentication. If you deleted this student from Firestore earlier, their Firebase Auth account remains active. Please use their original temporary password to sign in or recreate the profile.'
         : (describeAuthError(e) || 'Failed to create student account.');
-      showModal('Error', msg, 'error');
+      showModal(e.code === 'auth/email-already-in-use' ? 'Account Exists in Firebase Auth' : 'Error', msg, 'warning');
     }
+  };
+
+  const sendStudentWelcomeEmail = (student) => {
+    if (!student) return;
+    const emailAddr = student.email;
+    if (!emailAddr) {
+      showModal("Warning", "No email address registered for this student.", "warning");
+      return;
+    }
+    const studentName = student.name || 'Student';
+    const rollNo = student.rollNumber || 'N/A';
+
+    const greeting = `Welcome to Levlox Student Portal! 🎓\n\nDear ${studentName},\n\nHere are your account credentials for the Levlox Student Portal:\n\nSign-in Email / Mobile: ${emailAddr}\nStudent ID: ${rollNo}\nPortal Link: ${loginUrl}\n\nIf you need a password reset, please contact your Levlox administrator.\n\nBest regards,\nLevlox Admissions & Portal Team`;
+    
+    const body = encodeURIComponent(greeting);
+    window.open(`mailto:${emailAddr}?subject=${encodeURIComponent('Welcome to Levlox Student Portal - Account Credentials')}&body=${body}`, '_blank');
   };
 
   /**
@@ -5653,6 +5685,14 @@ const AdminDashboard = () => {
                         {selectedStudentDetails.feesStatus || 'Pending'}
                       </span>
                     </div>
+                    <button 
+                      type="button" 
+                      className="btn btn-outline" 
+                      style={{ width: '100%', marginTop: '6px', fontSize: '11.5px', padding: '6px 10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 700 }}
+                      onClick={() => sendStudentWelcomeEmail(selectedStudentDetails)}
+                    >
+                      ✉ Resend Credentials
+                    </button>
                   </div>
 
                   <div style={{ width: '100%', borderTop: '1px solid var(--border-color)', paddingTop: '14px', textAlign: 'left', marginTop: '14px' }}>
@@ -5765,7 +5805,15 @@ const AdminDashboard = () => {
                 </div>
               </div>
             </div>
-            <div className="modal-footer">
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <button 
+                type="button" 
+                className="btn btn-outline" 
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700 }}
+                onClick={() => sendStudentWelcomeEmail(selectedStudentDetails)}
+              >
+                ✉ Resend Credentials Mail
+              </button>
               <button type="button" className="btn btn-primary" onClick={() => { setShowDetailsModal(false); setSelectedStudentDetails(null); }}>Close</button>
             </div>
           </div>
@@ -5806,6 +5854,7 @@ const AdminDashboard = () => {
               <button 
                 type="button"
                 className="confirm-modal-btn btn-cancel" 
+                disabled={isDeletingStudent}
                 onClick={() => setStudentToDelete(null)}
               >
                 Cancel
@@ -5813,9 +5862,10 @@ const AdminDashboard = () => {
               <button 
                 type="button"
                 className="confirm-modal-btn btn-delete" 
+                disabled={isDeletingStudent}
                 onClick={executeDeleteStudent}
               >
-                Delete
+                {isDeletingStudent ? 'Deleting...' : 'Delete'}
               </button>
             </div>
           </div>

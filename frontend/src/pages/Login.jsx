@@ -224,10 +224,10 @@ const Login = () => {
     if (isLocked) return;
 
     let valid = true;
-    const cleanEmail = identifier.trim();
+    const rawInput = identifier.trim();
 
-    if (!cleanEmail || !cleanEmail.includes('@')) {
-      setIdentifierError('Please enter a valid email address.');
+    if (!rawInput) {
+      setIdentifierError('Please enter your mobile number or email address.');
       valid = false;
     }
 
@@ -237,13 +237,35 @@ const Login = () => {
     }
     if (!valid) return;
 
+    let authEmail = rawInput;
+    if (isValidMobile(rawInput)) {
+      authEmail = mobileToAuthId(rawInput);
+    } else if (!rawInput.includes('@')) {
+      setIdentifierError('Please enter a valid 10-digit mobile number or email address.');
+      return;
+    }
+
     setLoading(true);
     try {
-      const credential = await signInWithEmailAndPassword(
-        auth,
-        cleanEmail,
-        password
-      );
+      let credential;
+      try {
+        credential = await signInWithEmailAndPassword(
+          auth,
+          authEmail,
+          password
+        );
+      } catch (firstErr) {
+        // If mobile attempt failed and identifier wasn't formatted with @, also check if they signed up with plain identifier
+        if (isValidMobile(rawInput) && (firstErr?.code === 'auth/user-not-found' || firstErr?.code === 'auth/invalid-credential')) {
+          credential = await signInWithEmailAndPassword(
+            auth,
+            rawInput,
+            password
+          );
+        } else {
+          throw firstErr;
+        }
+      }
       const firebaseUser = credential.user;
 
       // Resolve the account's role from Firestore. Admin records take priority.
@@ -419,22 +441,22 @@ const Login = () => {
 
             {/* LOGIN FORM */}
             <form onSubmit={handleLoginSubmit} noValidate className="animated-form">
-              {/* Email Address */}
+              {/* Email Address or Mobile Number */}
               <div style={{ marginBottom: identifierError ? 10 : 20 }}>
-                <label style={labelStyle} htmlFor="identifier">Email Address</label>
+                <label style={labelStyle} htmlFor="identifier">Mobile Number or Email Address</label>
                 <div className={`input-group-relative ${identifierError ? 'error-border' : ''}`}>
                   <div className="input-icon-left">
-                    <Mail size={16} />
+                    <User size={16} />
                   </div>
                   <input
                     id="identifier"
                     className="premium-input"
-                    type="email"
-                    placeholder="Enter your registered email address"
+                    type="text"
+                    placeholder="Enter 10-digit mobile number or email"
                     value={identifier}
                     onChange={e => { setIdentifier(e.target.value); setIdentifierError(''); }}
                     disabled={isLocked}
-                    autoComplete="email"
+                    autoComplete="username"
                     required
                     style={{ cursor: isLocked ? 'not-allowed' : 'text', paddingLeft: '48px', paddingRight: '18px' }}
                   />

@@ -92,9 +92,28 @@ export const createAuthUserDetached = async (email, password) => {
       connectAuthEmulator(secondaryAuth, EMULATOR_AUTH_URL, { disableWarnings: true });
     }
 
-    const { createUserWithEmailAndPassword } = await import("firebase/auth");
-    const credential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
-    const { uid } = credential.user;
+    const { createUserWithEmailAndPassword, signInWithEmailAndPassword } = await import("firebase/auth");
+    let uid;
+
+    try {
+      const credential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+      uid = credential.user.uid;
+    } catch (err) {
+      if (err.code === "auth/email-already-in-use") {
+        // If Auth account exists (e.g. from previously deleted Firestore record),
+        // try signing in to recover the existing user's UID.
+        try {
+          const credential = await signInWithEmailAndPassword(secondaryAuth, email, password);
+          uid = credential.user.uid;
+        } catch {
+          // If sign-in fails (e.g. different password), throw original error
+          throw err;
+        }
+      } else {
+        throw err;
+      }
+    }
+
     await secondaryAuth.signOut().catch(() => null);
     return uid;
   } finally {
