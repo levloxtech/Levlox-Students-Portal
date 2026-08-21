@@ -484,29 +484,40 @@ export const getStudentsByBatch = async (batchId) => {
  */
 export const assignStudentsToBatch = async (batchId, studentIds = []) => {
   const existing = await getDocument("batches", batchId);
-  const previousIds = existing?.student_ids || [];
-  const removed = previousIds.filter((id) => !studentIds.includes(id));
+  if (!existing) {
+    throw new Error("Batch document not found.");
+  }
+
+  // Find all students currently linked to this batch in Firestore
+  const allCurrentInBatch = await getDocuments("students", [where("batch_id", "==", batchId)]).catch(() => []);
+  const allPreviousIds = Array.from(new Set([
+    ...(existing?.student_ids || []),
+    ...allCurrentInBatch.map(s => s.id)
+  ]));
+
+  const removedIds = allPreviousIds.filter((id) => !studentIds.includes(id));
 
   const batch = writeBatch(db);
-  batch.update(doc(db, "batches", batchId), {
+  batch.set(doc(db, "batches", batchId), {
     student_ids: studentIds,
+    students_count: studentIds.length,
     updatedAt: serverTimestamp(),
-  });
+  }, { merge: true });
 
   studentIds.forEach((sid) => {
-    batch.update(doc(db, "students", sid), {
+    batch.set(doc(db, "students", sid), {
       batch_id: batchId,
       batch_name: existing?.name || "",
       updatedAt: serverTimestamp(),
-    });
+    }, { merge: true });
   });
 
-  removed.forEach((sid) => {
-    batch.update(doc(db, "students", sid), {
+  removedIds.forEach((sid) => {
+    batch.set(doc(db, "students", sid), {
       batch_id: "",
       batch_name: "",
       updatedAt: serverTimestamp(),
-    });
+    }, { merge: true });
   });
 
   await batch.commit();
@@ -607,8 +618,17 @@ export const deleteFile = async (path) => {
 
 /** Upload student profile image */
 export const uploadProfileImage = async (uid, file) => {
-  const ext = file.name.split(".").pop();
-  return uploadFile(`students/${uid}/profile.${ext}`, file, { contentType: file.type });
+  if (!file) throw new Error("No image file provided.");
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+  if (file.type && !allowedTypes.includes(file.type.toLowerCase())) {
+    throw new Error("Only JPG, PNG, and WEBP image formats are supported.");
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error("Image file size exceeds the 5 MB limit.");
+  }
+  const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+  const downloadUrl = await uploadFile(`studentProfiles/${uid}/profile.${ext}`, file, { contentType: file.type || 'image/jpeg' });
+  return downloadUrl;
 };
 
 /** Upload assignment submission file */

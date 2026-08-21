@@ -2309,7 +2309,10 @@ const AdminDashboard = () => {
 
   const startAssignStudents = (batch) => {
     setAssigningBatch(batch);
-    setSelectedStudentIds(batch.student_ids || []);
+    const fromBatch = Array.isArray(batch.student_ids) ? batch.student_ids : [];
+    const fromStudents = allStudents.filter(s => s.batch_id === batch.id).map(s => s.id);
+    const combinedInitial = Array.from(new Set([...fromBatch, ...fromStudents]));
+    setSelectedStudentIds(combinedInitial);
     fetchAllStudentsForAssign();
   };
 
@@ -2321,13 +2324,24 @@ const AdminDashboard = () => {
 
   const saveStudentAssignments = async () => {
     if (!assigningBatch?.id) return;
+    const maxCapacity = Number(assigningBatch.max_students) || 30;
+    if (selectedStudentIds.length > maxCapacity) {
+      showModal(
+        'Capacity Exceeded',
+        `Cannot assign ${selectedStudentIds.length} students. Batch "${assigningBatch.name}" has a capacity limit of ${maxCapacity} students.`,
+        'warning'
+      );
+      return;
+    }
+
     try {
       await assignStudentsToBatch(assigningBatch.id, selectedStudentIds);
       setAssigningBatch(null);
       setSelectedStudentIds([]);
-      showModal('Success', 'Student assignments updated successfully!', 'success');
+      showModal('Success', `Student assignments for batch "${assigningBatch.name}" updated successfully!`, 'success');
       fetchBatches();
       fetchStudents();
+      fetchStats();
     } catch (error) {
       console.error('[Admin] saveStudentAssignments failed:', error);
       showModal('Error', classifyFirestoreError(error).message, 'error');
@@ -3397,8 +3411,8 @@ const AdminDashboard = () => {
                               <tr key={student.id} style={{ borderBottom: '1px solid var(--border-light)', cursor: 'pointer' }} onClick={() => handleViewStudentDetails(student.id)}>
                                 <td style={{ padding: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                   <div style={{ width: '28px', height: '28px', borderRadius: '50%', overflow: 'hidden', background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-color)', flexShrink: 0 }}>
-                                    {student.profile_pic ? (
-                                      <img src={student.profile_pic} alt={student.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                    {(student.profile_pic || student.profilePhotoUrl) ? (
+                                      <img src={student.profile_pic || student.profilePhotoUrl} alt={student.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                     ) : (
                                       <span style={{ fontSize: '10px', fontWeight: 'bold', color: 'var(--primary-color)' }}>{initials}</span>
                                     )}
@@ -3767,8 +3781,8 @@ const AdminDashboard = () => {
                       <tr key={student.id} style={{ cursor: 'pointer' }} onClick={() => handleViewStudentDetails(student.id)}>
                         <td className="col-profile" onClick={(e) => e.stopPropagation()}>
                           <div style={{ width: '36px', height: '36px', borderRadius: '50%', overflow: 'hidden', background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-color)' }}>
-                            {student.profile_pic && student.profile_pic.trim() !== '' ? (
-                              <img src={student.profile_pic} alt={student.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            {(student.profile_pic || student.profilePhotoUrl) && (student.profile_pic || student.profilePhotoUrl).trim() !== '' ? (
+                              <img src={student.profile_pic || student.profilePhotoUrl} alt={student.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                             ) : (
                               <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--primary-color)' }}>{initials}</span>
                             )}
@@ -5241,22 +5255,70 @@ const AdminDashboard = () => {
           onConfirm={saveStudentAssignments}
           size="md"
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '450px', overflowY: 'auto', padding: '6px 2px' }}>
-            <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)' }}>
-              Select students to enroll in this batch. Unchecked students will be removed from the batch.
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '480px', overflowY: 'auto', padding: '6px 2px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-alt)', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
+              <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                Selected: <strong style={{ color: selectedStudentIds.length > (assigningBatch.max_students || 30) ? '#EF4444' : 'var(--primary-color)' }}>{selectedStudentIds.length}</strong> / {assigningBatch.max_students || 30} max capacity
+              </span>
+              <button 
+                type="button" 
+                onClick={() => {
+                  if (selectedStudentIds.length === allStudentsForAssign.length) {
+                    setSelectedStudentIds([]);
+                  } else {
+                    setSelectedStudentIds(allStudentsForAssign.map(s => s.id));
+                  }
+                }}
+                style={{ background: 'none', border: 'none', color: 'var(--primary-color)', fontSize: '12.5px', fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                {selectedStudentIds.length === allStudentsForAssign.length ? 'Deselect All' : 'Select All'}
+              </button>
+            </div>
+
+            <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+              Select students to enroll in <strong>{assigningBatch.name}</strong> ({assigningBatch.code || 'Batch'}). Unchecking an enrolled student removes them from this batch.
             </p>
+
             {allStudentsForAssign.length === 0 ? (
-              <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>No registered student accounts found.</p>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '13px', textAlign: 'center', padding: '24px 0', margin: 0 }}>No registered student accounts found.</p>
             ) : (
               allStudentsForAssign.map(student => {
                 const isChecked = selectedStudentIds.includes(student.id);
                 return (
-                  <div key={student.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'var(--surface-alt)', borderRadius: '10px', border: '1px solid var(--border-color)', cursor: 'pointer' }} onClick={() => toggleStudentAssign(student.id)}>
-                    <input type="checkbox" checked={isChecked} readOnly style={{ cursor: 'pointer' }} />
-                    <div>
-                      <strong style={{ display: 'block', fontSize: '13.5px', color: 'var(--text-primary)' }}>{student.name}</strong>
-                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>ID: {student.rollNumber} | {student.email}</span>
+                  <div
+                    key={student.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '12px 14px',
+                      background: isChecked ? 'rgba(108,60,240,0.05)' : 'var(--surface-alt)',
+                      borderRadius: '12px',
+                      border: `1.5px solid ${isChecked ? 'var(--primary-color)' : 'var(--border-color)'}`,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s'
+                    }}
+                    onClick={() => toggleStudentAssign(student.id)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => {}}
+                      style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--primary-color)' }}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <strong style={{ display: 'block', fontSize: '13.5px', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {student.name}
+                      </strong>
+                      <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                        ID: {student.rollNumber || 'N/A'} · {student.email}
+                      </span>
                     </div>
+                    {student.batch_name && student.batch_id !== assigningBatch.id && (
+                      <span style={{ fontSize: '10.5px', background: 'rgba(245,158,11,0.1)', color: '#D97706', padding: '3px 8px', borderRadius: '6px', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                        In: {student.batch_name}
+                      </span>
+                    )}
                   </div>
                 );
               })
@@ -5725,8 +5787,8 @@ const AdminDashboard = () => {
                 {/* Left Column: Profile Card */}
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', background: 'var(--surface-alt)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '20px' }}>
                   <div style={{ width: '90px', height: '90px', borderRadius: '50%', overflow: 'hidden', background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '3px solid white', boxShadow: 'var(--shadow-card)', marginBottom: '12px' }}>
-                    {selectedStudentDetails.profile_pic && selectedStudentDetails.profile_pic.trim() !== '' ? (
-                      <img src={selectedStudentDetails.profile_pic} alt={selectedStudentDetails.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    {(selectedStudentDetails.profile_pic || selectedStudentDetails.profilePhotoUrl) && (selectedStudentDetails.profile_pic || selectedStudentDetails.profilePhotoUrl).trim() !== '' ? (
+                      <img src={selectedStudentDetails.profile_pic || selectedStudentDetails.profilePhotoUrl} alt={selectedStudentDetails.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : (
                       <span style={{ fontSize: '32px', fontWeight: 'bold', color: 'var(--primary-color)' }}>{selectedStudentDetails.name?.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}</span>
                     )}

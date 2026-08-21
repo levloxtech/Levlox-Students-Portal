@@ -32,10 +32,14 @@ service firebase.storage {
       return request.resource.size < mb * 1024 * 1024;
     }
 
-    // Profile photos — a user writes only their own avatar.
+    // Profile photos — a user writes only their own avatar (up to 5 MB).
+    match /studentProfiles/{userId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if (isOwner(userId) && isImageUnder(5)) || isAdmin();
+    }
     match /students/{userId}/{fileName} {
       allow read: if isAuthenticated();
-      allow write: if (isOwner(userId) && isImageUnder(3)) || isAdmin();
+      allow write: if (isOwner(userId) && isImageUnder(5)) || isAdmin();
     }
 
     // Assignment submissions — a student writes only their own file.

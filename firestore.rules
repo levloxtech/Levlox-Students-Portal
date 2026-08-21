@@ -46,7 +46,7 @@ service cloud.firestore {
       allow update: if isAdmin() || (
         isOwner(studentId) &&
         changedKeys().hasOnly([
-          'name', 'profile_pic', 'current_location', 'permanent_address',
+          'name', 'profile_pic', 'profilePhotoUrl', 'current_location', 'permanent_address',
           'college', 'company', 'feesStatus', 'mustChangePassword', 'updatedAt'
         ]) &&
         // Requesting payment is allowed; declaring yourself paid is not.

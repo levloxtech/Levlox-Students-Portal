@@ -107,7 +107,9 @@ const StudentProfile = ({ dashboardData, enrolledCourses = [], onProfileUpdate }
 
       // Files go to Firebase Storage; Firestore only holds the download URL.
       if (pendingAvatar) {
-        patch.profile_pic = await uploadProfileImage(uid, pendingAvatar);
+        const photoUrl = await uploadProfileImage(uid, pendingAvatar);
+        patch.profile_pic = photoUrl;
+        patch.profilePhotoUrl = photoUrl;
       }
 
       await updateStudent(uid, patch);

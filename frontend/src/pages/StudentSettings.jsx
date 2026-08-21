@@ -92,7 +92,9 @@ const StudentSettings = ({ user, onProfileUpdate }) => {
 
       // Upload the avatar to Storage first; Firestore only stores the URL.
       if (pendingAvatar) {
-        patch.profile_pic = await uploadProfileImage(uid, pendingAvatar);
+        const photoUrl = await uploadProfileImage(uid, pendingAvatar);
+        patch.profile_pic = photoUrl;
+        patch.profilePhotoUrl = photoUrl;
       }
 
       await updateStudent(uid, patch);
