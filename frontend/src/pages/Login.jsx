@@ -443,16 +443,16 @@ const Login = () => {
             <form onSubmit={handleLoginSubmit} noValidate className="animated-form">
               {/* Email Address or Mobile Number */}
               <div style={{ marginBottom: identifierError ? 10 : 20 }}>
-                <label style={labelStyle} htmlFor="identifier">Mobile Number or Email Address</label>
+                <label style={labelStyle} htmlFor="identifier">Email Address / Mobile Number</label>
                 <div className={`input-group-relative ${identifierError ? 'error-border' : ''}`}>
                   <div className="input-icon-left">
-                    <User size={16} />
+                    <Mail size={16} />
                   </div>
                   <input
                     id="identifier"
                     className="premium-input"
                     type="text"
-                    placeholder="Enter 10-digit mobile number or email"
+                    placeholder="Enter email address or 10-digit mobile number"
                     value={identifier}
                     onChange={e => { setIdentifier(e.target.value); setIdentifierError(''); }}
                     disabled={isLocked}
@@ -460,6 +460,7 @@ const Login = () => {
                     required
                     style={{ cursor: isLocked ? 'not-allowed' : 'text', paddingLeft: '48px', paddingRight: '18px' }}
                   />
+
                 </div>
                 {identifierError && <p style={errorStyle}>{identifierError}</p>}
               </div>

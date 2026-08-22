@@ -10,6 +10,8 @@ import FullScreenLoader from './components/FullScreenLoader';
 // downloads the admin bundle (and vice versa).
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 const StudentDashboard = lazy(() => import('./pages/StudentDashboard'));
+const StudentDetailsPage = lazy(() => import('./pages/StudentDetailsPage'));
+const BatchDetailsPage = lazy(() => import('./pages/BatchDetailsPage'));
 
 /**
  * Root redirect — uses Firebase Auth state to send users to the right place.
@@ -83,7 +85,27 @@ function App() {
 
                 {/* Protected Admin Routes */}
                 <Route
-                  path="/admin"
+                  path="/admin/students/:studentId"
+                  element={
+                    <ProtectedRoute allowedRoles={['admin']}>
+                      <ErrorBoundary>
+                        <StudentDetailsPage />
+                      </ErrorBoundary>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/batches/:batchId"
+                  element={
+                    <ProtectedRoute allowedRoles={['admin']}>
+                      <ErrorBoundary>
+                        <BatchDetailsPage />
+                      </ErrorBoundary>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/*"
                   element={
                     <ProtectedRoute allowedRoles={['admin']}>
                       <ErrorBoundary>
@@ -103,5 +125,6 @@ function App() {
     </ErrorBoundary>
   );
 }
+
 
 export default App;

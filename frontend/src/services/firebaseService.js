@@ -492,12 +492,22 @@ export const updateBatch = (id, data) => updateDocumentFields("batches", id, dat
 
 export const deleteBatch = (id) => deleteDocument("batches", id);
 
-/** Students assigned to a batch, resolved from the batch's student_ids array. */
+/** Students assigned to a batch, resolved from student documents AND batch student_ids array. */
 export const getStudentsByBatch = async (batchId) => {
+  if (!batchId) return [];
   const batch = await getDocument("batches", batchId);
-  if (!batch) return [];
-  return getStudentsByIds(batch.student_ids || []);
+  const [byBatchField, byStudentIds] = await Promise.all([
+    getDocuments("students", [where("batch_id", "==", batchId)]).catch(() => []),
+    batch?.student_ids && batch.student_ids.length > 0
+      ? getStudentsByIds(batch.student_ids).catch(() => [])
+      : Promise.resolve([])
+  ]);
+  const merged = [...byBatchField, ...byStudentIds];
+  const uniqueMap = new Map();
+  merged.forEach(s => uniqueMap.set(s.id, s));
+  return Array.from(uniqueMap.values());
 };
+
 
 /**
  * Replace a batch's student roster and keep each student's `batch_id` in sync.
@@ -544,6 +554,65 @@ export const assignStudentsToBatch = async (batchId, studentIds = []) => {
   await batch.commit();
   return { batchId, studentIds };
 };
+
+/** Unassign a single student from a batch */
+export const unassignStudentFromBatch = async (batchId, studentId) => {
+  const existing = await getDocument("batches", batchId);
+  if (!existing) {
+    throw new Error("Batch document not found.");
+  }
+  const currentIds = existing.student_ids || [];
+  const updatedIds = currentIds.filter(id => id !== studentId);
+
+  const batch = writeBatch(db);
+  batch.set(doc(db, "batches", batchId), {
+    student_ids: updatedIds,
+    students_count: updatedIds.length,
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
+
+  batch.set(doc(db, "students", studentId), {
+    batch_id: "",
+    batch_name: "",
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
+
+  await batch.commit();
+  return { batchId, studentId };
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRAINERS / INSTRUCTORS (MASTER DATA)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const getTrainers = () =>
+  getDocuments("trainers", [orderBy("createdAt", "desc"), limit(DEFAULT_LIST_LIMIT)]);
+
+export const getTrainer = (id) => getDocument("trainers", id);
+
+export const addTrainer = (data) => addDocument("trainers", data);
+
+export const updateTrainer = (id, data) => updateDocumentFields("trainers", id, data);
+
+export const deleteTrainer = (id) => deleteDocument("trainers", id);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MASTER DATA SUMMARY HELPER
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const getMasterData = async () => {
+  const [courses, trainers] = await Promise.all([
+    getCourses().catch(() => []),
+    getTrainers().catch(() => []),
+  ]);
+  return {
+    courses,
+    trainers,
+    feeStatuses: ["Paid", "Pending Payment", "Partial", "Overdue"],
+    accountStatuses: ["active", "disabled", "pending"],
+  };
+};
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LIVE CLASS ACTIVITY SCORES

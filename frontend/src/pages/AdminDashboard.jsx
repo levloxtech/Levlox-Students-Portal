@@ -13,6 +13,7 @@ import {
 import CustomModal from '../components/Modal';
 import FilterBar from '../components/FilterBar';
 import leveloxIcon from '../assets/levelox-icon-transparent.png';
+import MasterDataPage from './MasterDataPage';
 import { useAuth } from '../context/AuthContext';
 import {
   listStudents,
@@ -2520,22 +2521,12 @@ const AdminDashboard = () => {
     showModal('Info', 'Session management is handled by Firebase Auth. Disable the student account to prevent access.', 'info');
   };
 
-  const handleViewStudentDetails = async (studentId) => {
-    try {
-      const { getStudent: getStudentDoc } = await import('../services/firebaseService');
-      const data = await getStudentDoc(studentId);
-      if (data) {
-        setSelectedStudentDetails(data);
-        fetchStudentSessions(studentId);
-        setShowDetailsModal(true);
-      } else {
-        showModal('Error', 'Student record not found in Firestore.', 'error');
-      }
-    } catch (e) {
-      console.error(e);
-      showModal('Error', 'Failed to load student details.', 'error');
+  const handleViewStudentDetails = (studentId) => {
+    if (studentId) {
+      navigate(`/admin/students/${studentId}`);
     }
   };
+
 
   const handleCreateStudentSubmit = async (e) => {
     e.preventDefault();
@@ -2829,31 +2820,33 @@ const AdminDashboard = () => {
   };
 
   const saveAttendanceSheet = async () => {
-    if (!attBatchId) return;
-    const hasDemo = attendanceRecords.some(r => r.isDemo);
-    if (hasDemo) {
-      showModal('Demo Mode', 'Attendance saved successfully (Demo Mode - records not saved to database).', 'success');
+    if (!attBatchId) {
+      showModal('Warning', 'Please select a batch to mark attendance.', 'warning');
+      return;
+    }
+    if (!attendanceRecords || attendanceRecords.length === 0) {
+      showModal('Warning', 'No students found in this batch to mark attendance.', 'warning');
       return;
     }
     try {
       // Save each attendance record to Firestore
       await Promise.all(attendanceRecords.map(async (record) => {
-        if (record.id && !record.isNew) {
+        if (record.id && !record.isNew && !record.isDemo) {
           await updateAttendance(record.id, { status: record.status });
         } else {
           await markAttendance({
-            student_id: record.student_id,
-            studentId: record.student_id,
-            student_name: record.student_name,
-            rollNumber: record.rollNumber,
+            student_id: record.student_id || record.id,
+            studentId: record.student_id || record.id,
+            student_name: record.student_name || record.name || 'Student',
+            rollNumber: record.rollNumber || '',
             batch_id: attBatchId,
-            date: attendanceDate,
-            status: record.status,
-            course: record.course || attCourse,
+            date: attendanceDate || new Date().toISOString().split('T')[0],
+            status: record.status || 'Present',
+            course: record.course || attCourse || '',
           });
         }
       }));
-      showModal('Success', 'Attendance saved successfully!', 'success');
+      showModal('Success', 'Attendance saved successfully to Firestore!', 'success');
       fetchAttendanceHistory();
       fetchStats();
     } catch (error) {
@@ -2861,6 +2854,7 @@ const AdminDashboard = () => {
       showModal('Error', classifyFirestoreError(error).message, 'error');
     }
   };
+
 
   const exportAttendanceCSV = () => {
     if (!attendanceRecords || attendanceRecords.length === 0) return;
@@ -3270,11 +3264,17 @@ const AdminDashboard = () => {
             <Trophy size={18} />
             <span className="sidebar-link-text">Activity Scores</span>
           </button>
-          
+
+          <button className={`sidebar-link ${activeTab === 'master-data' ? 'active' : ''}`} onClick={() => { setActiveTab('master-data'); setMobileMenuOpen(false); }}>
+            <Shield size={18} />
+            <span className="sidebar-link-text">Master Data</span>
+          </button>
+
           <button className={`sidebar-link ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => { setActiveTab('settings'); setMobileMenuOpen(false); }}>
             <Settings size={18} />
             <span className="sidebar-link-text">Settings</span>
           </button>
+
         </nav>
 
         <div className="sidebar-footer">
@@ -3640,7 +3640,12 @@ const AdminDashboard = () => {
                               <span style={{ fontSize: '10.5px', fontWeight: 800, textTransform: 'uppercase', color: 'var(--primary-color)', background: 'var(--primary-light)', padding: '4px 10px', borderRadius: '6px' }}>
                                 {batch.code} · {batch.course_name}
                               </span>
-                              <h5 style={{ fontWeight: '800', fontSize: '18px', color: 'var(--text-primary)', margin: '12px 0 4px' }}>{batch.name}</h5>
+                              <h5 
+                                style={{ fontWeight: '800', fontSize: '18px', color: 'var(--primary-color)', margin: '12px 0 4px', cursor: 'pointer' }}
+                                onClick={() => navigate(`/admin/batches/${batch.id}`)}
+                              >
+                                {batch.name}
+                              </h5>
                               <p style={{ fontSize: '13.5px', color: 'var(--text-secondary)', margin: 0 }}>Instructor: <strong>{batch.trainer_name}</strong></p>
                             </div>
                             <span className={`badge-status ${batch.status === 'Active' ? 'paid' : 'unpaid'}`} style={{ height: '24px', fontSize: '11px', fontWeight: '700' }}>
@@ -3651,22 +3656,27 @@ const AdminDashboard = () => {
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', background: 'var(--surface-alt)', padding: '14px', borderRadius: '12px', border: '1px solid var(--border-color)', fontSize: '13px' }}>
                             <div>
                               <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '11px', textTransform: 'uppercase', fontWeight: 700, marginBottom: '2px' }}>Students</span>
-                              <strong>{batch.students_count} / {batch.max_students}</strong>
+                              <strong>{batch.students_count || 0} / {batch.max_students || 30}</strong>
                             </div>
                             <div>
                               <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '11px', textTransform: 'uppercase', fontWeight: 700, marginBottom: '2px' }}>Start Date</span>
-                              <strong>{batch.start_date}</strong>
+                              <strong>{batch.start_date || 'N/A'}</strong>
                             </div>
                             <div>
                               <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '11px', textTransform: 'uppercase', fontWeight: 700, marginBottom: '2px' }}>End Date</span>
-                              <strong>{batch.end_date}</strong>
+                              <strong>{batch.end_date || 'N/A'}</strong>
                             </div>
                           </div>
 
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-light)', paddingTop: '16px', gap: '10px' }}>
-                            <button className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '12.5px', height: '36px', borderRadius: '10px' }} onClick={() => startAssignStudents(batch)}>
-                              Assign Students
-                            </button>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '12.5px', height: '36px', borderRadius: '10px' }} onClick={() => navigate(`/admin/batches/${batch.id}`)}>
+                                View Roster / Details
+                              </button>
+                              <button className="btn btn-secondary" style={{ padding: '8px 14px', fontSize: '12.5px', height: '36px', borderRadius: '10px' }} onClick={() => startAssignStudents(batch)}>
+                                Assign
+                              </button>
+                            </div>
                             <div style={{ display: 'flex', gap: '8px' }}>
                               <button className="btn btn-outline" style={{ padding: '8px 14px', fontSize: '12.5px', height: '36px', borderRadius: '10px' }} onClick={() => startEditBatch(batch)}>
                                 Edit
@@ -3676,6 +3686,7 @@ const AdminDashboard = () => {
                               </button>
                             </div>
                           </div>
+
                         </div>
                       ))}
                     </div>
@@ -4910,8 +4921,14 @@ const AdminDashboard = () => {
         )}
 
         {/* Settings Tab */}
+        {/* Master Data Tab */}
+        {activeTab === 'master-data' && (
+          <MasterDataPage />
+        )}
+
         {/* Settings Tab */}
         {activeTab === 'settings' && (
+
           <div style={{ padding: '4px 0' }} className="animate-fade-in">
             {/* Admin Toast Alert */}
             {adminToast && (
@@ -6081,7 +6098,7 @@ const AdminDashboard = () => {
               <h3 className="modal-title">Schedule Live Lecture</h3>
               <button className="modal-close-red" onClick={() => setShowLiveClassModal(false)} aria-label="Close modal"><X size={18} /></button>
             </div>
-            <form onSubmit={addLiveClass}>
+            <form onSubmit={addLiveClassHandler}>
               <div className="modal-body">
                 <div className="modal-form-grid">
                   <div className="form-group grid-col-span-2">
@@ -6173,7 +6190,7 @@ const AdminDashboard = () => {
                 setRecTitle(''); setRecModule('Module 1 - Python Basics'); setRecVideoUrl(''); setRecThumbnailUrl(''); setRecLessonDescription(''); setRecNotesUrl(''); setRecAssignment(''); setRecVisibility('everyone'); setRecSortOrder(''); setRecDuration('1h 30m'); setVideoSourceType('link'); setRecStudyMaterials([]);
               }} aria-label="Close modal"><X size={18} /></button>
             </div>
-            <form onSubmit={addRecordedClass}>
+            <form onSubmit={addRecordedClassHandler}>
               <div className="modal-body">
                 <div className="modal-form-grid">
                   <div className="form-group">
@@ -6402,7 +6419,7 @@ const AdminDashboard = () => {
               <h3 className="modal-title">Publish Announcement</h3>
               <button className="modal-close-red" onClick={() => setShowAnnouncementModal(false)} aria-label="Close modal"><X size={18} /></button>
             </div>
-            <form onSubmit={addAnnouncement}>
+            <form onSubmit={addAnnouncementHandler}>
               <div className="modal-body">
                 <div className="modal-form-grid">
                   <div className="form-group">

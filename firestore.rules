@@ -74,6 +74,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    match /trainers/{trainerId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+
     match /liveClasses/{classId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();

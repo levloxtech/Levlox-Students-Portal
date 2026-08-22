@@ -445,7 +445,7 @@ const StudentDashboard = () => {
         el.style.transform = 'scale(1.03)';
         el.style.boxShadow = '0 0 25px rgba(108,60,240,0.5)';
         el.style.borderColor = 'var(--primary-color)';
-        
+
         setTimeout(() => {
           el.style.transform = 'none';
           el.style.boxShadow = 'var(--shadow-card)';
@@ -491,23 +491,23 @@ const StudentDashboard = () => {
 
       {/* ═══ SIDEBAR ═══════════════════════════════ */}
       <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''} ${mobileMenuOpen ? 'mobile-open' : ''}`}>
-        <div className="sidebar-header" style={{ 
-          display: 'flex', 
+        <div className="sidebar-header" style={{
+          display: 'flex',
           flexDirection: sidebarCollapsed ? 'column' : 'row',
-          alignItems: 'center', 
-          justifyContent: sidebarCollapsed ? 'center' : 'space-between', 
+          alignItems: 'center',
+          justifyContent: sidebarCollapsed ? 'center' : 'space-between',
           width: '100%',
           padding: sidebarCollapsed ? '16px 0 12px' : '16px 8px 0',
           gap: sidebarCollapsed ? '16px' : '0'
         }}>
           <div className="sidebar-brand" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div className="sidebar-brand-icon" style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              width: '40px', 
-              height: '40px', 
-              flexShrink: 0 
+            <div className="sidebar-brand-icon" style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '40px',
+              height: '40px',
+              flexShrink: 0
             }}>
               <img src={leveloxIcon} alt="Levlox Logo" style={{ width: '32px', height: '32px', objectFit: 'contain' }} />
             </div>
@@ -784,10 +784,10 @@ const StudentDashboard = () => {
                         </div>
                       );
                     }) || (
-                      <div style={{ gridColumn: 'span 3', textAlign: 'center', padding: '10px 0', color: 'var(--text-secondary)', fontSize: 12.5 }}>
-                        Calculating rankings...
-                      </div>
-                    )}
+                        <div style={{ gridColumn: 'span 3', textAlign: 'center', padding: '10px 0', color: 'var(--text-secondary)', fontSize: 12.5 }}>
+                          Calculating rankings...
+                        </div>
+                      )}
                   </div>
 
                   {/* Current Student Position Banner */}
@@ -857,9 +857,9 @@ const StudentDashboard = () => {
                         </div>
                       ))
                       : <div style={{ textAlign: 'center', padding: '28px 0', color: 'var(--text-secondary)' }}>
-                          <Calendar size={28} strokeWidth={1.5} style={{ marginBottom: 8, opacity: 0.4 }} />
-                          <p style={{ fontSize: 13, margin: 0, fontWeight: 500 }}>No upcoming classes</p>
-                        </div>
+                        <Calendar size={28} strokeWidth={1.5} style={{ marginBottom: 8, opacity: 0.4 }} />
+                        <p style={{ fontSize: 13, margin: 0, fontWeight: 500 }}>No upcoming classes</p>
+                      </div>
                     }
                   </div>
                 </div>
@@ -886,7 +886,7 @@ const StudentDashboard = () => {
                   {/* Loading skeleton */}
                   {replaysLoading && (
                     <div style={{ padding: '20px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-                      {[1,2,3].map(i => (
+                      {[1, 2, 3].map(i => (
                         <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                           <div style={{ width: 104, height: 58, borderRadius: 10, background: 'var(--surface-alt)', animation: 'pulse 1.5s infinite' }} />
                           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 7 }}>
@@ -1023,11 +1023,11 @@ const StudentDashboard = () => {
                                   </button>
                                 ) : (
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                    <span style={{ 
-                                      fontSize: 10.5, 
-                                      background: 'rgba(245,158,11,0.08)', 
-                                      color: '#F59E0B', 
-                                      padding: '3px 8px', 
+                                    <span style={{
+                                      fontSize: 10.5,
+                                      background: 'rgba(245,158,11,0.08)',
+                                      color: '#F59E0B',
+                                      padding: '3px 8px',
                                       borderRadius: 6,
                                       fontWeight: 700,
                                       cursor: 'pointer'
@@ -1143,7 +1143,7 @@ const StudentDashboard = () => {
                             <FileText size={16} strokeWidth={1.75} style={{ marginTop: 2, flexShrink: 0 }} /> {c.description}
                           </p>
                         )}
-                        
+
                         <div style={{ background: '#FAFADF', borderRadius: 12, padding: '12px 14px', marginBottom: 18, display: 'grid', gridTemplateColumns: '1fr', gap: 8, border: '1px solid #E8E8F0' }}>
                           <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 8 }}>
                             <User size={16} strokeWidth={1.75} color="var(--text-secondary)" /> <span><strong>Trainer:</strong> {c.instructor}</span>
@@ -1300,8 +1300,8 @@ const StudentDashboard = () => {
 
       {/* ACCESS RESTRICTED MODAL */}
       {showLockModal && (
-        <CustomModal 
-          isOpen={showLockModal} 
+        <CustomModal
+          isOpen={showLockModal}
           onClose={() => setShowLockModal(false)}
           title="Access Restricted"
           type="error"
