@@ -196,25 +196,63 @@ const Login = () => {
   };
 
   /* ════ PASSWORD RESET VIA EMAIL ════ */
+  const [resetError, setResetError] = useState('');
+
   const handleSendPasswordReset = async (e) => {
-    e.preventDefault();
-    if (!resetEmail || !resetEmail.includes('@')) {
-      showToast('Invalid Email', 'Please enter a valid email address to receive the password reset link.', 'warning');
+    if (e && e.preventDefault) e.preventDefault();
+    setResetError('');
+
+    const cleanEmail = (resetEmail || '').trim().toLowerCase();
+
+    if (!cleanEmail) {
+      setResetError('Please enter your email address.');
       return;
     }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      setResetError('Please enter a valid email address.');
+      return;
+    }
+
     setResetLoading(true);
     try {
-      await sendPasswordResetEmail(auth, resetEmail.trim());
+      await sendPasswordResetEmail(auth, cleanEmail);
       setResetModalOpen(false);
-      showToast('Email Sent', `A password reset link has been sent to ${resetEmail}. Check your inbox!`, 'success');
       setResetEmail('');
+      setResetError('');
+      showToast(
+        'Password Reset Email Sent',
+        `Password reset link sent successfully to ${cleanEmail}. Please check your email inbox and spam/junk folder.`,
+        'success'
+      );
     } catch (err) {
       console.error('[Login] Password reset failed:', err);
-      showToast('Reset Failed', getFirebaseAuthError(err.code || err.message), 'error');
+      const code = err?.code || '';
+
+      if (code === 'auth/invalid-email') {
+        setResetError('Please enter a valid email address.');
+      } else if (code === 'auth/user-not-found') {
+        // Safe security response — does not leak account existence while informing user
+        setResetModalOpen(false);
+        setResetEmail('');
+        showToast(
+          'Password Reset Email Sent',
+          'If an account exists for this email, a password reset link has been sent. Please check your inbox and spam/junk folder.',
+          'info'
+        );
+      } else if (code === 'auth/too-many-requests') {
+        setResetError('Too many attempts. Please try again later.');
+      } else if (code === 'auth/network-request-failed') {
+        setResetError('Unable to send the reset link. Please check your internet connection and try again.');
+      } else {
+        setResetError('Failed to send password reset email. Please try again later.');
+      }
     } finally {
       setResetLoading(false);
     }
   };
+
 
   /* ════ LOGIN SUBMIT ════ */
   const handleLoginSubmit = async (e) => {
@@ -443,7 +481,7 @@ const Login = () => {
             <form onSubmit={handleLoginSubmit} noValidate className="animated-form">
               {/* Email Address or Mobile Number */}
               <div style={{ marginBottom: identifierError ? 10 : 20 }}>
-                <label style={labelStyle} htmlFor="identifier">Email Address / Mobile Number</label>
+                <label style={labelStyle} htmlFor="identifier">Email Address</label>
                 <div className={`input-group-relative ${identifierError ? 'error-border' : ''}`}>
                   <div className="input-icon-left">
                     <Mail size={16} />
@@ -451,15 +489,16 @@ const Login = () => {
                   <input
                     id="identifier"
                     className="premium-input"
-                    type="text"
-                    placeholder="Enter email address or 10-digit mobile number"
+                    type="email"
+                    placeholder="Enter your email address"
                     value={identifier}
                     onChange={e => { setIdentifier(e.target.value); setIdentifierError(''); }}
                     disabled={isLocked}
-                    autoComplete="username"
+                    autoComplete="email"
                     required
                     style={{ cursor: isLocked ? 'not-allowed' : 'text', paddingLeft: '48px', paddingRight: '18px' }}
                   />
+
 
                 </div>
                 {identifierError && <p style={errorStyle}>{identifierError}</p>}
@@ -599,16 +638,35 @@ const Login = () => {
       {/* Reset Password Modal */}
       <CustomModal
         isOpen={resetModalOpen}
-        onClose={() => setResetModalOpen(false)}
+        onClose={() => { setResetModalOpen(false); setResetError(''); }}
         title="Reset Password"
         type="info"
-        confirmText={resetLoading ? "Sending Link..." : "Send Reset Link"}
+        confirmText={resetLoading ? "Sending..." : "Send Reset Link"}
         onConfirm={handleSendPasswordReset}
       >
         <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: '0 0 16px', lineHeight: 1.5 }}>
           Enter your registered email address below. We will send you an email with instructions to reset your password.
         </p>
-        <div className="input-group-relative">
+
+        {resetError && (
+          <div style={{
+            background: 'rgba(239, 68, 68, 0.1)',
+            border: '1px solid rgba(239, 68, 68, 0.25)',
+            color: '#EF4444',
+            borderRadius: 8,
+            padding: '8px 12px',
+            fontSize: 12.5,
+            fontWeight: 600,
+            marginBottom: 14,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6
+          }}>
+            <AlertTriangle size={14} color="#EF4444" /> {resetError}
+          </div>
+        )}
+
+        <div className={`input-group-relative ${resetError ? 'error-border' : ''}`}>
           <div className="input-icon-left">
             <Mail size={16} />
           </div>
@@ -617,11 +675,14 @@ const Login = () => {
             type="email"
             placeholder="Enter your email address"
             value={resetEmail}
-            onChange={e => setResetEmail(e.target.value)}
+            onChange={e => { setResetEmail(e.target.value); setResetError(''); }}
+            onKeyDown={e => { if (e.key === 'Enter') handleSendPasswordReset(e); }}
             style={{ paddingLeft: '48px' }}
+            disabled={resetLoading}
           />
         </div>
       </CustomModal>
+
 
       <CustomModal
         isOpen={modalOpen}

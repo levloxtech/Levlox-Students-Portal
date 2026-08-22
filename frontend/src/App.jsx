@@ -12,6 +12,7 @@ const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 const StudentDashboard = lazy(() => import('./pages/StudentDashboard'));
 const StudentDetailsPage = lazy(() => import('./pages/StudentDetailsPage'));
 const BatchDetailsPage = lazy(() => import('./pages/BatchDetailsPage'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 
 /**
  * Root redirect — uses Firebase Auth state to send users to the right place.
@@ -68,8 +69,10 @@ function App() {
           <div className="app-container">
             <Suspense fallback={<FullScreenLoader />}>
               <Routes>
-                {/* Public Route */}
+                {/* Public Routes */}
                 <Route path="/login" element={<Login />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
+
 
                 {/* Protected Student Routes */}
                 <Route
