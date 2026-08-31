@@ -132,15 +132,15 @@ const Login = () => {
 
   const getFirebaseAuthError = (code) => {
     const map = {
-      'auth/user-not-found': 'No account found with this email or mobile number.',
-      'auth/wrong-password': 'Incorrect password. Please try again.',
-      'auth/invalid-credential': 'Incorrect email/mobile number or password. Please try again.',
-      'auth/invalid-login-credentials': 'Incorrect email/mobile number or password. Please try again.',
+      'auth/user-not-found': 'Invalid email or password. Please check your credentials and try again.',
+      'auth/wrong-password': 'Invalid email or password. Please check your credentials and try again.',
+      'auth/invalid-credential': 'Invalid email or password. Please check your credentials and try again.',
+      'auth/invalid-login-credentials': 'Invalid email or password. Please check your credentials and try again.',
       'auth/missing-password': 'Please enter your password.',
-      'auth/invalid-email': 'Please enter a valid email address or 10-digit mobile number.',
-      'auth/user-disabled': 'This account has been disabled. Contact your administrator.',
-      'auth/too-many-requests': 'Too many failed attempts. Please try again later.',
-      'auth/network-request-failed': 'Network error. Please check your connection.',
+      'auth/invalid-email': 'Please enter a valid email address.',
+      'auth/user-disabled': 'This account has been disabled. Please contact the administrator.',
+      'auth/too-many-requests': 'Too many login attempts. Please try again later.',
+      'auth/network-request-failed': 'Unable to connect to Firebase. Please check your internet connection and try again.',
       'auth/internal-error': 'An internal error occurred. Please try again.',
       'auth/configuration-not-found':
         'Sign-in is not enabled for this portal yet. Please contact your administrator.',
@@ -279,38 +279,32 @@ const Login = () => {
     if (isValidMobile(rawInput)) {
       authEmail = mobileToAuthId(rawInput);
     } else if (!rawInput.includes('@')) {
-      setIdentifierError('Please enter a valid 10-digit mobile number or email address.');
+      setIdentifierError('Please enter a valid email address or 10-digit mobile number.');
       return;
     }
 
     setLoading(true);
     try {
-      let credential;
-      try {
-        credential = await signInWithEmailAndPassword(
-          auth,
-          authEmail,
-          password
-        );
-      } catch (firstErr) {
-        // If mobile attempt failed and identifier wasn't formatted with @, also check if they signed up with plain identifier
-        if (isValidMobile(rawInput) && (firstErr?.code === 'auth/user-not-found' || firstErr?.code === 'auth/invalid-credential')) {
-          credential = await signInWithEmailAndPassword(
-            auth,
-            rawInput,
-            password
-          );
-        } else {
-          throw firstErr;
-        }
-      }
+      const credential = await signInWithEmailAndPassword(
+        auth,
+        authEmail,
+        password
+      );
       const firebaseUser = credential.user;
 
       // Resolve the account's role from Firestore. Admin records take priority.
-      const [adminDoc, studentDoc] = await Promise.all([
-        getAdmin(firebaseUser.uid).catch(() => null),
-        getStudent(firebaseUser.uid).catch(() => null),
-      ]);
+      let adminDoc = null;
+      let studentDoc = null;
+      try {
+        [adminDoc, studentDoc] = await Promise.all([
+          getAdmin(firebaseUser.uid),
+          getStudent(firebaseUser.uid),
+        ]);
+      } catch (firestoreErr) {
+        console.error('[Login] Firestore profile lookup failed:', firestoreErr);
+        await signOut(auth);
+        throw new Error('Unable to verify your account profile due to a database connection error. Please try again.');
+      }
 
       let role = null;
       if (adminDoc) {
@@ -341,7 +335,11 @@ const Login = () => {
       navigate(role === 'admin' ? '/admin' : '/student', { replace: true });
 
     } catch (err) {
-      console.warn('[Login] sign-in failed:', err?.code || err?.message);
+      console.error('[Login] Firebase Auth sign-in failed:', {
+        code: err?.code,
+        message: err?.message,
+        error: err
+      });
 
       if (isConfigError(err?.code)) {
         showToast('Sign-In Unavailable', getFirebaseAuthError(err.code), 'error');
@@ -349,23 +347,31 @@ const Login = () => {
         return;
       }
 
-      const locked = recordFailedAttempt();
-      if (locked) {
-        showToast(
-          'Too Many Attempts',
-          `Account temporarily locked for ${LOCKOUT_SECONDS} seconds. Please wait.`,
-          'error'
-        );
-        setLoading(false);
-        return;
+      const isNetworkError =
+        err?.code === 'auth/network-request-failed' ||
+        err?.message?.includes('database connection error') ||
+        err?.message?.includes('fetch');
+
+      // Network failures and server errors must NOT decrement the attempt counter
+      if (!isNetworkError) {
+        const locked = recordFailedAttempt();
+        if (locked) {
+          showToast(
+            'Too Many Attempts',
+            `Account temporarily locked for ${LOCKOUT_SECONDS} seconds. Please wait.`,
+            'error'
+          );
+          setLoading(false);
+          return;
+        }
       }
 
       const isOwnError = !err.code;
-      const remaining = MAX_ATTEMPTS - (failedAttempts + 1);
+      const remaining = MAX_ATTEMPTS - (failedAttempts + (isNetworkError ? 0 : 1));
       const errorMsg = isOwnError
         ? err.message
         : getFirebaseAuthError(err.code) +
-          (remaining > 0 ? ` (${remaining} attempt${remaining > 1 ? 's' : ''} remaining)` : '');
+          (!isNetworkError && remaining > 0 ? ` (${remaining} attempt${remaining > 1 ? 's' : ''} remaining)` : '');
 
       showToast('Sign-In Failed', errorMsg, 'error');
     } finally {
