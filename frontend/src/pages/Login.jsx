@@ -671,19 +671,50 @@ const Login = () => {
           </div>
         )}
 
-        <div className={`input-group-relative ${resetError ? 'error-border' : ''}`}>
-          <div className="input-icon-left">
-            <Mail size={16} />
+        <div style={{ position: 'relative', width: '100%' }}>
+          <div style={{
+            position: 'absolute',
+            left: 14,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            color: 'var(--text-secondary)',
+            pointerEvents: 'none',
+            display: 'flex',
+            alignItems: 'center'
+          }}>
+            <Mail size={18} />
           </div>
           <input
-            className="premium-input"
             type="email"
             placeholder="Enter your email address"
             value={resetEmail}
             onChange={e => { setResetEmail(e.target.value); setResetError(''); }}
             onKeyDown={e => { if (e.key === 'Enter') handleSendPasswordReset(e); }}
-            style={{ paddingLeft: '48px' }}
             disabled={resetLoading}
+            style={{
+              width: '100%',
+              height: 48,
+              padding: '0 16px 0 44px',
+              borderRadius: 12,
+              border: resetError ? '1.5px solid #EF4444' : '1.5px solid var(--border-color)',
+              background: 'var(--surface-alt)',
+              color: 'var(--text-primary)',
+              fontSize: 14,
+              fontWeight: 600,
+              outline: 'none',
+              boxSizing: 'border-box',
+              transition: 'all 0.2s ease'
+            }}
+            onFocus={e => {
+              e.target.style.borderColor = 'var(--primary-color)';
+              e.target.style.background = '#FFFFFF';
+              e.target.style.boxShadow = '0 0 0 3px rgba(108, 60, 240, 0.12)';
+            }}
+            onBlur={e => {
+              e.target.style.borderColor = resetError ? '#EF4444' : 'var(--border-color)';
+              e.target.style.background = 'var(--surface-alt)';
+              e.target.style.boxShadow = 'none';
+            }}
           />
         </div>
       </CustomModal>
