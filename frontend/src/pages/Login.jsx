@@ -77,7 +77,6 @@ const Login = () => {
     const reasonMessages = {
       session_revoked: ['Session Revoked', 'You have been logged out because this session was revoked.', 'warning'],
       session_expired: ['Session Expired', 'Your session has expired. Please sign in again.', 'info'],
-      inactivity: ['Session Timeout', 'You were logged out due to 30 minutes of inactivity.', 'info'],
       no_profile: ['Profile Not Found', 'Your sign-in succeeded but no portal profile is linked to this account. Please contact your Levlox administrator.', 'warning'],
     };
     if (reason && reasonMessages[reason]) {

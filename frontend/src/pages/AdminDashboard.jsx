@@ -1602,10 +1602,10 @@ const AdminDashboard = () => {
   const [editAddress, setEditAddress] = useState('');
   const [editCompany, setEditCompany] = useState('');
   const [editAccountStatus, setEditAccountStatus] = useState('active');
-  const [editFeesStatus, setEditFeesStatus] = useState('Pending');
+  const [editFeesStatus, setEditFeesStatus] = useState('Pending Payment');
   const [editTotal, setEditTotal] = useState(1500);
   const [editPaid, setEditPaid] = useState(0);
-  const [editStatus, setEditStatus] = useState('Pending');
+  const [editStatus, setEditStatus] = useState('Pending Payment');
   const [editPayDate, setEditPayDate] = useState('');
 
   // Extra form states for creations
@@ -2415,7 +2415,7 @@ const AdminDashboard = () => {
   const toggleFees = async (studentId) => {
     try {
       const student = students.find(s => s.id === studentId);
-      const newStatus = student?.feesStatus === 'Paid' ? 'Pending' : 'Paid';
+      const newStatus = student?.feesStatus === 'Paid' ? 'Pending Payment' : 'Paid';
       await updateStudent(studentId, { feesStatus: newStatus });
       fetchStudents();
       fetchStats();
@@ -2594,14 +2594,16 @@ const AdminDashboard = () => {
       }
 
       const rollNumber = `LVX${Date.now().toString().slice(-6)}`;
+      const selectedBatch = batches.find(b => b.id === createBatchId);
       await createStudent(targetUid, {
         name: createName,
         email: cleanEmail || authEmail,
         phone: cleanPhone || '',
         course: createCourse,
         batch_id: createBatchId,
+        batch_name: selectedBatch?.name || '',
         rollNumber,
-        feesStatus: 'Pending',
+        feesStatus: 'Pending Payment',
         status: 'active',
         role: 'student',
         mustChangePassword: true,
@@ -2685,12 +2687,13 @@ const AdminDashboard = () => {
     setEditAddress(student.permanent_address || '');
     setEditCompany(student.company || '');
     setEditAccountStatus(student.status || 'active');
-    setEditFeesStatus(student.feesStatus || 'Pending');
+    setEditFeesStatus(student.feesStatus || 'Pending Payment');
   };
 
   const saveStudentEdit = async (e) => {
     e.preventDefault();
     try {
+      const selectedBatch = batches.find(b => b.id === editBatchId);
       const payload = {
         name: editName,
         email: editEmail,
@@ -2698,6 +2701,7 @@ const AdminDashboard = () => {
         phone: editPhone,
         course: editCourse,
         batch_id: editBatchId,
+        batch_name: selectedBatch?.name || '',
         college: editCollege,
         profile_pic: editProfilePic,
         current_location: editLocation,
@@ -2721,7 +2725,7 @@ const AdminDashboard = () => {
     setEditingFeesStudent(student);
     setEditTotal(student.feesTotal || 20000);
     setEditPaid(student.feesPaidAmount || 0);
-    setEditStatus(student.feesStatus || 'Pending');
+    setEditStatus(student.feesStatus || 'Pending Payment');
     setEditPayDate(student.feesPaymentDate || '');
   };
 
@@ -3738,7 +3742,7 @@ const AdminDashboard = () => {
                   onChange: (val) => { setFeesFilter(val); setCurrentPage(1); },
                   options: [
                     { value: 'Paid', label: 'Paid' },
-                    { value: 'Pending', label: 'Pending' }
+                    { value: 'Pending Payment', label: 'Pending Payment' }
                   ]
                 },
                 {
@@ -4719,7 +4723,7 @@ const AdminDashboard = () => {
                   onChange: (val) => { setFeesStatusFilter(val); setFeesPage(1); },
                   options: [
                     { value: 'Paid', label: 'Paid' },
-                    { value: 'Pending', label: 'Pending' }
+                    { value: 'Pending Payment', label: 'Pending Payment' }
                   ]
                 }
               ]}
@@ -5465,7 +5469,7 @@ const AdminDashboard = () => {
                   <div className="form-group">
                     <label className="form-label" htmlFor="editFeesStatus">Fee Ledger Status</label>
                     <select id="editFeesStatus" className="form-select" value={editFeesStatus} onChange={(e) => setEditFeesStatus(e.target.value)}>
-                      <option value="Pending">Pending</option>
+                      <option value="Pending Payment">Pending Payment</option>
                       <option value="Paid">Paid</option>
                     </select>
                   </div>
@@ -5509,7 +5513,7 @@ const AdminDashboard = () => {
                   <div className="form-group">
                     <label className="form-label" htmlFor="editStatus">Payment Status</label>
                     <select id="editStatus" className="form-select" value={editStatus} onChange={(e) => setEditStatus(e.target.value)}>
-                      <option value="Pending">Pending</option>
+                      <option value="Pending Payment">Pending Payment</option>
                       <option value="Paid">Paid</option>
                     </select>
                   </div>

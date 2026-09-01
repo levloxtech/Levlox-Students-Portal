@@ -28,44 +28,11 @@ const RootRedirect = () => {
   return <Navigate to="/login" replace />;
 };
 
-/**
- * Inactivity auto-logout — signs out after 30 minutes of no activity.
- * Only armed while a user is actually signed in.
- */
-const InactivityWatcher = () => {
-  const { logout, currentUser } = useAuth();
-
-  useEffect(() => {
-    if (!currentUser) return undefined;
-
-    let timer;
-    const reset = () => {
-      clearTimeout(timer);
-      timer = setTimeout(async () => {
-        await logout();
-        window.location.href = '/login?reason=inactivity';
-      }, 30 * 60 * 1000);
-    };
-
-    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
-    events.forEach(e => document.addEventListener(e, reset, { passive: true }));
-    reset();
-
-    return () => {
-      clearTimeout(timer);
-      events.forEach(e => document.removeEventListener(e, reset));
-    };
-  }, [logout, currentUser]);
-
-  return null;
-};
-
 function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
         <Router>
-          <InactivityWatcher />
           <div className="app-container">
             <Suspense fallback={<FullScreenLoader />}>
               <Routes>

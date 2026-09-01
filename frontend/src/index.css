@@ -248,8 +248,9 @@ button, input, select, textarea {
 }
 
 .auth-form-panel {
-  width: 480px;
-  min-width: 480px;
+  width: 100%;
+  max-width: 480px;
+  min-width: 0;
   background: white;
   display: flex;
   flex-direction: column;
@@ -1180,9 +1181,16 @@ body:has(.modal-overlay) {
   overflow: hidden;
   width: 100%;
   max-width: 800px;
-  max-height: 85vh;
+  max-height: 90vh;
   animation: scaleUpModal 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   box-sizing: border-box;
+}
+
+@media (max-width: 576px) {
+  .modal-content {
+    border-radius: 16px;
+    max-height: 92vh;
+  }
 }
 
 .modal-content form {
@@ -3119,6 +3127,23 @@ body:has(.modal-overlay) {
   flex-wrap: wrap;
   width: 100%;
   box-sizing: border-box;
+}
+
+@media (max-width: 576px) {
+  .levlox-filter-bar {
+    padding: 12px;
+    gap: 12px;
+  }
+  .levlox-filter-search-container,
+  .levlox-filter-dropdown,
+  .levlox-filter-actions {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex: 1 1 100% !important;
+  }
+  .levlox-filter-actions {
+    justify-content: space-between;
+  }
 }
 
 @media (min-width: 1024px) {
