@@ -1983,12 +1983,16 @@ const AdminDashboard = () => {
     }
   };
 
+  const [submittingActivity, setSubmittingActivity] = useState(false);
+
   const handleAwardActivity = async (e) => {
     e.preventDefault();
     if (!actStudentId || !actBatchId || !actMeeting) {
       showModal("Missing Fields", "Please select Batch, Student, and enter Meeting Title.", "warning");
       return;
     }
+    if (submittingActivity) return;
+    setSubmittingActivity(true);
     try {
       const student = batchStudents.find(s => s.id === actStudentId);
       const batch = firestoreBatches.find(b => b.id === actBatchId);
@@ -2013,6 +2017,8 @@ const AdminDashboard = () => {
     } catch (e) {
       console.error('[Admin] award activity failed:', e);
       showModal('Error', e.message || classifyFirestoreError(e).message, 'error');
+    } finally {
+      setSubmittingActivity(false);
     }
   };
 
@@ -6695,7 +6701,9 @@ const AdminDashboard = () => {
                 <button type="button" className="btn btn-outline" onClick={() => setShowActivityScoreModal(false)}>
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary">Award Activity Points</button>
+                <button type="submit" className="btn btn-primary" disabled={submittingActivity}>
+                  {submittingActivity ? 'Awarding Points...' : 'Award Activity Points'}
+                </button>
               </div>
             </form>
           </div>
