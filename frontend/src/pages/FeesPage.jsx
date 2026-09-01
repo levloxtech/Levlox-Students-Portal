@@ -4,6 +4,7 @@ import {
   Shield, CreditCard, ArrowRight, Download, Calendar,
   Zap, Lock, ChevronRight, Info, Receipt
 } from 'lucide-react';
+import { formatCurrency, getStudentFeeDetails } from '../services/firebaseService';
 
 /* ─── Small helpers ──────────────────────────────── */
 const ProgressBar = ({ pct = 0, color = '#6C3CF0', height = 10 }) => (
@@ -54,14 +55,15 @@ const FeesPage = ({ dashboardData, onPayFees, paying }) => {
   const [activeSection, setActiveSection] = useState('overview');
 
   const student = dashboardData?.student || {};
-  const isPaid  = student.feesStatus === 'Paid';
+  const feeInfo = getStudentFeeDetails(student);
+  const isPaid  = feeInfo.isPaid;
 
-  const total     = Number(student.feesTotal)           || 0;
-  const paid      = Number(student.feesPaidAmount)      || 0;
-  const pending   = Number(student.feesRemainingAmount) || (total - paid);
+  const total     = feeInfo.total;
+  const paid      = feeInfo.paid;
+  const pending   = feeInfo.remaining;
   const payPct    = total > 0 ? Math.round((paid / total) * 100) : (isPaid ? 100 : 0);
   const payDate   = student.feesPaymentDate || '—';
-  const statusStr = student.feesStatus || 'Unpaid';
+  const statusStr = isPaid ? 'Paid' : 'Pending Payment';
 
   /* ── Mock installment history ── */
   const mockHistory = useMemo(() => {

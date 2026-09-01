@@ -12,7 +12,9 @@ import {
   getAttendanceForStudent,
   getPaymentsForStudent,
   getDocuments,
-  classifyFirestoreError
+  classifyFirestoreError,
+  formatCurrency,
+  getStudentFeeDetails
 } from '../services/firebaseService';
 import { where, limit } from 'firebase/firestore';
 
@@ -97,11 +99,12 @@ const StudentDetailsPage = () => {
   const rollNo = student.rollNumber || student.student_id || studentId;
   const course = student.course || 'Fullstack Engineering';
   const batchName = student.batch_name || 'Not Assigned';
-  const feesStatus = student.feesStatus || 'Pending Payment';
+  const feeInfo = getStudentFeeDetails(student);
+  const feesStatus = feeInfo.isPaid ? 'Paid' : (student.feesStatus || 'Pending Payment');
   const accountStatus = student.status || 'active';
-  const totalFee = Number(student.feesTotal) || 20000;
-  const paidFee = Number(student.feesPaidAmount) || 0;
-  const remainingFee = Number(student.feesRemainingAmount) || (totalFee - paidFee);
+  const totalFee = feeInfo.total;
+  const paidFee = feeInfo.paid;
+  const remainingFee = feeInfo.remaining;
 
   return (
     <div style={{ padding: '4px 0' }} className="animate-fade-in">
@@ -304,16 +307,16 @@ const StudentDetailsPage = () => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Total Fee:</span>
-                <span style={{ fontSize: 14, fontWeight: 800 }}>₹{totalFee.toLocaleString()}</span>
+                <span style={{ fontSize: 14, fontWeight: 800 }}>{formatCurrency(totalFee)}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Paid Amount:</span>
-                <span style={{ fontSize: 14, fontWeight: 800, color: '#10B981' }}>₹{paidFee.toLocaleString()}</span>
+                <span style={{ fontSize: 14, fontWeight: 800, color: '#10B981' }}>{formatCurrency(paidFee)}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Remaining Balance:</span>
                 <span style={{ fontSize: 14, fontWeight: 800, color: remainingFee > 0 ? '#F59E0B' : '#10B981' }}>
-                  ₹{remainingFee.toLocaleString()}
+                  {formatCurrency(remainingFee)}
                 </span>
               </div>
             </div>

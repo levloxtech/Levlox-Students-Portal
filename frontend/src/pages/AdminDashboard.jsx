@@ -21,6 +21,8 @@ import {
   createStudent,
   updateStudent,
   deleteDocument as deleteStudentDoc,
+  formatCurrency,
+  getStudentFeeDetails,
   getCourses,
   addCourse,
   updateCourse,
@@ -277,10 +279,20 @@ const AdminDashboard = () => {
     if (!adminData) return null;
     const { studentList, liveClassList, courseList, announcementList } = adminData;
 
-    const paidStudents = studentList.filter(s => s.feesStatus === 'Paid').length;
+    let paidStudents = 0;
+    let totalCollected = 0;
+    let totalPending = 0;
+
+    studentList.forEach((s) => {
+      const feeInfo = getStudentFeeDetails(s);
+      if (feeInfo.isPaid) {
+        paidStudents += 1;
+      }
+      totalCollected += feeInfo.paid;
+      totalPending += feeInfo.remaining;
+    });
+
     const pendingStudents = studentList.length - paidStudents;
-    const totalCollected = studentList.reduce((acc, s) => acc + (parseFloat(s.feesPaidAmount) || 0), 0);
-    const totalPending = studentList.reduce((acc, s) => acc + (parseFloat(s.feesRemainingAmount) || 0), 0);
 
     return {
       totalStudents: studentList.length,
@@ -2415,8 +2427,18 @@ const AdminDashboard = () => {
   const toggleFees = async (studentId) => {
     try {
       const student = students.find(s => s.id === studentId);
-      const newStatus = student?.feesStatus === 'Paid' ? 'Pending Payment' : 'Paid';
-      await updateStudent(studentId, { feesStatus: newStatus });
+      const isCurrentlyPaid = student?.feesStatus === 'Paid';
+      const newStatus = isCurrentlyPaid ? 'Pending Payment' : 'Paid';
+      const totalFee = Number(student?.feesTotal) > 0 ? Number(student.feesTotal) : 20000;
+      
+      const patch = {
+        feesStatus: newStatus,
+        feesPaidAmount: !isCurrentlyPaid ? totalFee : 0,
+        feesRemainingAmount: !isCurrentlyPaid ? 0 : totalFee,
+        feesPaymentDate: !isCurrentlyPaid ? new Date().toISOString().split('T')[0] : '',
+      };
+
+      await updateStudent(studentId, patch);
       fetchStudents();
       fetchStats();
     } catch (error) {
@@ -2604,6 +2626,9 @@ const AdminDashboard = () => {
         batch_name: selectedBatch?.name || '',
         rollNumber,
         feesStatus: 'Pending Payment',
+        feesTotal: 20000,
+        feesPaidAmount: 0,
+        feesRemainingAmount: 20000,
         status: 'active',
         role: 'student',
         mustChangePassword: true,
@@ -2732,9 +2757,14 @@ const AdminDashboard = () => {
   const saveFeesEdit = async (e) => {
     e.preventDefault();
     try {
+      const totalNum = Number(editTotal) || 0;
+      const paidNum = Number(editPaid) || 0;
+      const remNum = Math.max(0, totalNum - paidNum);
+
       await updateStudent(editingFeesStudent.id, {
-        feesTotal: editTotal,
-        feesPaidAmount: editPaid,
+        feesTotal: totalNum,
+        feesPaidAmount: paidNum,
+        feesRemainingAmount: remNum,
         feesStatus: editStatus,
         feesPaymentDate: editPayDate,
       });
@@ -3362,7 +3392,7 @@ const AdminDashboard = () => {
                   </div>
                 </div>
                 <div>
-                  <h3 className="stat-card-value" style={{ fontSize: '22px', fontWeight: '800', margin: '4px 0' }}>₹{(stats.feesCollected || 0).toLocaleString()}</h3>
+                  <h3 className="stat-card-value" style={{ fontSize: '22px', fontWeight: '800', margin: '4px 0' }}>{formatCurrency(stats.feesCollected || 0)}</h3>
                   <span className="stat-card-footer" style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Total Received</span>
                 </div>
               </div>
@@ -3378,7 +3408,7 @@ const AdminDashboard = () => {
                 <div>
                   <h3 className="stat-card-value" style={{ fontSize: '24px', fontWeight: '800', margin: '4px 0' }}>{stats.pendingPaymentsCount}</h3>
                   <span className="stat-card-footer" style={{ fontSize: '10.5px', color: 'var(--danger-color)', fontWeight: '600' }}>
-                    Dues: ₹{stats.pendingAmount ? stats.pendingAmount.toLocaleString() : 0}
+                    Dues: {formatCurrency(stats.pendingAmount || 0)}
                   </span>
                 </div>
               </div>
@@ -3404,7 +3434,7 @@ const AdminDashboard = () => {
                           <th style={{ padding: '8px', fontSize: '11px' }}>Learner</th>
                           <th style={{ padding: '8px', fontSize: '11px' }}>Course</th>
                           <th style={{ padding: '8px', fontSize: '11px' }}>Batch</th>
-                          <th style={{ padding: '8px', fontSize: '11px' }}>Join Date</th>
+                          <th style={{ padding: '8px', fontSize: '11px' }}>Joined</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -3450,11 +3480,11 @@ const AdminDashboard = () => {
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                         <div>
                           <span style={{ fontSize: '10.5px', color: 'var(--text-secondary)', textTransform: 'uppercase', display: 'block' }}>Total Collection</span>
-                          <strong style={{ fontSize: '18px', color: 'var(--success-color)' }}>₹{(stats.feeOverview.totalCollected || 0).toLocaleString()}</strong>
+                          <strong style={{ fontSize: '18px', color: 'var(--success-color)' }}>{formatCurrency(stats.feeOverview.totalCollected || 0)}</strong>
                         </div>
                         <div>
                           <span style={{ fontSize: '10.5px', color: 'var(--text-secondary)', textTransform: 'uppercase', display: 'block' }}>Pending Amount</span>
-                          <strong style={{ fontSize: '18px', color: 'var(--danger-color)' }}>₹{(stats.feeOverview.pendingAmount || 0).toLocaleString()}</strong>
+                          <strong style={{ fontSize: '18px', color: 'var(--danger-color)' }}>{formatCurrency(stats.feeOverview.pendingAmount || 0)}</strong>
                         </div>
                       </div>
                       <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -4758,19 +4788,21 @@ const AdminDashboard = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredStudentsForFees.map((student) => (
-                    <tr key={student.id}>
-                      <td><strong>{student.rollNumber}</strong></td>
-                      <td>{student.name}</td>
-                      <td>₹{student.feesTotal || 20000}</td>
-                      <td style={{ color: 'var(--success-color)' }}>₹{student.feesPaidAmount || 0}</td>
-                      <td style={{ color: 'var(--danger-color)' }}>₹{student.feesRemainingAmount ?? (student.feesTotal || 20000)}</td>
-                      <td>
-                        <span className={`badge-status ${student.feesStatus === 'Paid' ? 'paid' : 'unpaid'}`}>
-                          {student.feesStatus || 'Pending'}
-                        </span>
-                      </td>
-                      <td>{student.feesPaymentDate || 'N/A'}</td>
+                    {filteredStudentsForFees.map((student) => {
+                      const feeInfo = getStudentFeeDetails(student);
+                      return (
+                        <tr key={student.id}>
+                          <td><strong>{student.rollNumber}</strong></td>
+                          <td>{student.name}</td>
+                          <td>{formatCurrency(feeInfo.total)}</td>
+                          <td style={{ color: 'var(--success-color)' }}>{formatCurrency(feeInfo.paid)}</td>
+                          <td style={{ color: 'var(--danger-color)' }}>{formatCurrency(feeInfo.remaining)}</td>
+                          <td>
+                            <span className={`badge-status ${feeInfo.isPaid ? 'paid' : 'unpaid'}`}>
+                              {student.feesStatus || 'Pending Payment'}
+                            </span>
+                          </td>
+                          <td>{student.feesPaymentDate || 'N/A'}</td>
                       <td>
                         <div style={{ display: 'flex', gap: '6px' }}>
                           <button 
@@ -4786,7 +4818,8 @@ const AdminDashboard = () => {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  );
+                })}
                 </tbody>
               </table>
             </div>

@@ -744,3 +744,39 @@ export const uploadCertificate = async (uid, certId, file) => {
   const ext = file.name.split(".").pop();
   return uploadFile(`certificates/${uid}/${certId}.${ext}`, file, { contentType: file.type });
 };
+
+/**
+ * Reusable Indian Rupee (INR) currency formatter.
+ * Formats numbers into standard INR currency representation e.g. ₹20,000
+ */
+export const formatCurrency = (amount) => {
+  const num = Number(amount);
+  if (isNaN(num) || num < 0) return "₹0";
+  return `₹${num.toLocaleString("en-IN")}`;
+};
+
+/**
+ * Derives canonical fee details for a student record.
+ * Standardizes total fee, paid fee, and remaining fee calculation across the portal.
+ */
+export const getStudentFeeDetails = (student) => {
+  const total = Number(student?.feesTotal) > 0 ? Number(student.feesTotal) : 20000;
+  const isPaid = student?.feesStatus === "Paid";
+  
+  let paid = 0;
+  if (student?.feesPaidAmount !== undefined && student?.feesPaidAmount !== null) {
+    paid = Number(student.feesPaidAmount);
+  } else {
+    paid = isPaid ? total : 0;
+  }
+
+  let remaining = 0;
+  if (student?.feesRemainingAmount !== undefined && student?.feesRemainingAmount !== null) {
+    remaining = Number(student.feesRemainingAmount);
+  } else {
+    remaining = isPaid ? 0 : Math.max(0, total - paid);
+  }
+
+  return { total, paid, remaining, isPaid };
+};
+

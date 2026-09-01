@@ -5,7 +5,7 @@ import {
   FileText, Calendar, Award, BookOpen, Percent, Users, UserCheck
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { updateStudent, uploadProfileImage, classifyFirestoreError } from '../services/firebaseService';
+import { updateStudent, uploadProfileImage, classifyFirestoreError, formatCurrency, getStudentFeeDetails } from '../services/firebaseService';
 
 const MAX_AVATAR_BYTES = 3 * 1024 * 1024; // 3 MB
 
@@ -517,92 +517,98 @@ const StudentProfile = ({ dashboardData, enrolledCourses = [], onProfileUpdate }
           </div>
 
           {/* PAYMENT INFORMATION CARD */}
-          <div id="profile-payment-card" className="clickable-card-hover" style={{
-            background: '#FFF',
-            border: '1.5px solid var(--border-color)',
-            borderRadius: 20,
-            padding: 28,
-            boxShadow: 'var(--shadow-card)',
-            display: 'flex',
-            flexDirection: 'column'
-          }}>
-            <h3 style={{ fontSize: 16, fontWeight: 800, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8, color: '#121118' }}>
-              <FileText size={18} color="var(--primary-color)" /> Payment Information
-            </h3>
+          {(() => {
+            const feeInfo = getStudentFeeDetails(profileData || dashboardData?.student);
+            const paidPct = Math.round((feeInfo.paid / (feeInfo.total || 1)) * 100);
+            return (
+              <div id="profile-payment-card" className="clickable-card-hover" style={{
+                background: '#FFF',
+                border: '1.5px solid var(--border-color)',
+                borderRadius: 20,
+                padding: 28,
+                boxShadow: 'var(--shadow-card)',
+                display: 'flex',
+                flexDirection: 'column'
+              }}>
+                <h3 style={{ fontSize: 16, fontWeight: 800, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8, color: '#121118' }}>
+                  <FileText size={18} color="var(--primary-color)" /> Payment Information
+                </h3>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* Fee Status Row */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>Fee Status</span>
-                <span style={{ 
-                  fontSize: 11, 
-                  fontWeight: 800, 
-                  padding: '4px 12px', 
-                  borderRadius: 20, 
-                  textTransform: 'uppercase',
-                  background: isPaid ? 'rgba(16,185,129,0.08)' : 'rgba(245,158,11,0.08)', 
-                  color: isPaid ? '#10B981' : '#F59E0B'
-                }}>
-                  {isPaid ? 'Paid' : 'Pending'}
-                </span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {/* Fee Status Row */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>Fee Status</span>
+                    <span style={{ 
+                      fontSize: 11, 
+                      fontWeight: 800, 
+                      padding: '4px 12px', 
+                      borderRadius: 20, 
+                      textTransform: 'uppercase',
+                      background: feeInfo.isPaid ? 'rgba(16,185,129,0.08)' : 'rgba(245,158,11,0.08)', 
+                      color: feeInfo.isPaid ? '#10B981' : '#F59E0B'
+                    }}>
+                      {feeInfo.isPaid ? 'Paid' : 'Pending Payment'}
+                    </span>
+                  </div>
+
+                  {/* Total Course Fee */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>Total Course Fee</span>
+                    <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-primary)' }}>{formatCurrency(feeInfo.total)}</span>
+                  </div>
+
+                  {/* Progress Summary box */}
+                  <div style={{ background: 'var(--surface-alt)', border: '1px solid var(--border-color)', borderRadius: 12, padding: 14 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, fontWeight: 700, marginBottom: 8 }}>
+                      <span style={{ color: 'var(--success-color)' }}>Paid : {formatCurrency(feeInfo.paid)}</span>
+                      <span style={{ color: 'var(--text-secondary)' }}>Remaining : {formatCurrency(feeInfo.remaining)}</span>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div style={{ height: 6, background: 'var(--border-color)', borderRadius: 99, overflow: 'hidden', marginBottom: 4 }}>
+                      <div style={{ 
+                        height: '100%', 
+                        width: `${paidPct}%`, 
+                        background: 'var(--primary-color)', 
+                        borderRadius: 99 
+                      }} />
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600 }}>
+                      <span>Progress</span>
+                      <span>{paidPct}%</span>
+                    </div>
+                  </div>
+
+                  {/* Next Due Date Alert */}
+                  {!feeInfo.isPaid && (
+                    <div style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'space-between', 
+                      padding: '10px 14px', 
+                      background: 'rgba(245,158,11,0.06)', 
+                      border: '1.5px solid rgba(245,158,11,0.15)', 
+                      borderRadius: 12 
+                    }}>
+                      <span style={{ fontSize: 12.5, fontWeight: 700, color: '#D97706' }}>Next Due</span>
+                      <span style={{ 
+                        fontSize: 11, 
+                        fontWeight: 800, 
+                        background: '#F59E0B', 
+                        color: 'white', 
+                        padding: '3px 8px', 
+                        borderRadius: 6,
+                        textTransform: 'uppercase'
+                      }}>
+                        {profileData?.feesDueDate || '15 Jul 2026'}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
-
-              {/* Total Course Fee */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>Total Course Fee</span>
-                <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-primary)' }}>₹{profileData?.feesTotal || 20000}</span>
-              </div>
-
-              {/* Progress Summary box */}
-              <div style={{ background: 'var(--surface-alt)', border: '1px solid var(--border-color)', borderRadius: 12, padding: 14 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, fontWeight: 700, marginBottom: 8 }}>
-                  <span style={{ color: 'var(--success-color)' }}>Paid : ₹{profileData?.feesPaidAmount || 0}</span>
-                  <span style={{ color: 'var(--text-secondary)' }}>Remaining : ₹{profileData?.feesRemainingAmount || 20000}</span>
-                </div>
-
-                {/* Progress Bar */}
-                <div style={{ height: 6, background: 'var(--border-color)', borderRadius: 99, overflow: 'hidden', marginBottom: 4 }}>
-                  <div style={{ 
-                    height: '100%', 
-                    width: `${Math.round(((profileData?.feesPaidAmount || 0) / (profileData?.feesTotal || 20000)) * 100)}%`, 
-                    background: 'var(--primary-color)', 
-                    borderRadius: 99 
-                  }} />
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600 }}>
-                  <span>Progress</span>
-                  <span>{Math.round(((profileData?.feesPaidAmount || 0) / (profileData?.feesTotal || 20000)) * 100)}%</span>
-                </div>
-              </div>
-
-              {/* Next Due Date Alert */}
-              {!isPaid && (
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'space-between', 
-                  padding: '10px 14px', 
-                  background: 'rgba(245,158,11,0.06)', 
-                  border: '1.5px solid rgba(245,158,11,0.15)', 
-                  borderRadius: 12 
-                }}>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: '#D97706' }}>Next Due</span>
-                  <span style={{ 
-                    fontSize: 11, 
-                    fontWeight: 800, 
-                    background: '#F59E0B', 
-                    color: 'white', 
-                    padding: '3px 8px', 
-                    borderRadius: 6,
-                    textTransform: 'uppercase'
-                  }}>
-                    {profileData?.feesDueDate || '15 Jul 2026'}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
+            );
+          })()}
 
         </div>
       </div>
