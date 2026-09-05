@@ -2899,6 +2899,11 @@ const AdminDashboard = () => {
     const newBatchId = e.target.value;
     setAttBatchId(newBatchId);
     setAttendancePage(1);
+    if (newBatchId) {
+      fetchAttendanceSheetByBatch(newBatchId, attendanceDate);
+    } else {
+      setAttendanceRecords([]);
+    }
   };
 
   const fetchAttendanceSheetByBatch = async (batchId, dateVal) => {
@@ -4554,15 +4559,24 @@ const AdminDashboard = () => {
                 filters={[
                   {
                     label: 'Course',
-                    value: attCourseFilter,
-                    onChange: (val) => { setAttCourseFilter(val); setAttendancePage(1); },
+                    value: attCourse || attCourseFilter,
+                    onChange: (val) => {
+                      setAttCourse(val);
+                      setAttCourseFilter(val);
+                      setAttBatchId('');
+                      setAttendanceRecords([]);
+                      setAttendancePage(1);
+                    },
                     options: Array.from(new Set(batches.map(b => b.course_name))).filter(Boolean).map(c => ({ value: c, label: c }))
                   },
                   {
                     label: 'Batch',
-                    value: attBatchFilter,
-                    onChange: (val) => { setAttBatchFilter(val); setAttendancePage(1); },
-                    options: batches.map(b => ({ value: b.id, label: b.name }))
+                    value: attBatchId || attBatchFilter,
+                    onChange: (val) => {
+                      setAttBatchFilter(val);
+                      handleBatchChange({ target: { value: val } });
+                    },
+                    options: (attCourse ? batches.filter(b => b.course_name === attCourse) : batches).map(b => ({ value: b.id, label: b.name }))
                   },
                   {
                     label: 'Attendance Status',
@@ -4603,13 +4617,15 @@ const AdminDashboard = () => {
 
                     {/* Batch Selection Controls */}
                     <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
-                      <div>
+                      <div style={{ minWidth: '160px' }}>
                         <select 
                           className="form-select" 
-                          style={{ height: '38px', fontSize: '13px', minWidth: '160px' }}
+                          style={{ height: '38px', fontSize: '13px', width: '100%', background: 'white' }}
                           value={attCourse}
                           onChange={(e) => {
-                            setAttCourse(e.target.value);
+                            const val = e.target.value;
+                            setAttCourse(val);
+                            setAttCourseFilter(val);
                             setAttBatchId('');
                             setAttendanceRecords([]);
                           }}
@@ -4621,10 +4637,10 @@ const AdminDashboard = () => {
                         </select>
                       </div>
 
-                      <div>
+                      <div style={{ minWidth: '200px' }}>
                         <select 
                           className="form-select" 
-                          style={{ height: '38px', fontSize: '13px', minWidth: '200px', fontWeight: 700, borderColor: 'var(--primary-color)' }}
+                          style={{ height: '38px', fontSize: '13px', width: '100%', fontWeight: 700, borderColor: 'var(--primary-color)', background: 'white' }}
                           value={attBatchId}
                           onChange={(e) => handleBatchChange(e)}
                         >

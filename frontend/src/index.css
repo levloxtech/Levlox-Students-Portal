@@ -3220,7 +3220,7 @@ body:has(.modal-overlay) {
 
 @media (min-width: 1024px) {
   .levlox-filter-dropdown {
-    max-width: 145px;
+    max-width: 220px;
   }
 }
 
