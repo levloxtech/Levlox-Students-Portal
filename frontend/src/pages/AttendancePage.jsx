@@ -163,16 +163,22 @@ const AttendancePage = ({ dashboardData }) => {
     return days;
   }, [year, month, totalDays, startDayIndex, attendanceMap]);
 
+  /* ─── Overall history counts ─── */
+  const historyPresent = useMemo(() => history.filter(h => h.status === 'Present').length, [history]);
+  const historyAbsent = useMemo(() => history.filter(h => h.status === 'Absent').length, [history]);
+  const historyTotal = historyPresent + historyAbsent;
+  const historyPercentage = historyTotal > 0 ? Math.round((historyPresent / historyTotal) * 100) : 0;
+
   /* ─── Monthly counts ─── */
   const monthPresent = useMemo(() => calendarDays.filter(d => d && d.status === 'Present').length, [calendarDays]);
   const monthAbsent = useMemo(() => calendarDays.filter(d => d && d.status === 'Absent').length, [calendarDays]);
   const monthWorkingDays = monthPresent + monthAbsent;
 
   /* ─── Aggregated stats ─── */
-  const totalPresent = attendance.present ?? monthPresent;
-  const totalAbsent = attendance.absent ?? monthAbsent;
-  const totalWorking = (attendance.total_days) ?? (totalPresent + totalAbsent);
-  const percentage = attendance.percentage ?? (totalWorking > 0 ? Math.round((totalPresent / totalWorking) * 100) : 0);
+  const totalPresent = history.length > 0 ? historyPresent : (attendance.present ?? monthPresent);
+  const totalAbsent = history.length > 0 ? historyAbsent : (attendance.absent ?? monthAbsent);
+  const totalWorking = history.length > 0 ? historyTotal : ((attendance.total_days) ?? (totalPresent + totalAbsent));
+  const percentage = history.length > 0 ? historyPercentage : (attendance.percentage ?? (totalWorking > 0 ? Math.round((totalPresent / totalWorking) * 100) : 0));
 
   /* ─── Month nav ─── */
   const handlePrevMonth = () => setCurrentDate(new Date(year, month - 1, 1));

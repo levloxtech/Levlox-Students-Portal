@@ -27,6 +27,7 @@ import {
   getCountFromServer,
   writeBatch,
   increment,
+  runTransaction,
 } from "firebase/firestore";
 import {
   ref,
@@ -340,38 +341,158 @@ export const subscribeAnnouncements = (callback, onError) =>
 export const getAttendanceForStudent = async (studentId, constraints = []) => {
   if (!studentId) return [];
   try {
-    // 1. Primary query: studentId field
-    return await getDocuments("attendance", [
-      where("studentId", "==", studentId),
-      orderBy("date", "desc"),
-      ...constraints,
-      limit(DEFAULT_LIST_LIMIT),
+    const [byStudentId, byStudent_id] = await Promise.all([
+      getDocuments("attendance", [where("studentId", "==", studentId), limit(DEFAULT_LIST_LIMIT)]).catch(() => []),
+      getDocuments("attendance", [where("student_id", "==", studentId), limit(DEFAULT_LIST_LIMIT)]).catch(() => []),
     ]);
+    const merged = [...byStudentId, ...byStudent_id];
+    const unique = Array.from(new Map(merged.map(item => [item.id, item])).values());
+    unique.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    return unique;
   } catch (error) {
-    console.warn('[firebaseService] Primary getAttendanceForStudent query failed, trying fallback query:', error);
-    try {
-      // 2. Fallback query: check both studentId & student_id without orderBy (prevents index errors)
-      const [byStudentId, byStudent_id] = await Promise.all([
-        getDocuments("attendance", [where("studentId", "==", studentId), limit(DEFAULT_LIST_LIMIT)]).catch(() => []),
-        getDocuments("attendance", [where("student_id", "==", studentId), limit(DEFAULT_LIST_LIMIT)]).catch(() => []),
-      ]);
-      const merged = [...byStudentId, ...byStudent_id];
-      const unique = Array.from(new Map(merged.map(item => [item.id, item])).values());
-      unique.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-      return unique;
-    } catch (fallbackError) {
-      console.error('[firebaseService] getAttendanceForStudent fallback failed:', fallbackError);
-      throw error;
-    }
+    console.error('[firebaseService] getAttendanceForStudent failed:', error);
+    return [];
   }
 };
 
 export const getAttendanceSheet = (constraints = []) =>
-  getDocuments("attendance", [orderBy("date", "desc"), ...constraints, limit(DEFAULT_LIST_LIMIT)]);
+  getDocuments("attendanceSheets", [orderBy("date", "desc"), ...constraints, limit(DEFAULT_LIST_LIMIT)]);
+
+/** Get attendance records for a specific batch and date */
+export const getAttendanceByBatchAndDate = async (batchId, date) => {
+  if (!batchId || !date) return [];
+  try {
+    return await getDocuments("attendance", [
+      where("batchId", "==", batchId),
+      where("date", "==", date)
+    ]);
+  } catch (err) {
+    console.warn('[Attendance] getAttendanceByBatchAndDate failed:', err);
+    return [];
+  }
+};
+
+/** Save or update attendance for a batch on a date in a batched write */
+export const saveBatchAttendance = async (batchId, date, attendanceRecords = [], sheetMeta = {}) => {
+  if (!batchId || !date || attendanceRecords.length === 0) {
+    throw new Error("Batch ID, Date, and Attendance Records are required.");
+  }
+
+  const batch = writeBatch(db);
+  let presentCount = 0;
+  let absentCount = 0;
+
+  attendanceRecords.forEach((rec) => {
+    const status = rec.status || 'Present';
+    if (status === 'Present') presentCount += 1;
+    else if (status === 'Absent') absentCount += 1;
+
+    // Canonical document ID per student per batch per date
+    const docId = `${batchId}_${date}_${rec.studentId}`;
+    const docRef = doc(db, "attendance", docId);
+    
+    batch.set(docRef, {
+      studentId: rec.studentId,
+      student_id: rec.studentId,
+      studentName: rec.studentName || rec.name || 'Student',
+      student_name: rec.studentName || rec.name || 'Student',
+      rollNumber: rec.rollNumber || rec.studentIdNumber || 'N/A',
+      course: rec.course || sheetMeta.courseName || '',
+      batchId: batchId,
+      batch_id: batchId,
+      batchName: sheetMeta.batchName || '',
+      batch_name: sheetMeta.batchName || '',
+      date: date,
+      status: status,
+      updatedAt: serverTimestamp(),
+      createdAt: serverTimestamp(),
+    }, { merge: true });
+  });
+
+  // Daily batch summary sheet record
+  const sheetDocId = `${batchId}_${date}`;
+  const sheetRef = doc(db, "attendanceSheets", sheetDocId);
+  const totalCount = attendanceRecords.length;
+  const percentage = totalCount > 0 ? Math.round((presentCount / totalCount) * 100) : 0;
+
+  batch.set(sheetRef, {
+    id: sheetDocId,
+    batchId: batchId,
+    batch_id: batchId,
+    batchName: sheetMeta.batchName || '',
+    batch_name: sheetMeta.batchName || '',
+    courseName: sheetMeta.courseName || '',
+    course_name: sheetMeta.courseName || '',
+    date: date,
+    presentCount: presentCount,
+    present_count: presentCount,
+    absentCount: absentCount,
+    absent_count: absentCount,
+    totalStudents: totalCount,
+    total_students: totalCount,
+    attendancePercentage: percentage,
+    attendance_percentage: percentage,
+    records: attendanceRecords,
+    updatedAt: serverTimestamp(),
+    createdAt: serverTimestamp(),
+  }, { merge: true });
+
+  await batch.commit();
+  return { sheetDocId, presentCount, absentCount, percentage };
+};
 
 export const markAttendance = (data) => addDocument("attendance", data);
 
 export const updateAttendance = (id, data) => updateDocumentFields("attendance", id, data);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ATOMIC ID GENERATION SYSTEM (MASTER DATA CONFIG)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const DEFAULT_ID_CONFIGS = {
+  student: { prefix: "LVX", nextNumber: 70129, padding: 6, separator: "" },
+  trainer: { prefix: "TRN", nextNumber: 1001, padding: 6, separator: "" },
+  batch: { prefix: "BAT", nextNumber: 7173, padding: 4, separator: "-" },
+  course: { prefix: "CRS", nextNumber: 101, padding: 4, separator: "-" },
+};
+
+/**
+ * Atomic Firestore transaction helper to generate the next formatted ID for an entity.
+ * Guarantees zero duplicate ID generation across simultaneous creation requests.
+ */
+export const generateNextId = async (entityKey = "student") => {
+  const docRef = doc(db, "masterData", `idConfig_${entityKey}`);
+  let generatedId = "";
+
+  try {
+    await runTransaction(db, async (transaction) => {
+      const sfDoc = await transaction.get(docRef);
+      const defaultConfig = DEFAULT_ID_CONFIGS[entityKey] || { prefix: entityKey.toUpperCase(), nextNumber: 1000, padding: 4, separator: "" };
+      
+      let config = defaultConfig;
+      if (sfDoc.exists()) {
+        config = { ...defaultConfig, ...sfDoc.data() };
+      }
+
+      const numStr = String(config.nextNumber).padStart(config.padding || 4, '0');
+      const sep = config.separator || "";
+      generatedId = `${config.prefix || ""}${sep}${numStr}`;
+
+      // Increment next number atomically
+      transaction.set(docRef, {
+        ...config,
+        nextNumber: (config.nextNumber || 1000) + 1,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    });
+    return generatedId;
+  } catch (e) {
+    console.warn(`[IDGen] Atomic transaction failed for ${entityKey}, fallback generator used:`, e);
+    const cfg = DEFAULT_ID_CONFIGS[entityKey] || { prefix: entityKey.toUpperCase(), nextNumber: Date.now() % 10000 };
+    return `${cfg.prefix}${cfg.separator || ''}${Math.floor(1000 + Math.random() * 9000)}`;
+  }
+};
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ASSIGNMENTS

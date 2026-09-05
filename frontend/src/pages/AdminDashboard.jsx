@@ -71,6 +71,8 @@ import {
   uploadProfileImage,
   getEmailTemplates,
   interpolateEmailTemplate,
+  generateNextId,
+  saveBatchAttendance,
 } from '../services/firebaseService';
 import {
   changeOwnPassword,
@@ -2256,10 +2258,11 @@ const AdminDashboard = () => {
     e.preventDefault();
     if (!validateBatchForm()) return;
     try {
-      await addBatch(batchPayload());
+      const code = await generateNextId('batch');
+      await addBatch({ ...batchPayload(), code });
       resetBatchForm();
       setShowBatchModal(false);
-      showModal('Success', 'New batch created successfully!', 'success');
+      showModal('Success', `New batch (${code}) created successfully!`, 'success');
       fetchBatches();
     } catch (error) {
       console.error('[Admin] createBatch failed:', error);
@@ -2293,19 +2296,29 @@ const AdminDashboard = () => {
       return;
     }
     try {
-      const payload = {
-        name: trainerName.trim(),
-        email: trainerEmail.trim(),
-        phone: trainerPhone.trim(),
-        specialization: trainerSpecialization.trim(),
-        status: trainerStatus,
-      };
       if (editingTrainer) {
+        const payload = {
+          name: trainerName.trim(),
+          email: trainerEmail.trim(),
+          phone: trainerPhone.trim(),
+          specialization: trainerSpecialization.trim(),
+          status: trainerStatus,
+        };
         await updateTrainer(editingTrainer.id, payload);
         showModal('Success', 'Trainer updated successfully!', 'success');
       } else {
+        const trainerId = await generateNextId('trainer');
+        const payload = {
+          name: trainerName.trim(),
+          email: trainerEmail.trim(),
+          phone: trainerPhone.trim(),
+          specialization: trainerSpecialization.trim(),
+          status: trainerStatus,
+          trainerId,
+          code: trainerId,
+        };
         await addTrainer(payload);
-        showModal('Success', 'New Trainer added successfully!', 'success');
+        showModal('Success', `New Trainer (${trainerId}) added successfully!`, 'success');
       }
       setShowTrainerModal(false);
       fetchStats();
@@ -2665,7 +2678,7 @@ const AdminDashboard = () => {
         }
       }
 
-      const rollNumber = `LVX${Date.now().toString().slice(-6)}`;
+      const rollNumber = await generateNextId('student');
       const selectedBatch = batches.find(b => b.id === createBatchId);
       await createStudent(targetUid, {
         name: createName,
