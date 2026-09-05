@@ -279,10 +279,12 @@ const BatchDetailsPage = () => {
               <thead>
                 <tr style={{ borderBottom: '1.5px solid var(--border-color)', color: 'var(--text-secondary)' }}>
                   <th style={{ padding: '12px 14px' }}>Student</th>
-                  <th style={{ padding: '12px 14px' }}>Roll / ID</th>
-                  <th style={{ padding: '12px 14px' }}>Mobile</th>
+                  <th style={{ padding: '12px 14px' }}>Student ID</th>
+                  <th style={{ padding: '12px 14px' }}>Course</th>
                   <th style={{ padding: '12px 14px' }}>Fee Status</th>
                   <th style={{ padding: '12px 14px' }}>Account Status</th>
+                  <th style={{ padding: '12px 14px' }}>Attendance %</th>
+                  <th style={{ padding: '12px 14px' }}>Activity Pts</th>
                   <th style={{ padding: '12px 14px', textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
@@ -290,6 +292,8 @@ const BatchDetailsPage = () => {
                 {batchStudents.map((s) => {
                   const photo = s.profilePhotoUrl || s.profile_pic || '';
                   const sName = s.name || 'Unnamed Student';
+                  const attPct = typeof s.attendance === 'object' ? (s.attendance?.percentage ?? 0) : (typeof s.attendance === 'number' ? s.attendance : 0);
+                  const pts = s.activityPoints || 0;
                   return (
                     <tr key={s.id} style={{ borderBottom: '1px solid var(--border-light)' }}>
                       <td style={{ padding: '12px 14px' }}>
@@ -318,11 +322,11 @@ const BatchDetailsPage = () => {
                           </div>
                         </div>
                       </td>
-                      <td style={{ padding: '12px 14px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                      <td style={{ padding: '12px 14px', fontWeight: 700, color: 'var(--primary-color)' }}>
                         {s.rollNumber || s.id}
                       </td>
                       <td style={{ padding: '12px 14px', fontWeight: 600 }}>
-                        {s.phone || '—'}
+                        {s.course || batch.course_name || 'Fullstack Engineering'}
                       </td>
                       <td style={{ padding: '12px 14px' }}>
                         <span style={{
@@ -341,6 +345,12 @@ const BatchDetailsPage = () => {
                         }}>
                           {s.status || 'active'}
                         </span>
+                      </td>
+                      <td style={{ padding: '12px 14px', fontWeight: 800, color: 'var(--primary-color)' }}>
+                        {attPct}%
+                      </td>
+                      <td style={{ padding: '12px 14px', fontWeight: 800, color: '#F59E0B' }}>
+                        {pts} pts
                       </td>
                       <td style={{ padding: '12px 14px', textAlign: 'right' }}>
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>

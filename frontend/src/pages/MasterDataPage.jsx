@@ -225,20 +225,15 @@ const MasterDataPage = () => {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
-          <h2 style={{ fontSize: 24, fontWeight: 800, margin: 0 }}>Master Data Management</h2>
+          <h2 style={{ fontSize: 24, fontWeight: 800, margin: 0 }}>Master Data & Reusable Configuration</h2>
           <p style={{ margin: '4px 0 0', fontSize: 13.5, color: 'var(--text-secondary)' }}>
-            Manage core dropdown values (Courses, Trainers, Statuses) for the portal.
+            Manage master course definitions and system configurations shared across the portal.
           </p>
         </div>
         <div>
           {activeTab === 'courses' && (
             <button className="btn btn-primary" onClick={() => openCourseModal()}>
-              <Plus size={16} /> Add Course
-            </button>
-          )}
-          {activeTab === 'trainers' && (
-            <button className="btn btn-primary" onClick={() => openTrainerModal()}>
-              <Plus size={16} /> Add Trainer
+              <Plus size={16} /> Add Master Course
             </button>
           )}
         </div>
@@ -262,25 +257,7 @@ const MasterDataPage = () => {
             gap: 8
           }}
         >
-          <BookOpen size={16} /> Courses ({courses.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('trainers')}
-          style={{
-            padding: '12px 20px',
-            fontSize: 14,
-            fontWeight: 700,
-            color: activeTab === 'trainers' ? 'var(--primary-color)' : 'var(--text-secondary)',
-            borderBottom: activeTab === 'trainers' ? '3px solid var(--primary-color)' : '3px solid transparent',
-            background: 'none',
-            borderTop: 'none', borderLeft: 'none', borderRight: 'none',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8
-          }}
-        >
-          <Users size={16} /> Trainers ({trainers.length})
+          <BookOpen size={16} /> Master Courses ({courses.length})
         </button>
         <button
           onClick={() => setActiveTab('statuses')}

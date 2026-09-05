@@ -695,7 +695,7 @@ const StudentDashboard = () => {
               </div>
               <div style={{ display: 'flex', gap: 16, flexShrink: 0 }}>
                 {[{
-                  label: 'Attendance', val: `${(typeof dashboardData.student?.attendance === 'number' ? dashboardData.student.attendance : (dashboardData.student?.attendance?.percentage || 92))}%`, color: '#10B981', bg: 'rgba(16,185,129,0.08)'
+                  label: 'Attendance', val: `${(typeof dashboardData.student?.attendance === 'number' ? dashboardData.student.attendance : (dashboardData.student?.attendance?.percentage ?? 0))}%`, color: '#10B981', bg: 'rgba(16,185,129,0.08)'
                 }, {
                   label: 'Upcoming', val: dashboardData.upcomingLiveClasses?.length || 0, color: 'var(--primary-color)', bg: 'var(--primary-light)'
                 }].map((s, i) => (

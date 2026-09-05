@@ -27,6 +27,10 @@ import {
   addCourse,
   updateCourse,
   deleteCourse,
+  getTrainers,
+  addTrainer,
+  updateTrainer,
+  deleteTrainer,
   getLiveClasses,
   addLiveClass,
   updateLiveClass,
@@ -244,6 +248,7 @@ const AdminDashboard = () => {
         getRecordedClasses(),
         getAnnouncements(),
         getCourses(),
+        getTrainers().catch(() => []),
         getLeaderboard(),
         getAllPayments(),
         getGlobalSettings().catch(() => ({})),
@@ -255,6 +260,7 @@ const AdminDashboard = () => {
         recordedList,
         announcementList,
         courseList,
+        trainerList,
         leaderboardList,
         paymentList,
         globalSettings,
@@ -269,6 +275,7 @@ const AdminDashboard = () => {
   const recordedClasses = adminData?.recordedList || EMPTY_LIST;
   const announcements = adminData?.announcementList || EMPTY_LIST;
   const courses = adminData?.courseList || EMPTY_LIST;
+  const trainers = adminData?.trainerList || EMPTY_LIST;
   const batches = firestoreBatches;
   // Falls back to a module-level constant rather than a fresh `[]` each render,
   // so the students memo below is not invalidated on every render.
@@ -435,7 +442,7 @@ const AdminDashboard = () => {
   const [studentEndDateFilter, setStudentEndDateFilter] = useState('');
 
   // Batch Date filter (quick selector)
-  const [batchDateFilter, setBatchDateFilter] = useState('Today');
+  const [batchDateFilter, setBatchDateFilter] = useState('This Year');
 
   // Activity score filters
   const [activitySearchQuery, setActivitySearchQuery] = useState('');
@@ -516,6 +523,13 @@ const AdminDashboard = () => {
 
   // New modal visibility states
   const [showBatchModal, setShowBatchModal] = useState(false);
+  const [showTrainerModal, setShowTrainerModal] = useState(false);
+  const [editingTrainer, setEditingTrainer] = useState(null);
+  const [trainerName, setTrainerName] = useState('');
+  const [trainerEmail, setTrainerEmail] = useState('');
+  const [trainerPhone, setTrainerPhone] = useState('');
+  const [trainerSpecialization, setTrainerSpecialization] = useState('');
+  const [trainerStatus, setTrainerStatus] = useState('Active');
   const [showLiveClassModal, setShowLiveClassModal] = useState(false);
   const [showRecordedClassModal, setShowRecordedClassModal] = useState(false);
   const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
@@ -2283,6 +2297,66 @@ const AdminDashboard = () => {
     }
   };
 
+  const openTrainerModal = (trainer = null) => {
+    if (trainer) {
+      setEditingTrainer(trainer);
+      setTrainerName(trainer.name || '');
+      setTrainerEmail(trainer.email || '');
+      setTrainerPhone(trainer.phone || '');
+      setTrainerSpecialization(trainer.specialization || '');
+      setTrainerStatus(trainer.status || 'Active');
+    } else {
+      setEditingTrainer(null);
+      setTrainerName('');
+      setTrainerEmail('');
+      setTrainerPhone('');
+      setTrainerSpecialization('');
+      setTrainerStatus('Active');
+    }
+    setShowTrainerModal(true);
+  };
+
+  const handleSaveTrainer = async (e) => {
+    e.preventDefault();
+    if (!trainerName.trim()) {
+      showModal('Missing Fields', 'Trainer name is required.', 'warning');
+      return;
+    }
+    try {
+      const payload = {
+        name: trainerName.trim(),
+        email: trainerEmail.trim(),
+        phone: trainerPhone.trim(),
+        specialization: trainerSpecialization.trim(),
+        status: trainerStatus,
+      };
+      if (editingTrainer) {
+        await updateTrainer(editingTrainer.id, payload);
+        showModal('Success', 'Trainer updated successfully!', 'success');
+      } else {
+        await addTrainer(payload);
+        showModal('Success', 'New Trainer added successfully!', 'success');
+      }
+      setShowTrainerModal(false);
+      fetchStats();
+    } catch (err) {
+      console.error(err);
+      showModal('Error', classifyFirestoreError(err).message, 'error');
+    }
+  };
+
+  const handleDeleteTrainer = async (trainerId) => {
+    if (!window.confirm('Are you sure you want to delete this trainer record?')) return;
+    try {
+      await deleteTrainer(trainerId);
+      showModal('Success', 'Trainer deleted successfully.', 'success');
+      fetchStats();
+    } catch (err) {
+      console.error(err);
+      showModal('Error', classifyFirestoreError(err).message, 'error');
+    }
+  };
+
   const startEditBatch = (batch) => {
     setEditingBatch(batch);
     setBatchName(batch.name);
@@ -2641,6 +2715,14 @@ const AdminDashboard = () => {
         createdBy: uid,
       });
 
+      if (createBatchId && selectedBatch) {
+        const currentStudentIds = Array.isArray(selectedBatch.student_ids) ? selectedBatch.student_ids : [];
+        if (!currentStudentIds.includes(targetUid)) {
+          const updatedStudentIds = [...currentStudentIds, targetUid];
+          await assignStudentsToBatch(createBatchId, updatedStudentIds).catch(err => console.warn('[Admin] Auto-assign batch failed:', err));
+        }
+      }
+
       setCreatedCredentials({
         username: rollNumber,
         password: createTempPassword,
@@ -2741,7 +2823,28 @@ const AdminDashboard = () => {
         status: editAccountStatus,
         feesStatus: editFeesStatus,
       };
+      const oldBatchId = editingStudent?.batch_id;
+      const newBatchId = editBatchId;
       await updateStudent(editingStudent.id, payload);
+
+      if (oldBatchId !== newBatchId) {
+        if (oldBatchId) {
+          const oldBatch = batches.find(b => b.id === oldBatchId);
+          if (oldBatch && Array.isArray(oldBatch.student_ids)) {
+            const updatedIds = oldBatch.student_ids.filter(id => id !== editingStudent.id);
+            await assignStudentsToBatch(oldBatchId, updatedIds).catch(err => console.warn('[Admin] Unlink old batch failed:', err));
+          }
+        }
+        if (newBatchId) {
+          const newBatch = batches.find(b => b.id === newBatchId);
+          const currentIds = newBatch && Array.isArray(newBatch.student_ids) ? newBatch.student_ids : [];
+          if (!currentIds.includes(editingStudent.id)) {
+            const updatedIds = [...currentIds, editingStudent.id];
+            await assignStudentsToBatch(newBatchId, updatedIds).catch(err => console.warn('[Admin] Link new batch failed:', err));
+          }
+        }
+      }
+
       setEditingStudent(null);
       fetchStudents();
       fetchStats();
@@ -2869,14 +2972,15 @@ const AdminDashboard = () => {
       return;
     }
     try {
-      // Save each attendance record to Firestore
+      // Save each attendance record to Firestore & update student attendance stats
       await Promise.all(attendanceRecords.map(async (record) => {
+        const sid = record.student_id || record.id;
         if (record.id && !record.isNew && !record.isDemo) {
           await updateAttendance(record.id, { status: record.status });
         } else {
           await markAttendance({
-            student_id: record.student_id || record.id,
-            studentId: record.student_id || record.id,
+            student_id: sid,
+            studentId: sid,
             student_name: record.student_name || record.name || 'Student',
             rollNumber: record.rollNumber || '',
             batch_id: attBatchId,
@@ -2884,6 +2988,25 @@ const AdminDashboard = () => {
             status: record.status || 'Present',
             course: record.course || attCourse || '',
           });
+        }
+
+        try {
+          const allStudentAtt = await getAttendanceForStudent(sid);
+          const presentCount = allStudentAtt.filter(r => (r.status || '').toLowerCase() === 'present').length;
+          const totalDaysCount = allStudentAtt.length;
+          const absentCount = totalDaysCount - presentCount;
+          const pct = totalDaysCount > 0 ? Math.round((presentCount / totalDaysCount) * 100) : 0;
+
+          await updateStudent(sid, {
+            attendance: {
+              present: presentCount,
+              absent: absentCount,
+              total_days: totalDaysCount,
+              percentage: pct,
+            }
+          });
+        } catch (attErr) {
+          console.warn('[Admin] Sync student attendance stats failed:', attErr);
         }
       }));
       showModal('Success', 'Attendance saved successfully to Firestore!', 'success');
@@ -3303,6 +3426,11 @@ const AdminDashboard = () => {
           <button className={`sidebar-link ${activeTab === 'activity-score' ? 'active' : ''}`} onClick={() => { setActiveTab('activity-score'); setMobileMenuOpen(false); }}>
             <Trophy size={18} />
             <span className="sidebar-link-text">Activity Scores</span>
+          </button>
+
+          <button className={`sidebar-link ${activeTab === 'trainer-management' ? 'active' : ''}`} onClick={() => { setActiveTab('trainer-management'); setMobileMenuOpen(false); }}>
+            <Users size={18} />
+            <span className="sidebar-link-text">Trainer Management</span>
           </button>
 
           <button className={`sidebar-link ${activeTab === 'master-data' ? 'active' : ''}`} onClick={() => { setActiveTab('master-data'); setMobileMenuOpen(false); }}>
@@ -4964,6 +5092,64 @@ const AdminDashboard = () => {
         )}
 
         {/* Settings Tab */}
+        {/* Trainer Management Tab */}
+        {activeTab === 'trainer-management' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+              <div>
+                <h2 style={{ fontSize: 24, fontWeight: 800, margin: 0 }}>Trainer Management</h2>
+                <p style={{ margin: '4px 0 0', fontSize: 13.5, color: 'var(--text-secondary)' }}>
+                  Create and manage trainers, faculty members, and lead instructors with unique Trainer IDs.
+                </p>
+              </div>
+              <button className="btn btn-primary" onClick={() => openTrainerModal()}>
+                <Plus size={16} /> Create Trainer
+              </button>
+            </div>
+
+            <div className="dashboard-card-section">
+              {trainers.length === 0 ? (
+                <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-secondary)' }}>
+                  <Users size={40} style={{ marginBottom: 12, opacity: 0.5 }} />
+                  <h4 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>No Trainers Found</h4>
+                  <p style={{ fontSize: 13, margin: '4px 0 0' }}>Click "+ Create Trainer" to add your first trainer.</p>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 20 }}>
+                  {trainers.map((t) => (
+                    <div key={t.id} className="feed-item-premium" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: 20, background: '#FFF', borderRadius: 16, border: '1px solid var(--border-light)' }}>
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                          <span style={{ fontSize: 11, fontWeight: 800, background: 'var(--primary-light)', color: 'var(--primary-color)', padding: '3px 8px', borderRadius: 6 }}>
+                            {t.trainerId || t.code || 'TRN-001'}
+                          </span>
+                          <span className={`badge-status ${t.status === 'Active' ? 'paid' : 'unpaid'}`} style={{ fontSize: 10, fontWeight: 700 }}>
+                            {t.status || 'Active'}
+                          </span>
+                        </div>
+                        <h4 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 800 }}>{t.name}</h4>
+                        <p style={{ margin: '0 0 10px', fontSize: 12.5, color: 'var(--primary-color)', fontWeight: 700 }}>{t.specialization || 'Instructor'}</p>
+                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <span>Email: {t.email || '—'}</span>
+                          <span>Phone: {t.phone || '—'}</span>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, marginTop: 16, borderTop: '1px solid var(--border-light)', paddingTop: 12, justifyContent: 'flex-end' }}>
+                        <button className="btn btn-outline" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => openTrainerModal(t)}>
+                          <Pencil size={14} /> Edit
+                        </button>
+                        <button className="btn btn-danger" style={{ padding: '6px 12px', fontSize: 12, backgroundColor: 'var(--danger-color)', color: 'white' }} onClick={() => handleDeleteTrainer(t.id)}>
+                          <Trash2 size={14} /> Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Master Data Tab */}
         {activeTab === 'master-data' && (
           <MasterDataPage />
@@ -5596,7 +5782,7 @@ const AdminDashboard = () => {
                   </div>
                   <div className="form-group">
                     <label className="form-label" htmlFor="editLiveTime">Time</label>
-                    <input id="editLiveTime" type="text" className="form-input" value={editLiveTime} onChange={(e) => setEditLiveTime(e.target.value)} required />
+                    <input id="editLiveTime" type="time" className="form-input" value={editLiveTime} onChange={(e) => setEditLiveTime(e.target.value)} required />
                   </div>
                   <div className="form-group">
                     <label className="form-label" htmlFor="editLiveMeetLink">Google Meet Link</label>
@@ -6083,11 +6269,27 @@ const AdminDashboard = () => {
                   </div>
                   <div className="form-group">
                     <label className="form-label" htmlFor="batchCourseName">Course Title</label>
-                    <input id="batchCourseName" type="text" className="form-input" value={batchCourseName} onChange={(e) => setBatchCourseName(e.target.value)} placeholder="e.g. Fullstack Engineering" required />
+                    <select id="batchCourseName" className="form-select" value={batchCourseName} onChange={(e) => setBatchCourseName(e.target.value)} required>
+                      <option value="">-- Select Course --</option>
+                      {courseTitles.map((c, i) => (
+                        <option key={i} value={c}>{c}</option>
+                      ))}
+                    </select>
                   </div>
                   <div className="form-group">
                     <label className="form-label" htmlFor="batchTrainerName">Trainer / Instructor</label>
-                    <input id="batchTrainerName" type="text" className="form-input" value={batchTrainerName} onChange={(e) => setBatchTrainerName(e.target.value)} placeholder="e.g. Dr. Sarah Jenkins" required />
+                    <select id="batchTrainerName" className="form-select" value={batchTrainerName} onChange={(e) => setBatchTrainerName(e.target.value)} required>
+                      <option value="">-- Select Trainer --</option>
+                      {trainers.length > 0 ? (
+                        trainers.map((t, i) => (
+                          <option key={i} value={t.name}>{t.name} ({t.trainerId || t.code || 'TRN'})</option>
+                        ))
+                      ) : (
+                        ['Aakash', 'Dr. Sarah Jenkins', 'Rajesh Kumar'].map((t, i) => (
+                          <option key={i} value={t}>{t}</option>
+                        ))
+                      )}
+                    </select>
                   </div>
                   <div className="form-group">
                     <label className="form-label" htmlFor="batchStartDate">Start Date</label>
@@ -6172,7 +6374,7 @@ const AdminDashboard = () => {
                   </div>
                   <div className="form-group">
                     <label className="form-label" htmlFor="liveTime">Time / Schedule</label>
-                    <input id="liveTime" type="text" className="form-input" value={liveTime} onChange={(e) => setLiveTime(e.target.value)} placeholder="e.g. 7:00 PM - 8:30 PM" required />
+                    <input id="liveTime" type="time" className="form-input" value={liveTime} onChange={(e) => setLiveTime(e.target.value)} required />
                   </div>
                   <div className="form-group">
                     <label className="form-label" htmlFor="liveUrl">Google Meet Link</label>
@@ -6708,6 +6910,40 @@ const AdminDashboard = () => {
             </form>
           </div>
         </div>
+      )}
+      {/* Trainer Modal */}
+      {showTrainerModal && (
+        <CustomModal isOpen={showTrainerModal} onClose={() => setShowTrainerModal(false)} title={editingTrainer ? 'Edit Trainer' : 'Add New Trainer'}>
+          <form onSubmit={handleSaveTrainer} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div>
+              <label className="form-label">Trainer Name *</label>
+              <input type="text" className="form-input" value={trainerName} onChange={(e) => setTrainerName(e.target.value)} placeholder="e.g. Rajesh Kumar" required />
+            </div>
+            <div>
+              <label className="form-label">Specialization</label>
+              <input type="text" className="form-input" value={trainerSpecialization} onChange={(e) => setTrainerSpecialization(e.target.value)} placeholder="e.g. React & Node.js Expert" />
+            </div>
+            <div>
+              <label className="form-label">Email</label>
+              <input type="email" className="form-input" value={trainerEmail} onChange={(e) => setTrainerEmail(e.target.value)} placeholder="trainer@levlox.com" />
+            </div>
+            <div>
+              <label className="form-label">Phone</label>
+              <input type="text" className="form-input" value={trainerPhone} onChange={(e) => setTrainerPhone(e.target.value)} placeholder="+91 9876543210" />
+            </div>
+            <div>
+              <label className="form-label">Status</label>
+              <select className="form-select" value={trainerStatus} onChange={(e) => setTrainerStatus(e.target.value)}>
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+              <button type="button" className="btn btn-outline" onClick={() => setShowTrainerModal(false)}>Cancel</button>
+              <button type="submit" className="btn btn-primary">Save Trainer</button>
+            </div>
+          </form>
+        </CustomModal>
       )}
     </div>
   );

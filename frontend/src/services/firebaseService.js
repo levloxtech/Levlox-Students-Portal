@@ -256,7 +256,16 @@ export const getCourses = () =>
 
 export const getCourse = (id) => getDocument("courses", id);
 
-export const addCourse = (data) => addDocument("courses", data);
+export const addCourse = async (data) => {
+  const existing = await getCourses().catch(() => []);
+  const nextNum = existing.length + 1;
+  const courseId = data.courseId || data.code || `COURSE-${String(nextNum).padStart(3, '0')}`;
+  return addDocument("courses", {
+    ...data,
+    courseId,
+    code: courseId,
+  });
+};
 
 export const updateCourse = (id, data) => updateDocumentFields("courses", id, data);
 
@@ -481,12 +490,15 @@ export const unenrollStudent = (enrollmentId) => deleteDocument("enrollments", e
 
 export const getBatches = () => getDocuments("batches", [limit(DEFAULT_LIST_LIMIT)]);
 
-export const addBatch = (data) =>
-  addDocument("batches", {
+export const addBatch = async (data) => {
+  const code = data.code || data.batchId || `BAT-${Math.floor(1000 + Math.random() * 9000)}`;
+  return addDocument("batches", {
     ...data,
-    code: data.code || `BAT-${Math.floor(1000 + Math.random() * 9000)}`,
+    code,
+    batchId: code,
     student_ids: data.student_ids || [],
   });
+};
 
 export const updateBatch = (id, data) => updateDocumentFields("batches", id, data);
 
@@ -590,7 +602,16 @@ export const getTrainers = () =>
 
 export const getTrainer = (id) => getDocument("trainers", id);
 
-export const addTrainer = (data) => addDocument("trainers", data);
+export const addTrainer = async (data) => {
+  const existing = await getTrainers().catch(() => []);
+  const nextNum = existing.length + 1;
+  const trainerId = data.trainerId || data.code || `TRN${String(nextNum).padStart(3, '0')}`;
+  return addDocument("trainers", {
+    ...data,
+    trainerId,
+    code: trainerId,
+  });
+};
 
 export const updateTrainer = (id, data) => updateDocumentFields("trainers", id, data);
 

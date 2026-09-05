@@ -63,9 +63,11 @@ const StudentDetailsPage = () => {
       const pct = total > 0 ? Math.round((present / total) * 100) : 0;
       return { present, absent, total, pct };
     }
-    const pct = student?.attendance?.percentage || student?.attendance || 90;
-    const present = student?.attendance?.present || Math.round((pct / 100) * 40);
-    const absent = student?.attendance?.absent || (40 - present);
+    const pct = typeof student?.attendance?.percentage === 'number'
+      ? student.attendance.percentage
+      : (typeof student?.attendance === 'number' ? student.attendance : 0);
+    const present = student?.attendance?.present || (pct > 0 ? Math.round((pct / 100) * 40) : 0);
+    const absent = student?.attendance?.absent || 0;
     return { present, absent, total: present + absent, pct };
   }, [attendanceRecords, student]);
 

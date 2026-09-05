@@ -172,7 +172,8 @@ const StudentProfile = ({ dashboardData, enrolledCourses = [], onProfileUpdate }
     );
   }
 
-  const attendancePct = profileData?.attendance || dashboardData?.student?.attendance?.percentage || 92;
+  const rawAtt = profileData?.attendance ?? dashboardData?.student?.attendance;
+  const attendancePct = typeof rawAtt === 'object' ? (rawAtt?.percentage ?? 0) : (typeof rawAtt === 'number' ? rawAtt : 0);
   const isPaid = profileData?.feesStatus === 'Paid' || dashboardData?.student?.feesStatus === 'Paid';
   const studentId = profileData?.rollNumber || dashboardData?.student?.rollNumber || 'LSP-2026-9999';
   const course = profileData?.course || dashboardData?.student?.course || 'Fullstack Engineering';
