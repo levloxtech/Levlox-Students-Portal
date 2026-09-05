@@ -362,6 +362,11 @@ export const getAttendanceSheet = (constraints = []) =>
 export const getAttendanceByBatchAndDate = async (batchId, date) => {
   if (!batchId || !date) return [];
   try {
+    const res = await getDocuments("attendance", [
+      where("batch_id", "==", batchId),
+      where("date", "==", date)
+    ]);
+    if (res.length > 0) return res;
     return await getDocuments("attendance", [
       where("batchId", "==", batchId),
       where("date", "==", date)

@@ -1647,11 +1647,12 @@ const AdminDashboard = () => {
   const [createCompany, setCreateCompany] = useState('');
   const [createStatus, setCreateStatus] = useState('active');
 
-  // Attendance Sheet States
+  // Attendance Sheet & Calendar States
   const [attCourse, setAttCourse] = useState('');
   const [attBatchId, setAttBatchId] = useState('');
   const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().substring(0, 10));
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
   const [attSheetsHistory, setAttSheetsHistory] = useState([]);
   const [viewingHistoryRecord, setViewingHistoryRecord] = useState(null);
 
@@ -2907,32 +2908,37 @@ const AdminDashboard = () => {
     }
     setLoading(true);
     try {
-      const { where } = await import('firebase/firestore');
-      const { getDocuments } = await import('../services/firebaseService');
-      const records = await getDocuments('attendance', [
-        where('batch_id', '==', batchId),
-        where('date', '==', dateVal),
-      ]);
-      // If no records exist yet, build empty sheet from batch students
-      if (records.length === 0) {
-        const batchStudents = students.filter(s => s.batch_id === batchId);
-        const emptyRecords = batchStudents.map(s => ({
+      const records = await getAttendanceByBatchAndDate(batchId, dateVal);
+      // Fetch assigned students for the batch
+      const batchStudents = await getStudentsByBatch(batchId).catch(() => students.filter(s => s.batch_id === batchId));
+      
+      const recordMap = {};
+      records.forEach(r => {
+        const sId = r.studentId || r.student_id;
+        recordMap[sId] = r;
+      });
+
+      const mergedSheet = batchStudents.map(s => {
+        const existing = recordMap[s.id];
+        return {
+          id: existing ? existing.id : `${batchId}_${dateVal}_${s.id}`,
+          studentId: s.id,
           student_id: s.id,
+          studentName: s.name,
           student_name: s.name,
-          rollNumber: s.rollNumber,
-          phone: s.phone,
-          course: s.course,
+          rollNumber: s.rollNumber || s.id || 'N/A',
+          phone: s.phone || '',
+          course: s.course || '',
           batch_id: batchId,
           date: dateVal,
-          status: 'Present',
-          isNew: true,
-        }));
-        setAttendanceRecords(emptyRecords);
-      } else {
-        setAttendanceRecords(records);
-      }
+          status: existing ? (existing.status || 'Not Marked') : 'Not Marked',
+          isExisting: !!existing,
+        };
+      });
+
+      setAttendanceRecords(mergedSheet);
     } catch (error) {
-      console.error(error);
+      console.error('[Admin] fetchAttendanceSheetByBatch failed:', error);
     } finally {
       setLoading(false);
     }
@@ -2940,19 +2946,63 @@ const AdminDashboard = () => {
 
   const fetchAttendanceHistory = async () => {
     try {
-      const { where, orderBy } = await import('firebase/firestore');
+      const { orderBy } = await import('firebase/firestore');
       const { getDocuments } = await import('../services/firebaseService');
-      const history = await getDocuments('attendance', [orderBy('date', 'desc')]).catch(() => []);
-      // Group by batch+date for history view
+      
+      // Try attendanceSheets first
+      const sheets = await getDocuments('attendanceSheets', [orderBy('date', 'desc')]).catch(() => []);
+      if (sheets.length > 0) {
+        setAttSheetsHistory(sheets.map(s => ({
+          ...s,
+          batch_id: s.batch_id || s.batchId,
+          batch_name: s.batch_name || s.batchName || 'Batch',
+          course_name: s.course_name || s.courseName || '',
+          present_count: s.present_count ?? s.presentCount ?? 0,
+          absent_count: s.absent_count ?? s.absentCount ?? 0,
+          attendance_percentage: s.attendance_percentage ?? s.attendancePercentage ?? 0,
+        })));
+        return;
+      }
+
+      // Fallback grouping directly from attendance collection
+      const rawAttendance = await getDocuments('attendance', [orderBy('date', 'desc')]).catch(() => []);
       const grouped = {};
-      history.forEach(r => {
-        const key = `${r.batch_id}_${r.date}`;
-        if (!grouped[key]) grouped[key] = { batch_id: r.batch_id, date: r.date, count: 0 };
-        grouped[key].count++;
+      rawAttendance.forEach(r => {
+        const bId = r.batch_id || r.batchId;
+        const key = `${bId}_${r.date}`;
+        if (!grouped[key]) {
+          const batchObj = batches.find(b => b.id === bId);
+          grouped[key] = {
+            id: key,
+            batch_id: bId,
+            batchId: bId,
+            batch_name: r.batch_name || r.batchName || batchObj?.name || 'Batch',
+            course_name: r.course || r.course_name || r.courseName || batchObj?.course_name || '',
+            date: r.date,
+            present_count: 0,
+            absent_count: 0,
+            total_students: 0,
+            records: [],
+          };
+        }
+        grouped[key].records.push(r);
+        grouped[key].total_students += 1;
+        const st = (r.status || '').toLowerCase();
+        if (st === 'present') grouped[key].present_count += 1;
+        else if (st === 'absent') grouped[key].absent_count += 1;
       });
-      setAttSheetsHistory(Object.values(grouped));
+
+      const historySheets = Object.values(grouped).map(g => {
+        const pct = g.total_students > 0 ? Math.round((g.present_count / g.total_students) * 100) : 0;
+        return {
+          ...g,
+          attendance_percentage: pct,
+        };
+      });
+
+      setAttSheetsHistory(historySheets);
     } catch (error) {
-      console.error(error);
+      console.error('[Admin] fetchAttendanceHistory failed:', error);
     }
   };
 
@@ -2968,31 +3018,40 @@ const AdminDashboard = () => {
       return;
     }
     if (!attendanceRecords || attendanceRecords.length === 0) {
-      showModal('Warning', 'No students found in this batch to mark attendance.', 'warning');
+      showModal('Warning', 'No students assigned to this batch yet.', 'warning');
       return;
     }
-    try {
-      // Save each attendance record to Firestore & update student attendance stats
-      await Promise.all(attendanceRecords.map(async (record) => {
-        const sid = record.student_id || record.id;
-        if (record.id && !record.isNew && !record.isDemo) {
-          await updateAttendance(record.id, { status: record.status });
-        } else {
-          await markAttendance({
-            student_id: sid,
-            studentId: sid,
-            student_name: record.student_name || record.name || 'Student',
-            rollNumber: record.rollNumber || '',
-            batch_id: attBatchId,
-            date: attendanceDate || new Date().toISOString().split('T')[0],
-            status: record.status || 'Present',
-            course: record.course || attCourse || '',
-          });
-        }
 
+    const unMarked = attendanceRecords.some(r => !r.status || r.status === 'Not Marked');
+    if (unMarked) {
+      showModal('Validation Warning', 'Please mark attendance for all students before saving.', 'warning');
+      return;
+    }
+
+    try {
+      const selectedBatchObj = batches.find(b => b.id === attBatchId);
+      const batchNameVal = selectedBatchObj?.name || 'Batch';
+      const courseNameVal = selectedBatchObj?.course_name || attCourse || '';
+
+      const recordsToSave = attendanceRecords.map(r => ({
+        studentId: r.studentId || r.student_id,
+        studentName: r.studentName || r.student_name || r.name,
+        rollNumber: r.rollNumber || r.studentIdNumber || 'N/A',
+        status: r.status,
+        course: courseNameVal,
+      }));
+
+      await saveBatchAttendance(attBatchId, attendanceDate, recordsToSave, {
+        batchName: batchNameVal,
+        courseName: courseNameVal,
+      });
+
+      // Sync individual student overall stats
+      await Promise.all(recordsToSave.map(async (r) => {
         try {
+          const sid = r.studentId;
           const allStudentAtt = await getAttendanceForStudent(sid);
-          const presentCount = allStudentAtt.filter(r => (r.status || '').toLowerCase() === 'present').length;
+          const presentCount = allStudentAtt.filter(rec => (rec.status || '').toLowerCase() === 'present').length;
           const totalDaysCount = allStudentAtt.length;
           const absentCount = totalDaysCount - presentCount;
           const pct = totalDaysCount > 0 ? Math.round((presentCount / totalDaysCount) * 100) : 0;
@@ -3005,15 +3064,17 @@ const AdminDashboard = () => {
               percentage: pct,
             }
           });
-        } catch (attErr) {
-          console.warn('[Admin] Sync student attendance stats failed:', attErr);
+        } catch (syncErr) {
+          console.warn('[Admin] Sync student attendance stats warning:', syncErr);
         }
       }));
+
       showModal('Success', 'Attendance saved successfully to Firestore!', 'success');
       fetchAttendanceHistory();
+      fetchAttendanceSheetByBatch(attBatchId, attendanceDate);
       fetchStats();
     } catch (error) {
-      console.error(error);
+      console.error('[Admin] saveAttendanceSheet error:', error);
       showModal('Error', classifyFirestoreError(error).message, 'error');
     }
   };
@@ -4434,153 +4495,563 @@ const AdminDashboard = () => {
           );
         })()}
 
-        {activeTab === 'attendance' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
-            <FilterBar
-              searchPlaceholder="Search Student"
-              searchValue={attSearchQuery}
-              onSearchChange={(val) => { setAttSearchQuery(val); setAttendancePage(1); }}
-              filters={[
-                {
-                  label: 'Course',
-                  value: attCourseFilter,
-                  onChange: (val) => { setAttCourseFilter(val); setAttendancePage(1); },
-                  options: Array.from(new Set(batches.map(b => b.course_name))).filter(Boolean).map(c => ({ value: c, label: c }))
-                },
-                {
-                  label: 'Batch',
-                  value: attBatchFilter,
-                  onChange: (val) => { setAttBatchFilter(val); setAttendancePage(1); },
-                  options: batches.map(b => ({ value: b.id, label: b.name }))
-                },
-                {
-                  label: 'Attendance Status',
-                  value: attStatusFilter,
-                  onChange: (val) => { setAttStatusFilter(val); setAttendancePage(1); },
-                  options: [
-                    { value: 'high', label: 'High Rate (>= 80%)' },
-                    { value: 'low', label: 'Low Rate (< 80%)' }
-                  ]
-                }
-              ]}
-              showDateFilter={true}
-              activeQuickFilter={attDateFilter}
-              onQuickFilterChange={(pill) => { setAttDateFilter(pill); setAttendancePage(1); }}
-              startDateValue={attStartDateFilter}
-              endDateValue={attEndDateFilter}
-              onStartDateChange={(val) => { setAttStartDateFilter(val); setAttendancePage(1); }}
-              onEndDateChange={(val) => { setAttEndDateFilter(val); setAttendancePage(1); }}
-              onExportCSV={exportAttHistoryToCSV}
-              onExportExcel={exportAttHistoryToExcel}
-              onExportPDF={exportAttHistoryToPDF}
-            />
+        {activeTab === 'attendance' && (() => {
+          // Calendar Helper Math
+          const year = calendarMonth.getFullYear();
+          const month = calendarMonth.getMonth();
+          const monthName = calendarMonth.toLocaleString('default', { month: 'long' });
+          
+          const firstDayOfMonth = new Date(year, month, 1).getDay();
+          const daysInMonth = new Date(year, month + 1, 0).getDate();
+          
+          const prevMonthDays = [];
+          for (let i = 0; i < firstDayOfMonth; i++) prevMonthDays.push(null);
+          
+          const daysArray = [];
+          for (let d = 1; d <= daysInMonth; d++) {
+            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            daysArray.push({ day: d, dateStr });
+          }
+          
+          const calendarGrid = [...prevMonthDays, ...daysArray];
 
-            {/* Attendance History Section */}
-            <div className="dashboard-card-section" style={{ marginTop: '30px' }}>
-              <h3 className="section-title-premium" style={{ marginBottom: '18px' }}>Attendance History Logs</h3>
-              <div className="table-container-premium">
-                <table className="table-premium">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Batch</th>
-                      <th>Present Count</th>
-                      <th>Absent Count</th>
-                      <th>Attendance Rate</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredAttSheets.length === 0 ? (
-                      <tr>
-                        <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-secondary)' }}>
-                          No attendance logs history found matching the filters.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredAttSheets.map((sheet, idx) => (
-                        <tr key={sheet.id || idx}>
-                          <td><strong>{sheet.date}</strong></td>
-                            <td>{sheet.batch_name}</td>
-                            <td style={{ color: 'var(--success-color)', fontWeight: '600' }}>{sheet.present_count ?? 0} students</td>
-                            <td style={{ color: 'var(--danger-color)', fontWeight: '600' }}>{sheet.absent_count ?? 0} students</td>
-                            <td style={{ color: 'var(--primary-color)', fontWeight: '700' }}>{sheet.attendance_percentage ?? 100}%</td>
-                            <td>
-                              <div style={{ display: 'flex', gap: '8px' }}>
-                                <button 
-                                  type="button" 
-                                  className="btn btn-outline" 
-                                  style={{ padding: '6px 12px', fontSize: '12px' }}
-                                  onClick={() => {
-                                    setViewingHistoryRecord(sheet);
-                                  }}
-                                >
-                                  View Logs
-                                </button>
-                                <button 
-                                  type="button" 
-                                  className="btn btn-outline" 
-                                  style={{ padding: '6px 12px', fontSize: '12px' }}
-                                  onClick={() => handleEditHistoryRecord(sheet)}
-                                >
-                                  Edit
-                                </button>
+          // Compute summary stats for current sheet
+          const totalAttStudents = attendanceRecords.length;
+          const presentCount = attendanceRecords.filter(r => r.status === 'Present').length;
+          const absentCount = attendanceRecords.filter(r => r.status === 'Absent').length;
+          const notMarkedCount = attendanceRecords.filter(r => !r.status || r.status === 'Not Marked').length;
+          const attendanceRate = totalAttStudents > 0 ? ((presentCount / totalAttStudents) * 100).toFixed(1) : '0.0';
+
+          // Live class agenda match for selected date and batch
+          const activeAgendaClass = liveClasses.find(c => {
+            const isBatchMatch = !attBatchId || c.batch_id === attBatchId;
+            return isBatchMatch && c.date === attendanceDate;
+          });
+
+          // Check if attendance is already saved for selected date & batch
+          const hasSavedAttendanceForDate = attSheetsHistory.some(s => 
+            s.date === attendanceDate && (!attBatchId || s.batch_id === attBatchId || s.batchId === attBatchId)
+          );
+
+          // Dates that have saved attendance in history (for calendar indicators)
+          const markedDatesSet = new Set(
+            attSheetsHistory
+              .filter(s => !attBatchId || s.batch_id === attBatchId || s.batchId === attBatchId)
+              .map(s => s.date)
+          );
+
+          // Filter batches by selected Course dropdown
+          const filteredBatchOptions = attCourse 
+            ? batches.filter(b => b.course_name === attCourse)
+            : batches;
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%' }}>
+              <FilterBar
+                searchPlaceholder="Search Student in Sheet..."
+                searchValue={attSearchQuery}
+                onSearchChange={(val) => { setAttSearchQuery(val); setAttendancePage(1); }}
+                filters={[
+                  {
+                    label: 'Course',
+                    value: attCourseFilter,
+                    onChange: (val) => { setAttCourseFilter(val); setAttendancePage(1); },
+                    options: Array.from(new Set(batches.map(b => b.course_name))).filter(Boolean).map(c => ({ value: c, label: c }))
+                  },
+                  {
+                    label: 'Batch',
+                    value: attBatchFilter,
+                    onChange: (val) => { setAttBatchFilter(val); setAttendancePage(1); },
+                    options: batches.map(b => ({ value: b.id, label: b.name }))
+                  },
+                  {
+                    label: 'Attendance Status',
+                    value: attStatusFilter,
+                    onChange: (val) => { setAttStatusFilter(val); setAttendancePage(1); },
+                    options: [
+                      { value: 'high', label: 'High Rate (>= 80%)' },
+                      { value: 'low', label: 'Low Rate (< 80%)' }
+                    ]
+                  }
+                ]}
+                showDateFilter={true}
+                activeQuickFilter={attDateFilter}
+                onQuickFilterChange={(pill) => { setAttDateFilter(pill); setAttendancePage(1); }}
+                startDateValue={attStartDateFilter}
+                endDateValue={attEndDateFilter}
+                onStartDateChange={(val) => { setAttStartDateFilter(val); setAttendancePage(1); }}
+                onEndDateChange={(val) => { setAttEndDateFilter(val); setAttendancePage(1); }}
+                onExportCSV={exportAttHistoryToCSV}
+                onExportExcel={exportAttHistoryToExcel}
+                onExportPDF={exportAttHistoryToPDF}
+              />
+
+              {/* Main Workspace Grid: Left Attendance Sheet (Main) | Right Calendar (Side) */}
+              <div className="attendance-workspace-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 340px', gap: '20px', alignItems: 'start' }}>
+                
+                {/* LEFT COLUMN: Attendance Sheet & Interactive Roster */}
+                <div className="dashboard-card-section" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', borderBottom: '1px solid var(--border-light)', paddingBottom: '14px' }}>
+                    <div>
+                      <h3 style={{ fontSize: '18px', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
+                        Attendance Sheet — {batches.find(b => b.id === attBatchId)?.name || 'Select Batch'}
+                      </h3>
+                      <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                        Class Date: <strong style={{ color: 'var(--primary-color)' }}>{attendanceDate}</strong>
+                      </span>
+                    </div>
+
+                    {/* Batch Selection Controls */}
+                    <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <div>
+                        <select 
+                          className="form-select" 
+                          style={{ height: '38px', fontSize: '13px', minWidth: '160px' }}
+                          value={attCourse}
+                          onChange={(e) => {
+                            setAttCourse(e.target.value);
+                            setAttBatchId('');
+                            setAttendanceRecords([]);
+                          }}
+                        >
+                          <option value="">-- All Courses --</option>
+                          {courseTitles.map((c, i) => (
+                            <option key={i} value={c}>{c}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <select 
+                          className="form-select" 
+                          style={{ height: '38px', fontSize: '13px', minWidth: '200px', fontWeight: 700, borderColor: 'var(--primary-color)' }}
+                          value={attBatchId}
+                          onChange={(e) => handleBatchChange(e)}
+                        >
+                          <option value="">-- Choose Batch --</option>
+                          {filteredBatchOptions.map((b) => (
+                            <option key={b.id} value={b.id}>{b.name} ({b.code || 'BAT'})</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Summary Counters Banner */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '12px', background: 'var(--surface-alt)', padding: '14px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <span style={{ fontSize: '10.5px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 700, display: 'block' }}>Total Students</span>
+                      <strong style={{ fontSize: '18px', color: 'var(--text-primary)' }}>{totalAttStudents}</strong>
+                    </div>
+                    <div style={{ textAlign: 'center', borderLeft: '1px solid var(--border-color)' }}>
+                      <span style={{ fontSize: '10.5px', textTransform: 'uppercase', color: 'var(--success-color)', fontWeight: 700, display: 'block' }}>Present</span>
+                      <strong style={{ fontSize: '18px', color: 'var(--success-color)' }}>{presentCount}</strong>
+                    </div>
+                    <div style={{ textAlign: 'center', borderLeft: '1px solid var(--border-color)' }}>
+                      <span style={{ fontSize: '10.5px', textTransform: 'uppercase', color: 'var(--danger-color)', fontWeight: 700, display: 'block' }}>Absent</span>
+                      <strong style={{ fontSize: '18px', color: 'var(--danger-color)' }}>{absentCount}</strong>
+                    </div>
+                    <div style={{ textAlign: 'center', borderLeft: '1px solid var(--border-color)' }}>
+                      <span style={{ fontSize: '10.5px', textTransform: 'uppercase', color: '#F59E0B', fontWeight: 700, display: 'block' }}>Not Marked</span>
+                      <strong style={{ fontSize: '18px', color: '#F59E0B' }}>{notMarkedCount}</strong>
+                    </div>
+                    <div style={{ textAlign: 'center', borderLeft: '1px solid var(--border-color)' }}>
+                      <span style={{ fontSize: '10.5px', textTransform: 'uppercase', color: 'var(--primary-color)', fontWeight: 700, display: 'block' }}>Attendance Rate</span>
+                      <strong style={{ fontSize: '18px', color: 'var(--primary-color)' }}>{attendanceRate}%</strong>
+                    </div>
+                  </div>
+
+                  {/* Student Attendance List / Roster Table */}
+                  {!attBatchId ? (
+                    <div style={{ textAlign: 'center', padding: '50px 20px', background: 'var(--surface-alt)', borderRadius: '12px', border: '1.5px dashed var(--border-color)' }}>
+                      <GraduationCap size={44} style={{ color: 'var(--primary-color)', marginBottom: '12px', opacity: 0.6 }} />
+                      <h4 style={{ fontSize: '16px', fontWeight: 800, margin: '0 0 6px' }}>Select a Batch to Take Attendance</h4>
+                      <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>Choose a batch from the dropdown above to load the assigned student roster.</p>
+                    </div>
+                  ) : loading ? (
+                    <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>Loading student roster...</div>
+                  ) : attendanceRecords.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '40px', background: 'var(--surface-alt)', borderRadius: '12px' }}>
+                      <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-secondary)' }}>No students are currently assigned to this batch in Batch Management.</p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Desktop Table View */}
+                      <div className="table-container-premium table-desktop-view">
+                        <table className="table-premium">
+                          <thead>
+                            <tr>
+                              <th>Roll Number</th>
+                              <th>Student Name</th>
+                              <th>Mobile</th>
+                              <th>Course</th>
+                              <th style={{ textAlign: 'center' }}>Mark Attendance</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {attendanceRecords
+                              .filter(r => !attSearchQuery || (r.student_name || '').toLowerCase().includes(attSearchQuery.toLowerCase()) || (r.rollNumber || '').toLowerCase().includes(attSearchQuery.toLowerCase()))
+                              .map((rec) => {
+                                const sId = rec.student_id || rec.studentId;
+                                const isPresent = rec.status === 'Present';
+                                const isAbsent = rec.status === 'Absent';
+
+                                return (
+                                  <tr key={sId}>
+                                    <td><strong style={{ fontSize: '13px', color: 'var(--primary-color)' }}>{rec.rollNumber}</strong></td>
+                                    <td>
+                                      <span style={{ fontWeight: 700, fontSize: '13.5px' }}>{rec.student_name}</span>
+                                    </td>
+                                    <td><span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>{rec.phone || 'N/A'}</span></td>
+                                    <td><span style={{ fontSize: '12.5px' }}>{rec.course}</span></td>
+                                    <td style={{ textAlign: 'center' }}>
+                                      <div style={{ display: 'inline-flex', gap: '8px', background: 'var(--surface-alt)', padding: '4px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleStatusChange(sId, 'Present')}
+                                          style={{
+                                            padding: '6px 16px',
+                                            borderRadius: '6px',
+                                            border: 'none',
+                                            fontWeight: 800,
+                                            fontSize: '12px',
+                                            cursor: 'pointer',
+                                            transition: 'all 0.2s ease',
+                                            background: isPresent ? 'var(--success-color)' : 'transparent',
+                                            color: isPresent ? '#FFFFFF' : 'var(--text-secondary)',
+                                            boxShadow: isPresent ? '0 2px 4px rgba(16,185,129,0.3)' : 'none',
+                                          }}
+                                        >
+                                          ✓ Present
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleStatusChange(sId, 'Absent')}
+                                          style={{
+                                            padding: '6px 16px',
+                                            borderRadius: '6px',
+                                            border: 'none',
+                                            fontWeight: 800,
+                                            fontSize: '12px',
+                                            cursor: 'pointer',
+                                            transition: 'all 0.2s ease',
+                                            background: isAbsent ? 'var(--danger-color)' : 'transparent',
+                                            color: isAbsent ? '#FFFFFF' : 'var(--text-secondary)',
+                                            boxShadow: isAbsent ? '0 2px 4px rgba(239,68,68,0.3)' : 'none',
+                                          }}
+                                        >
+                                          ✗ Absent
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Mobile Responsive Cards */}
+                      <div className="mobile-student-cards" style={{ display: 'none' }}>
+                        {attendanceRecords
+                          .filter(r => !attSearchQuery || (r.student_name || '').toLowerCase().includes(attSearchQuery.toLowerCase()) || (r.rollNumber || '').toLowerCase().includes(attSearchQuery.toLowerCase()))
+                          .map((rec) => {
+                            const sId = rec.student_id || rec.studentId;
+                            const isPresent = rec.status === 'Present';
+                            const isAbsent = rec.status === 'Absent';
+
+                            return (
+                              <div key={sId} className="student-mobile-card" style={{ padding: '14px', borderRadius: '12px', border: '1px solid var(--border-color)', marginBottom: '12px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                  <strong style={{ fontSize: '14px' }}>{rec.student_name}</strong>
+                                  <span style={{ fontSize: '11px', color: 'var(--primary-color)', fontWeight: 700 }}>{rec.rollNumber}</span>
+                                </div>
+                                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                                  Course: {rec.course}
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStatusChange(sId, 'Present')}
+                                    style={{
+                                      padding: '8px',
+                                      borderRadius: '8px',
+                                      border: 'none',
+                                      fontWeight: 800,
+                                      fontSize: '12px',
+                                      cursor: 'pointer',
+                                      background: isPresent ? 'var(--success-color)' : 'var(--surface-alt)',
+                                      color: isPresent ? '#FFFFFF' : 'var(--text-secondary)',
+                                    }}
+                                  >
+                                    ✓ Present
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStatusChange(sId, 'Absent')}
+                                    style={{
+                                      padding: '8px',
+                                      borderRadius: '8px',
+                                      border: 'none',
+                                      fontWeight: 800,
+                                      fontSize: '12px',
+                                      cursor: 'pointer',
+                                      background: isAbsent ? 'var(--danger-color)' : 'var(--surface-alt)',
+                                      color: isAbsent ? '#FFFFFF' : 'var(--text-secondary)',
+                                    }}
+                                  >
+                                    ✗ Absent
+                                  </button>
+                                </div>
                               </div>
-                            </td>
-                          </tr>
-                        ))
+                            );
+                          })}
+                      </div>
+
+                      {/* Save Attendance Action Button */}
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          style={{ padding: '12px 28px', fontSize: '14px', fontWeight: 800, borderRadius: '10px' }}
+                          onClick={saveAttendanceSheet}
+                        >
+                          💾 Save Attendance
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* RIGHT COLUMN: Attendance Interactive Calendar & Agenda */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  
+                  {/* Calendar Card */}
+                  <div className="dashboard-card-section" style={{ padding: '18px', background: '#FFFFFF', borderRadius: '16px', border: '1px solid var(--border-color)', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
+                    
+                    {/* Month Header & Controls */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                      <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: 'var(--text-primary)' }}>
+                        {monthName} {year}
+                      </h4>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <button
+                          type="button"
+                          className="btn btn-outline btn-sm"
+                          style={{ padding: '4px 8px', borderRadius: '6px' }}
+                          onClick={() => setCalendarMonth(new Date(year, month - 1, 1))}
+                        >
+                          &lt;
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-outline btn-sm"
+                          style={{ padding: '4px 8px', borderRadius: '6px' }}
+                          onClick={() => setCalendarMonth(new Date(year, month + 1, 1))}
+                        >
+                          &gt;
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Day Names Header */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center', marginBottom: '8px' }}>
+                      {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+                        <span key={i} style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-secondary)' }}>{d}</span>
+                      ))}
+                    </div>
+
+                    {/* Calendar Days Grid */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
+                      {calendarGrid.map((item, idx) => {
+                        if (!item) {
+                          return <div key={idx} style={{ height: '36px' }} />;
+                        }
+
+                        const isSelected = item.dateStr === attendanceDate;
+                        const isMarked = markedDatesSet.has(item.dateStr);
+
+                        return (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => {
+                              setAttendanceDate(item.dateStr);
+                              if (attBatchId) {
+                                fetchAttendanceSheetByBatch(attBatchId, item.dateStr);
+                              }
+                            }}
+                            style={{
+                              height: '36px',
+                              borderRadius: '8px',
+                              border: isSelected ? '2px solid var(--primary-color)' : '1px solid transparent',
+                              background: isSelected ? 'var(--primary-color)' : (isMarked ? 'rgba(16,185,129,0.1)' : 'transparent'),
+                              color: isSelected ? '#FFFFFF' : (isMarked ? 'var(--success-color)' : 'var(--text-primary)'),
+                              fontWeight: (isSelected || isMarked) ? 800 : 500,
+                              fontSize: '12px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              justify: 'center',
+                              position: 'relative',
+                              transition: 'all 0.15s ease',
+                            }}
+                          >
+                            <span>{item.day}</span>
+                            {isMarked && !isSelected && (
+                              <span style={{ fontSize: '8px', lineHeight: 1, marginTop: '-2px' }}>✓</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Agenda / Session Details Card */}
+                  <div className="dashboard-card-section" style={{ padding: '18px', background: '#FFFFFF', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
+                    <h5 style={{ fontSize: '12px', textTransform: 'uppercase', color: 'var(--primary-color)', fontWeight: 800, margin: '0 0 12px', borderBottom: '1px solid var(--border-light)', paddingBottom: '6px' }}>
+                      AGENDA: {attendanceDate}
+                    </h5>
+
+                    {activeAgendaClass ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px' }}>
+                        <div><strong>Class:</strong> {activeAgendaClass.title}</div>
+                        <div><strong>Trainer:</strong> {activeAgendaClass.instructor}</div>
+                        <div><strong>Time:</strong> {activeAgendaClass.time}</div>
+                        <div>
+                          <strong>Status:</strong>{' '}
+                          <span className={`badge-status ${activeAgendaClass.status === 'Live' ? 'live' : 'completed'}`}>
+                            {activeAgendaClass.status}
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', margin: '0 0 10px' }}>
+                        No live lecture scheduled for this date.
+                      </p>
+                    )}
+
+                    <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid var(--border-light)', fontSize: '12.5px' }}>
+                      <strong>Attendance Status:</strong>{' '}
+                      {hasSavedAttendanceForDate ? (
+                        <span style={{ color: 'var(--success-color)', fontWeight: 800 }}>✓ Marked & Saved</span>
+                      ) : (
+                        <span style={{ color: '#F59E0B', fontWeight: 700 }}>Pending Mark</span>
                       )}
-                    </tbody>
-                  </table>
+                    </div>
+                  </div>
+
                 </div>
               </div>
 
-              {/* Attendance View Detail Modal */}
-              {viewingHistoryRecord && (
-                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
-                  <div style={{ background: 'white', borderRadius: '20px', padding: '24px', width: '100%', maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto', boxShadow: 'var(--shadow-lg)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid var(--border-light)', paddingBottom: '12px' }}>
-                      <h4 style={{ margin: 0, fontSize: '18px', fontWeight: '800' }}>Attendance Logs Detail</h4>
-                      <button type="button" className="btn btn-outline" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => setViewingHistoryRecord(null)}>Close</button>
-                    </div>
-                    
-                    <div style={{ marginBottom: '16px', fontSize: '14px', color: 'var(--text-secondary)' }}>
-                      <p style={{ margin: '4px 0' }}><strong>Batch Name:</strong> {viewingHistoryRecord.batch_name}</p>
-                      <p style={{ margin: '4px 0' }}><strong>Course:</strong> {viewingHistoryRecord.course_name}</p>
-                      <p style={{ margin: '4px 0' }}><strong>Date:</strong> {viewingHistoryRecord.date}</p>
-                      <p style={{ margin: '4px 0' }}><strong>Attendance Rate:</strong> {viewingHistoryRecord.attendance_percentage}%</p>
-                    </div>
-
-                    <div className="table-container-premium" style={{ border: '1px solid var(--border-light)', borderRadius: '12px' }}>
-                      <table className="table-premium" style={{ fontSize: '13px' }}>
+              {/* Attendance History Section */}
+                  <div className="dashboard-card-section" style={{ marginTop: '10px' }}>
+                    <h3 className="section-title-premium" style={{ marginBottom: '18px' }}>Attendance History Logs</h3>
+                    <div className="table-container-premium">
+                      <table className="table-premium">
                         <thead>
                           <tr>
-                            <th>Roll No.</th>
-                            <th>Student Name</th>
-                            <th>Status</th>
+                            <th>Date</th>
+                            <th>Batch</th>
+                            <th>Present Count</th>
+                            <th>Absent Count</th>
+                            <th>Attendance Rate</th>
+                            <th>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {(viewingHistoryRecord.records || []).map((rec, idx) => (
-                            <tr key={rec.student_id || idx}>
-                              <td>{rec.rollNumber}</td>
-                              <td>{rec.student_name}</td>
-                              <td>
-                                <span className={`badge-status ${rec.status === 'Present' ? 'paid' : 'unpaid'}`} style={{ textTransform: 'capitalize' }}>
-                                  {rec.status}
-                                </span>
+                          {filteredAttSheets.length === 0 ? (
+                            <tr>
+                              <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-secondary)' }}>
+                                No attendance logs history found matching the filters.
                               </td>
                             </tr>
-                          ))}
+                          ) : (
+                            filteredAttSheets.map((sheet, idx) => (
+                              <tr key={sheet.id || idx}>
+                                <td><strong>{sheet.date}</strong></td>
+                                <td>{sheet.batch_name}</td>
+                                <td style={{ color: 'var(--success-color)', fontWeight: '600' }}>{sheet.present_count ?? 0} students</td>
+                                <td style={{ color: 'var(--danger-color)', fontWeight: '600' }}>{sheet.absent_count ?? 0} students</td>
+                                <td style={{ color: 'var(--primary-color)', fontWeight: '700' }}>{sheet.attendance_percentage ?? 100}%</td>
+                                <td>
+                                  <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button 
+                                      type="button" 
+                                      className="btn btn-outline" 
+                                      style={{ padding: '6px 12px', fontSize: '12px' }}
+                                      onClick={() => {
+                                        setViewingHistoryRecord(sheet);
+                                      }}
+                                    >
+                                      View Logs
+                                    </button>
+                                    <button 
+                                      type="button" 
+                                      className="btn btn-outline" 
+                                      style={{ padding: '6px 12px', fontSize: '12px' }}
+                                      onClick={() => handleEditHistoryRecord(sheet)}
+                                    >
+                                      Edit
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          )}
                         </tbody>
                       </table>
                     </div>
                   </div>
-                </div>
-              )}
+
+                  {/* Attendance View Detail Modal */}
+                  {viewingHistoryRecord && (
+                    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+                      <div style={{ background: 'white', borderRadius: '20px', padding: '24px', width: '100%', maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto', boxShadow: 'var(--shadow-lg)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid var(--border-light)', paddingBottom: '12px' }}>
+                          <h4 style={{ margin: 0, fontSize: '18px', fontWeight: '800' }}>Attendance Logs Detail</h4>
+                          <button type="button" className="btn btn-outline" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => setViewingHistoryRecord(null)}>Close</button>
+                        </div>
+                        
+                        <div style={{ marginBottom: '16px', fontSize: '14px', color: 'var(--text-secondary)' }}>
+                          <p style={{ margin: '4px 0' }}><strong>Batch Name:</strong> {viewingHistoryRecord.batch_name}</p>
+                          <p style={{ margin: '4px 0' }}><strong>Course:</strong> {viewingHistoryRecord.course_name}</p>
+                          <p style={{ margin: '4px 0' }}><strong>Date:</strong> {viewingHistoryRecord.date}</p>
+                          <p style={{ margin: '4px 0' }}><strong>Attendance Rate:</strong> {viewingHistoryRecord.attendance_percentage}%</p>
+                        </div>
+
+                        <div className="table-container-premium" style={{ border: '1px solid var(--border-light)', borderRadius: '12px' }}>
+                          <table className="table-premium" style={{ fontSize: '13px' }}>
+                            <thead>
+                              <tr>
+                                <th>Roll No.</th>
+                                <th>Student Name</th>
+                                <th>Status</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(viewingHistoryRecord.records || []).map((rec, idx) => (
+                                <tr key={rec.student_id || idx}>
+                                  <td>{rec.rollNumber}</td>
+                                  <td>{rec.student_name}</td>
+                                  <td>
+                                    <span className={`badge-status ${rec.status === 'Present' ? 'paid' : 'unpaid'}`} style={{ textTransform: 'capitalize' }}>
+                                      {rec.status}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
             </div>
-        )}
+          );
+        })()}
 
         {/* Recorded Classes View */}
         {activeTab === 'recorded-classes' && (
