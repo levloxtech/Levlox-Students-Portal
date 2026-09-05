@@ -488,7 +488,23 @@ export const unenrollStudent = (enrollmentId) => deleteDocument("enrollments", e
 // BATCHES
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const getBatches = () => getDocuments("batches", [limit(DEFAULT_LIST_LIMIT)]);
+export const getBatches = async () => {
+  const batchList = await getDocuments("batches", [limit(DEFAULT_LIST_LIMIT)]);
+  if (!batchList || batchList.length === 0) return [];
+  
+  const allStudents = await getDocuments("students", [limit(DEFAULT_LIST_LIMIT)]).catch(() => []);
+  
+  return batchList.map(b => {
+    // Count students matching this batch either by student_ids array or s.batch_id
+    const studentIdsSet = new Set(b.student_ids || []);
+    const matchingStudents = allStudents.filter(s => s.batch_id === b.id || studentIdsSet.has(s.id));
+    const realCount = Math.max(matchingStudents.length, (b.student_ids || []).length, Number(b.students_count) || 0);
+    return {
+      ...b,
+      students_count: realCount
+    };
+  });
+};
 
 export const addBatch = async (data) => {
   const code = data.code || data.batchId || `BAT-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -800,4 +816,96 @@ export const getStudentFeeDetails = (student) => {
 
   return { total, paid, remaining, isPaid };
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EMAIL TEMPLATES MANAGEMENT (MASTER DATA)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const DEFAULT_STUDENT_WELCOME_TEMPLATE = {
+  subject: "Welcome to Levlox Students Portal",
+  body: `Hello {{studentName}},
+
+Welcome to Levlox Students Portal.
+
+Your student account has been created successfully.
+
+Student ID: {{studentId}}
+Email: {{email}}
+Temporary Password: {{temporaryPassword}}
+Course: {{course}}
+Batch: {{batch}}
+
+You can use these credentials to sign in to the Levlox Students Portal.
+
+Please change your temporary password after your first login.
+
+Regards,
+Levlox Team`
+};
+
+/**
+ * Fetch the email templates canonical settings document from Firestore (`settings/emailTemplates`).
+ * Returns default template if missing or unconfigured.
+ */
+export const getEmailTemplates = async () => {
+  try {
+    const docData = await getDocument("settings", "emailTemplates");
+    if (docData && docData.studentWelcome) {
+      return {
+        studentWelcome: {
+          subject: docData.studentWelcome.subject || DEFAULT_STUDENT_WELCOME_TEMPLATE.subject,
+          body: docData.studentWelcome.body || DEFAULT_STUDENT_WELCOME_TEMPLATE.body,
+          updatedAt: docData.studentWelcome.updatedAt || null,
+        }
+      };
+    }
+  } catch (err) {
+    console.warn("[EmailTemplates] Fetch failed or not found, fallback to default:", err);
+  }
+  return {
+    studentWelcome: { ...DEFAULT_STUDENT_WELCOME_TEMPLATE }
+  };
+};
+
+/**
+ * Save/Update email templates in Firestore (`settings/emailTemplates`).
+ */
+export const updateEmailTemplates = async (templatesData) => {
+  const payload = {
+    studentWelcome: {
+      subject: templatesData?.studentWelcome?.subject?.trim() || DEFAULT_STUDENT_WELCOME_TEMPLATE.subject,
+      body: templatesData?.studentWelcome?.body?.trim() || DEFAULT_STUDENT_WELCOME_TEMPLATE.body,
+      updatedAt: serverTimestamp(),
+    }
+  };
+  await setDocument("settings", "emailTemplates", payload);
+  return payload;
+};
+
+/**
+ * Interpolate dynamic placeholders in template string safely.
+ * Supported placeholders: {{studentName}}, {{studentId}}, {{email}}, {{temporaryPassword}}, {{course}}, {{batch}}
+ */
+export const interpolateEmailTemplate = (templateStr = "", variables = {}) => {
+  if (!templateStr) return "";
+  let result = templateStr;
+  
+  const replacements = {
+    "{{studentName}}": variables.studentName || variables.name || "Student",
+    "{{studentId}}": variables.studentId || variables.rollNumber || "N/A",
+    "{{email}}": variables.email || "N/A",
+    "{{temporaryPassword}}": variables.temporaryPassword || variables.password || "********",
+    "{{course}}": variables.course || "Levlox Course",
+    "{{batch}}": variables.batch || variables.batch_name || "Regular Batch",
+  };
+
+  Object.entries(replacements).forEach(([placeholder, val]) => {
+    // Regex global replace for each placeholder
+    const safeVal = String(val !== undefined && val !== null ? val : "");
+    result = result.split(placeholder).join(safeVal);
+  });
+
+  return result;
+};
+
 

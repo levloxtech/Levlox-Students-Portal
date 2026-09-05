@@ -69,6 +69,8 @@ import {
   addActivityPreset,
   deleteActivityPreset,
   uploadProfileImage,
+  getEmailTemplates,
+  interpolateEmailTemplate,
 } from '../services/firebaseService';
 import {
   changeOwnPassword,
@@ -239,6 +241,7 @@ const AdminDashboard = () => {
         recordedList,
         announcementList,
         courseList,
+        trainerList,
         leaderboardList,
         paymentList,
         globalSettings,
@@ -1725,7 +1728,6 @@ const AdminDashboard = () => {
   // Admin Account Fields
   const [adminName, setAdminName] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
-  const [adminPhone, setAdminPhone] = useState('');
   const [adminProfilePic, setAdminProfilePic] = useState('');
 
   // Admin Password Fields
@@ -1736,10 +1738,6 @@ const AdminDashboard = () => {
   const [showAdminNewPassword, setShowAdminNewPassword] = useState(false);
   const [showAdminConfirmPassword, setShowAdminConfirmPassword] = useState(false);
 
-  // Admin Phone Update State
-  const [isAdminUpdatingPhone, setIsAdminUpdatingPhone] = useState(false);
-  const [adminTempPhone, setAdminTempPhone] = useState('');
-  const [verifyingAdminPhone, setVerifyingAdminPhone] = useState(false);
   // Avatar file staged locally; uploaded to Storage when the form is saved.
   const [pendingAdminAvatar, setPendingAdminAvatar] = useState(null);
 
@@ -2109,9 +2107,10 @@ const AdminDashboard = () => {
       if (d) {
         setAdminProfileData(d);
         setAdminName(d.name || '');
-        setAdminEmail(d.email || '');
-        setAdminPhone(d.phone || '');
+        setAdminEmail(d.email || currentUser?.email || '');
         setAdminProfilePic(d.profile_pic || '');
+      } else if (currentUser?.email) {
+        setAdminEmail(currentUser.email);
       }
     } catch (e) {
       console.error('[Admin] load profile failed:', e);
@@ -2199,35 +2198,6 @@ const AdminDashboard = () => {
       showModal('Update Failed', describeAuthError(e), 'error');
     } finally {
       setSavingAdminPassword(false);
-    }
-  };
-
-  /**
-   * Save the admin's contact number.
-   *
-   * The old flow sent an OTP that was only ever printed to the Flask server
-   * logs — it verified nothing. With no SMS provider wired up, the honest
-   * behaviour is a direct write to the admin's own document.
-   */
-  const saveAdminPhone = async () => {
-    if (!adminTempPhone || adminTempPhone.length !== 10 || !/^\d+$/.test(adminTempPhone)) {
-      showModal('Validation Error', 'Please enter a valid 10-digit mobile number.', 'warning');
-      return;
-    }
-    if (!uid) return;
-
-    setVerifyingAdminPhone(true);
-    try {
-      await updateDocumentFields('admins', uid, { phone: adminTempPhone });
-      setAdminPhone(adminTempPhone);
-      setIsAdminUpdatingPhone(false);
-      showModal('Saved', 'Mobile number updated successfully!', 'success');
-      fetchAdminProfile();
-    } catch (e) {
-      console.error('[Admin] phone update failed:', e);
-      showModal('Error', classifyFirestoreError(e).message, 'error');
-    } finally {
-      setVerifyingAdminPhone(false);
     }
   };
 
@@ -2729,6 +2699,8 @@ const AdminDashboard = () => {
         name: createName,
         email: cleanEmail || authEmail,
         phone: createPhone ? normalizeMobile(createPhone) : '',
+        course: createCourse || 'Fullstack Engineering',
+        batch: selectedBatch?.name || '',
       });
 
       setCreateName(''); setCreateEmail(''); setCreatePhone('');
@@ -2745,20 +2717,35 @@ const AdminDashboard = () => {
     }
   };
 
-  const sendStudentWelcomeEmail = (student) => {
+  const sendStudentWelcomeEmail = async (student, tempPasswordOverride = '') => {
     if (!student) return;
     const emailAddr = student.email;
     if (!emailAddr) {
       showModal("Warning", "No email address registered for this student.", "warning");
       return;
     }
-    const studentName = student.name || 'Student';
-    const rollNo = student.rollNumber || 'N/A';
 
-    const greeting = `Welcome to Levlox Student Portal! 🎓\n\nDear ${studentName},\n\nHere are your account credentials for the Levlox Student Portal:\n\nSign-in Email / Mobile: ${emailAddr}\nStudent ID: ${rollNo}\nPortal Link: ${loginUrl}\n\nIf you need a password reset, please contact your Levlox administrator.\n\nBest regards,\nLevlox Admissions & Portal Team`;
-    
-    const body = encodeURIComponent(greeting);
-    window.open(`mailto:${emailAddr}?subject=${encodeURIComponent('Welcome to Levlox Student Portal - Account Credentials')}&body=${body}`, '_blank');
+    try {
+      const templateData = await getEmailTemplates();
+      const welcomeTemplate = templateData?.studentWelcome || {};
+
+      const variables = {
+        studentName: student.name || 'Student',
+        studentId: student.rollNumber || student.id || 'N/A',
+        email: emailAddr,
+        temporaryPassword: tempPasswordOverride || student.password || '********',
+        course: student.course || 'Levlox Course',
+        batch: student.batch_name || student.batch || 'Regular Batch'
+      };
+
+      const finalSubject = interpolateEmailTemplate(welcomeTemplate.subject, variables);
+      const finalBody = interpolateEmailTemplate(welcomeTemplate.body, variables);
+
+      window.open(`mailto:${emailAddr}?subject=${encodeURIComponent(finalSubject)}&body=${encodeURIComponent(finalBody)}`, '_blank');
+    } catch (err) {
+      console.error('[Admin] Error sending welcome email:', err);
+      showModal("Error", "Failed to load email template from Master Data.", "error");
+    }
   };
 
   /**
@@ -5287,78 +5274,12 @@ const AdminDashboard = () => {
                             <input
                               type="email"
                               className="form-input"
-                              value={adminEmail}
-                              onChange={e => setAdminEmail(e.target.value)}
-                              placeholder="admin@example.com"
-                              style={{ paddingLeft: 42 }}
+                              value={adminEmail || currentUser?.email || ''}
+                              readOnly
+                              style={{ paddingLeft: 42, background: 'var(--surface-alt)', cursor: 'default', opacity: 0.9 }}
                             />
                             <Mail size={16} color="var(--text-secondary)" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }} />
                           </div>
-                        </div>
-
-                        {/* Mobile Number Block */}
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label">Mobile Number</label>
-
-                          {!isAdminUpdatingPhone ? (
-                            <div style={{ display: 'flex', gap: 10 }}>
-                              <div style={{ position: 'relative', flex: 1 }}>
-                                <input
-                                  type="text"
-                                  className="form-input"
-                                  value={adminPhone}
-                                  readOnly
-                                  style={{ paddingLeft: 42, background: 'var(--surface-alt)', opacity: 0.95, cursor: 'default' }}
-                                />
-                                <Phone size={16} color="var(--text-secondary)" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }} />
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => { setAdminTempPhone(adminPhone); setIsAdminUpdatingPhone(true); }}
-                                className="btn btn-secondary btn-sm"
-                                style={{ height: '46px', alignSelf: 'flex-end' }}
-                              >
-                                Update Number
-                              </button>
-                            </div>
-                          ) : (
-                            <div style={{ background: 'var(--surface-alt)', border: '1.5px solid var(--border-color)', borderRadius: 14, padding: 18, marginTop: 4 }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                                <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--primary-color)' }}>UPDATE MOBILE NUMBER</span>
-                                <button
-                                  type="button"
-                                  onClick={() => setIsAdminUpdatingPhone(false)}
-                                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
-                                >
-                                  <X size={16} />
-                                </button>
-                              </div>
-
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                                <div style={{ position: 'relative' }}>
-                                  <input
-                                    type="text"
-                                    className="form-input"
-                                    value={adminTempPhone}
-                                    onChange={e => setAdminTempPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                                    placeholder="Enter 10-digit new number"
-                                    style={{ paddingLeft: 42 }}
-                                    disabled={verifyingAdminPhone}
-                                  />
-                                  <Phone size={16} color="var(--text-secondary)" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }} />
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={saveAdminPhone}
-                                  disabled={verifyingAdminPhone || adminTempPhone.length !== 10}
-                                  className="btn btn-primary btn-block"
-                                  style={{ height: 40, fontSize: 13 }}
-                                >
-                                  {verifyingAdminPhone ? 'Saving...' : 'Save Mobile Number'}
-                                </button>
-                              </div>
-                            </div>
-                          )}
                         </div>
 
                       </div>
@@ -5366,7 +5287,7 @@ const AdminDashboard = () => {
                       {/* Save Profile Button */}
                       <button
                         type="submit"
-                        disabled={savingAdminAccount || isAdminUpdatingPhone}
+                        disabled={savingAdminAccount}
                         className="btn btn-primary btn-block"
                         style={{ height: 46 }}
                       >
@@ -5975,9 +5896,7 @@ const AdminDashboard = () => {
 
                 {createdCredentials.email && (
                   <button className="btn btn-outline" style={{ height: '40px', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => {
-                    const greeting = `Welcome to Levlox Student Portal! 🎓\n\nDear ${createdCredentials.name},\n\nYour student account has been created successfully.\n\nSign-in Email: ${createdCredentials.email}\nStudent ID: ${createdCredentials.username}\nTemporary Password: ${createdCredentials.password}\n\nPlease visit the portal link to sign in and update your password:\n${loginUrl}\n\nBest regards,\nLevlox Admissions & Portal Team`;
-                    const body = encodeURIComponent(greeting);
-                    window.open(`mailto:${createdCredentials.email}?subject=${encodeURIComponent('Welcome to Levlox Student Portal - Your Credentials')}&body=${body}`, '_blank');
+                    sendStudentWelcomeEmail(createdCredentials, createdCredentials.password);
                   }}>
                     ✉ Resend Welcome Email
                   </button>
