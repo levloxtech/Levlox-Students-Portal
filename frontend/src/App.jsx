@@ -9,6 +9,7 @@ import FullScreenLoader from './components/FullScreenLoader';
 // Dashboards are large and mutually exclusive — split them so a student never
 // downloads the admin bundle (and vice versa).
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
+const TrainerDashboard = lazy(() => import('./pages/TrainerDashboard'));
 const StudentDashboard = lazy(() => import('./pages/StudentDashboard'));
 const StudentDetailsPage = lazy(() => import('./pages/StudentDetailsPage'));
 const BatchDetailsPage = lazy(() => import('./pages/BatchDetailsPage'));
@@ -24,6 +25,7 @@ const RootRedirect = () => {
 
   if (!currentUser) return <Navigate to="/login" replace />;
   if (userRole === 'admin') return <Navigate to="/admin" replace />;
+  if (userRole === 'trainer') return <Navigate to="/trainer" replace />;
   if (userRole === 'student') return <Navigate to="/student" replace />;
   return <Navigate to="/login" replace />;
 };
@@ -48,6 +50,18 @@ function App() {
                     <ProtectedRoute allowedRoles={['student']}>
                       <ErrorBoundary>
                         <StudentDashboard />
+                      </ErrorBoundary>
+                    </ProtectedRoute>
+                  }
+                />
+
+                {/* Protected Trainer Routes */}
+                <Route
+                  path="/trainer/*"
+                  element={
+                    <ProtectedRoute allowedRoles={['trainer']}>
+                      <ErrorBoundary>
+                        <TrainerDashboard />
                       </ErrorBoundary>
                     </ProtectedRoute>
                   }

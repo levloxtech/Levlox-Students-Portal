@@ -2255,12 +2255,26 @@ const AdminDashboard = () => {
     return true;
   };
 
+  const syncBatchTrainer = async (batchId, trainerNameStr) => {
+    if (!batchId || !trainerNameStr) return;
+    const matchingTrainer = trainers.find(t => t.name === trainerNameStr || t.trainer_id === trainerNameStr || t.trainerId === trainerNameStr);
+    if (matchingTrainer) {
+      await assignTrainerToBatch(batchId, matchingTrainer.id, {
+        trainerId: matchingTrainer.trainerId || matchingTrainer.trainer_id || '',
+        trainerName: matchingTrainer.name || '',
+      }).catch(err => console.warn('[Admin] Sync trainer assigned_batch_ids failed:', err));
+    }
+  };
+
   const createBatch = async (e) => {
     e.preventDefault();
     if (!validateBatchForm()) return;
     try {
       const code = await generateNextId('batch');
-      await addBatch({ ...batchPayload(), code });
+      const created = await addBatch({ ...batchPayload(), code });
+      if (created?.id) {
+        await syncBatchTrainer(created.id, batchTrainerName.trim());
+      }
       resetBatchForm();
       setShowBatchModal(false);
       showModal('Success', `New batch (${code}) created successfully!`, 'success');
@@ -2271,14 +2285,18 @@ const AdminDashboard = () => {
     }
   };
 
+  const [trainerTempPassword, setTrainerTempPassword] = useState('');
+  const [createdTrainerCredentials, setCreatedTrainerCredentials] = useState(null);
+
   const openTrainerModal = (trainer = null) => {
     if (trainer) {
       setEditingTrainer(trainer);
       setTrainerName(trainer.name || '');
       setTrainerEmail(trainer.email || '');
       setTrainerPhone(trainer.phone || '');
-      setTrainerSpecialization(trainer.specialization || '');
+      setTrainerSpecialization(trainer.specialization || trainer.course || '');
       setTrainerStatus(trainer.status || 'Active');
+      setTrainerTempPassword('');
     } else {
       setEditingTrainer(null);
       setTrainerName('');
@@ -2286,14 +2304,36 @@ const AdminDashboard = () => {
       setTrainerPhone('');
       setTrainerSpecialization('');
       setTrainerStatus('Active');
+      setTrainerTempPassword(generateRandomPassword());
     }
     setShowTrainerModal(true);
   };
 
+  const sendTrainerWelcomeEmail = (trainerObj, tempPass) => {
+    const subject = encodeURIComponent("Levlox Trainer Portal — Account Created");
+    const bodyText = `Hello ${trainerObj.name},
+
+Your Levlox Trainer Portal account has been created.
+
+Trainer ID: ${trainerObj.trainerId || trainerObj.trainer_id}
+Email: ${trainerObj.email}
+Temporary Password: ${tempPass}
+Login URL: ${window.location.origin}/login
+
+For security, you must change your temporary password after your first login.
+
+Regards,
+Levlox Administration`;
+
+    const mailtoUrl = `mailto:${trainerObj.email}?subject=${subject}&body=${encodeURIComponent(bodyText)}`;
+    window.open(mailtoUrl, '_blank');
+    showModal("Email Client Opened", `Prepared welcome email for ${trainerObj.name}.`, "success");
+  };
+
   const handleSaveTrainer = async (e) => {
     e.preventDefault();
-    if (!trainerName.trim()) {
-      showModal('Missing Fields', 'Trainer name is required.', 'warning');
+    if (!trainerName.trim() || !trainerEmail.trim()) {
+      showModal('Missing Fields', 'Trainer Name and Email are required.', 'warning');
       return;
     }
     try {
@@ -2302,26 +2342,51 @@ const AdminDashboard = () => {
           name: trainerName.trim(),
           email: trainerEmail.trim(),
           phone: trainerPhone.trim(),
+          mobile: trainerPhone.trim(),
           specialization: trainerSpecialization.trim(),
+          course: trainerSpecialization.trim(),
           status: trainerStatus,
         };
         await updateTrainer(editingTrainer.id, payload);
-        showModal('Success', 'Trainer updated successfully!', 'success');
+        showModal('Success', 'Trainer profile updated successfully!', 'success');
+        setShowTrainerModal(false);
       } else {
+        if (!trainerTempPassword) {
+          showModal('Missing Fields', 'Temporary password is required.', 'warning');
+          return;
+        }
+
+        // Create detached Firebase Auth user without breaking Super Admin session
+        const uid = await createAuthUserDetached(trainerEmail.trim(), trainerTempPassword);
         const trainerId = await generateNextId('trainer');
+
         const payload = {
           name: trainerName.trim(),
           email: trainerEmail.trim(),
           phone: trainerPhone.trim(),
+          mobile: trainerPhone.trim(),
           specialization: trainerSpecialization.trim(),
+          course: trainerSpecialization.trim(),
           status: trainerStatus,
           trainerId,
+          trainer_id: trainerId,
           code: trainerId,
+          mustChangePassword: true,
         };
-        await addTrainer(payload);
-        showModal('Success', `New Trainer (${trainerId}) added successfully!`, 'success');
+
+        await createTrainerProfile(uid, payload);
+        
+        setShowTrainerModal(false);
+        setCreatedTrainerCredentials({
+          name: trainerName.trim(),
+          email: trainerEmail.trim(),
+          trainerId,
+          password: trainerTempPassword
+        });
+
+        // Trigger welcome mailto flow
+        sendTrainerWelcomeEmail({ name: trainerName.trim(), email: trainerEmail.trim(), trainerId }, trainerTempPassword);
       }
-      setShowTrainerModal(false);
       fetchStats();
     } catch (err) {
       console.error(err);
@@ -2358,6 +2423,7 @@ const AdminDashboard = () => {
     if (!validateBatchForm()) return;
     try {
       await updateBatch(editingBatch.id, batchPayload());
+      await syncBatchTrainer(editingBatch.id, batchTrainerName.trim());
       setEditingBatch(null);
       resetBatchForm();
       setShowBatchModal(false);
@@ -5909,6 +5975,109 @@ const AdminDashboard = () => {
           </div>
         )}
       </main>
+
+      {/* Trainer Creation / Edit Modal */}
+      {showTrainerModal && (
+        <CustomModal
+          isOpen={showTrainerModal}
+          onClose={() => setShowTrainerModal(false)}
+          title={editingTrainer ? 'Edit Trainer Profile' : 'Create New Trainer Account'}
+        >
+          <form onSubmit={handleSaveTrainer} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div>
+              <label className="form-label">Full Name *</label>
+              <input type="text" className="form-input" value={trainerName} onChange={e => setTrainerName(e.target.value)} placeholder="e.g. Sri Trainer" required />
+            </div>
+
+            <div>
+              <label className="form-label">Email Address *</label>
+              <input type="email" className="form-input" value={trainerEmail} onChange={e => setTrainerEmail(e.target.value)} placeholder="e.g. trainer@levlox.com" required />
+            </div>
+
+            <div>
+              <label className="form-label">Mobile Number</label>
+              <input type="text" className="form-input" value={trainerPhone} onChange={e => setTrainerPhone(e.target.value)} placeholder="e.g. +91 9876543210" />
+            </div>
+
+            <div>
+              <label className="form-label">Course / Expertise</label>
+              <input type="text" className="form-input" value={trainerSpecialization} onChange={e => setTrainerSpecialization(e.target.value)} placeholder="e.g. Full Stack Web Development" />
+            </div>
+
+            <div>
+              <label className="form-label">Account Status</label>
+              <select className="form-select" value={trainerStatus} onChange={e => setTrainerStatus(e.target.value)}>
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </div>
+
+            {!editingTrainer && (
+              <div>
+                <label className="form-label">Temporary Password *</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input type="text" className="form-input" value={trainerTempPassword} onChange={e => setTrainerTempPassword(e.target.value)} required />
+                  <button type="button" className="btn btn-outline" style={{ flexShrink: 0, padding: '0 12px', fontSize: 12 }} onClick={() => setTrainerTempPassword(generateRandomPassword())}>
+                    Generate
+                  </button>
+                </div>
+                <span style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4, display: 'block' }}>
+                  Trainer will be forced to change this password on their first login.
+                </span>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 12 }}>
+              <button type="button" className="btn btn-outline" onClick={() => setShowTrainerModal(false)}>Cancel</button>
+              <button type="submit" className="btn btn-primary">{editingTrainer ? 'Save Changes' : 'Create Trainer'}</button>
+            </div>
+          </form>
+        </CustomModal>
+      )}
+
+      {/* Created Trainer Credentials Modal */}
+      {createdTrainerCredentials && (
+        <CustomModal
+          isOpen={!!createdTrainerCredentials}
+          onClose={() => setCreatedTrainerCredentials(null)}
+          title="Trainer Account Created Successfully"
+        >
+          <div style={{ textAlign: 'center', padding: '12px 0' }}>
+            <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(16,185,129,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: '#10B981' }}>
+              <CheckCircle size={32} />
+            </div>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: 20 }}>
+              Account created. Share the credentials below or send the welcome email.
+            </p>
+            <div style={{ background: 'var(--surface-alt)', border: '1px solid var(--border-color)', borderRadius: 12, padding: 16, textAlign: 'left', marginBottom: 20 }}>
+              <div style={{ marginBottom: 12 }}>
+                <span style={{ fontSize: 10.5, textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 700, display: 'block', marginBottom: 2 }}>Trainer ID</span>
+                <strong style={{ fontSize: 14, color: 'var(--primary-color)' }}>{createdTrainerCredentials.trainerId}</strong>
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <span style={{ fontSize: 10.5, textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 700, display: 'block', marginBottom: 2 }}>Email Address</span>
+                <strong style={{ fontSize: 14, color: 'var(--text-primary)' }}>{createdTrainerCredentials.email}</strong>
+              </div>
+              <div>
+                <span style={{ fontSize: 10.5, textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 700, display: 'block', marginBottom: 2 }}>Temporary Password</span>
+                <strong style={{ fontSize: 14, color: 'var(--text-primary)', fontFamily: 'monospace' }}>{createdTrainerCredentials.password}</strong>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <button className="btn btn-outline" style={{ height: 40, justifyContent: 'center' }} onClick={() => {
+                navigator.clipboard.writeText(`Trainer ID: ${createdTrainerCredentials.trainerId}\nEmail: ${createdTrainerCredentials.email}\nTemporary Password: ${createdTrainerCredentials.password}`);
+                showModal("Copied", "Trainer credentials copied to clipboard!", "success");
+              }}>
+                📋 Copy Credentials
+              </button>
+              <button className="btn btn-primary" style={{ height: 40 }} onClick={() => setCreatedTrainerCredentials(null)}>
+                ✓ Done
+              </button>
+            </div>
+          </div>
+        </CustomModal>
+      )}
 
       {/* Assign Students Modal */}
       {assigningBatch && (

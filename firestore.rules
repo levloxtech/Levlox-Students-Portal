@@ -24,23 +24,28 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    function isAdmin() {
+    function isTrainer() {
       return isAuthenticated() &&
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+        exists(/databases/$(database)/documents/trainers/$(request.auth.uid));
     }
 
-    /** Fields changed by this write. */
-    function changedKeys() {
-      return request.resource.data.diff(resource.data).affectedKeys();
+    function getTrainerDoc() {
+      return get(/databases/$(database)/documents/trainers/$(request.auth.uid)).data;
+    }
+
+    function isTrainerAssignedToBatch(batchId) {
+      return isTrainer() && (
+        batchId in getTrainerDoc().assigned_batch_ids
+      );
     }
 
     // ── Students ───────────────────────────────────────────────────────────
     // A student may edit their own profile fields only. Identity, status,
-    // batch and fee amounts stay under administrative control, so a student
-    // cannot mark their own fees as paid or reactivate a disabled account.
+    // batch and fee amounts stay under administrative control.
+    // Trainers can read students assigned to their batches.
     match /students/{studentId} {
-      allow get: if isOwner(studentId) || isAdmin();
-      allow list: if isAdmin();
+      allow get: if isOwner(studentId) || isAdmin() || isTrainer();
+      allow list: if isAdmin() || isTrainer();
       allow create, delete: if isAdmin();
 
       allow update: if isAdmin() || (
@@ -68,7 +73,7 @@ service cloud.firestore {
       allow create, delete: if isAdmin();
     }
 
-    // ── Shared course content (readable by any signed-in user) ─────────────
+    // ── Shared course content ──────────────────────────────────────────────
     match /courses/{courseId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
@@ -77,17 +82,17 @@ service cloud.firestore {
     match /trainers/{trainerId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
+      allow update: if isOwner(trainerId) && changedKeys().hasOnly(['name', 'phone', 'profile_pic', 'mustChangePassword', 'updatedAt']);
     }
-
 
     match /liveClasses/{classId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow write: if isAdmin() || isTrainer();
     }
 
     match /recordedClasses/{classId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow write: if isAdmin() || isTrainer();
     }
 
     match /studyMaterials/{materialId} {
@@ -129,8 +134,13 @@ service cloud.firestore {
     }
 
     match /attendance/{attendanceId} {
-      allow get, list: if isAdmin() || ownsStudentRow();
-      allow write: if isAdmin();
+      allow get, list: if isAdmin() || isTrainer() || ownsStudentRow();
+      allow write: if isAdmin() || isTrainer();
+    }
+
+    match /attendanceSheets/{sheetId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || isTrainer();
     }
 
     match /submissions/{submissionId} {

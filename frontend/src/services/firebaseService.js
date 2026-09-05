@@ -745,9 +745,7 @@ export const getTrainers = () =>
 export const getTrainer = (id) => getDocument("trainers", id);
 
 export const addTrainer = async (data) => {
-  const existing = await getTrainers().catch(() => []);
-  const nextNum = existing.length + 1;
-  const trainerId = data.trainerId || data.code || `TRN${String(nextNum).padStart(3, '0')}`;
+  const trainerId = data.trainerId || data.code || await generateNextId("trainer");
   return addDocument("trainers", {
     ...data,
     trainerId,
@@ -755,9 +753,59 @@ export const addTrainer = async (data) => {
   });
 };
 
+export const createTrainerProfile = async (uid, data) => {
+  const trainerId = data.trainerId || data.code || await generateNextId("trainer");
+  const payload = {
+    ...data,
+    uid,
+    trainer_id: trainerId,
+    trainerId,
+    code: trainerId,
+    role: "trainer",
+    status: data.status || "Active",
+    assigned_batch_ids: data.assigned_batch_ids || [],
+    assigned_course_ids: data.assigned_course_ids || [],
+    mustChangePassword: data.mustChangePassword !== false,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+  await setDocument("trainers", uid, payload, false);
+  return payload;
+};
+
 export const updateTrainer = (id, data) => updateDocumentFields("trainers", id, data);
 
 export const deleteTrainer = (id) => deleteDocument("trainers", id);
+
+/**
+ * Assign a trainer to a batch atomically, updating both batches/{batchId} and trainers/{trainerUid}.
+ */
+export const assignTrainerToBatch = async (batchId, trainerUid, trainerData = {}) => {
+  const batchRef = doc(db, "batches", batchId);
+  const trainerRef = doc(db, "trainers", trainerUid);
+
+  await runTransaction(db, async (transaction) => {
+    const trainerSnap = await transaction.get(trainerRef);
+    if (!trainerSnap.exists()) {
+      throw new Error("Trainer record not found in Firestore.");
+    }
+    const currentBatches = trainerSnap.data().assigned_batch_ids || [];
+    const updatedBatches = Array.from(new Set([...currentBatches, batchId]));
+
+    transaction.set(trainerRef, {
+      assigned_batch_ids: updatedBatches,
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+
+    transaction.set(batchRef, {
+      trainer_uid: trainerUid,
+      trainer_id: trainerData.trainerId || trainerSnap.data().trainer_id || trainerSnap.data().trainerId || "",
+      trainer_name: trainerData.trainerName || trainerSnap.data().name || "",
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+  });
+  return true;
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MASTER DATA SUMMARY HELPER
@@ -773,7 +821,25 @@ export const getMasterData = async () => {
     trainers,
     feeStatuses: ["Paid", "Pending Payment", "Partial", "Overdue"],
     accountStatuses: ["active", "disabled", "pending"],
+    trainerStatuses: ["Active", "Inactive"],
   };
+};
+
+export const DEFAULT_TRAINER_WELCOME_TEMPLATE = {
+  subject: "Levlox Trainer Portal — Account Created",
+  body: `Hello {{trainerName}},
+
+Your Levlox Trainer Portal account has been created.
+
+Trainer ID: {{trainerId}}
+Email: {{email}}
+Temporary Password: {{temporaryPassword}}
+Login URL: {{loginUrl}}
+
+For security, you must change your temporary password after your first login.
+
+Regards,
+Levlox Administration`
 };
 
 

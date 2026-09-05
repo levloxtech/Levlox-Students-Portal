@@ -30,14 +30,15 @@ export const AuthProvider = ({ children }) => {
 
   /** Resolve a signed-in Firebase user to their Firestore profile + role. */
   const resolveProfile = useCallback(async (uid) => {
-    // A user is either an admin or a student — check both in parallel and let
-    // the admin record win, since admins are the smaller, privileged set.
-    const [adminDoc, studentDoc] = await Promise.all([
+    // Check admin, trainer, and student in parallel
+    const [adminDoc, trainerDoc, studentDoc] = await Promise.all([
       getAdmin(uid).catch(() => null),
+      getDocument('trainers', uid).catch(() => null),
       getStudent(uid).catch(() => null),
     ]);
 
     if (adminDoc) return { profile: adminDoc, role: 'admin' };
+    if (trainerDoc) return { profile: trainerDoc, role: trainerDoc.role || 'trainer' };
     if (studentDoc) return { profile: studentDoc, role: studentDoc.role || 'student' };
     return { profile: null, role: null };
   }, []);
@@ -167,6 +168,7 @@ export const AuthProvider = ({ children }) => {
       refreshProfile,
       applyProfilePatch,
       isAdmin: userRole === 'admin',
+      isTrainer: userRole === 'trainer',
       isStudent: userRole === 'student',
       uid: currentUser?.uid || null,
     }),
