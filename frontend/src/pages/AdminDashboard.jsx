@@ -71,6 +71,7 @@ import {
   uploadProfileImage,
   getEmailTemplates,
   interpolateEmailTemplate,
+  createTrainerProfile,
   generateNextId,
   saveBatchAttendance,
 } from '../services/firebaseService';
@@ -2356,8 +2357,25 @@ Levlox Administration`;
           return;
         }
 
-        // Create detached Firebase Auth user without breaking Super Admin session
-        const uid = await createAuthUserDetached(trainerEmail.trim(), trainerTempPassword);
+        let uid;
+        try {
+          uid = await createAuthUserDetached(trainerEmail.trim(), trainerTempPassword);
+        } catch (authErr) {
+          if (authErr?.code === 'auth/email-already-in-use') {
+            // Check if trainer document exists in loaded list
+            const existingTrainer = trainers.find(t => t.email?.trim().toLowerCase() === trainerEmail.trim().toLowerCase());
+            if (existingTrainer) {
+              uid = existingTrainer.id || existingTrainer.uid;
+            } else {
+              // Firebase Auth has user, try sign-in or reuse
+              showModal('Account Exists', 'A user with this email address already exists in Firebase Authentication. Please use a different email or update the existing account.', 'warning');
+              return;
+            }
+          } else {
+            throw authErr;
+          }
+        }
+
         const trainerId = await generateNextId('trainer');
 
         const payload = {
@@ -2389,8 +2407,11 @@ Levlox Administration`;
       }
       fetchStats();
     } catch (err) {
-      console.error(err);
-      showModal('Error', classifyFirestoreError(err).message, 'error');
+      console.error('[Admin] Trainer creation/update failed:', err);
+      const msg = err.code === 'auth/email-already-in-use'
+        ? 'That email address is already registered in Firebase Authentication.'
+        : (describeAuthError(err) || err?.message || 'Unable to create trainer account. Please try again.');
+      showModal('Error', msg, 'error');
     }
   };
 

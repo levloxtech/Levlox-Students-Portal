@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '../firebase';
-import { getStudent, getAdmin } from '../services/firebaseService';
+import { getStudent, getAdmin, getDocument } from '../services/firebaseService';
 
 const AuthContext = createContext(null);
 
