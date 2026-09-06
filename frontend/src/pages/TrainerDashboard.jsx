@@ -126,20 +126,23 @@ const TrainerDashboard = () => {
       if (!attBatchId || !attDate) return;
       setLoadingAttRecords(true);
       try {
-        const students = await getStudentsByBatch(attBatchId);
+        let students = await getStudentsByBatch(attBatchId).catch(() => []);
+        if (!students || students.length === 0) {
+          students = trainerStudents.filter(s => s.batch_id === attBatchId || s.batchId === attBatchId);
+        }
         const existing = await getAttendanceByBatchAndDate(attBatchId, attDate);
         const existingMap = new Map(existing.map(r => [r.studentId || r.student_id, r.status]));
 
         const records = students.map(s => ({
-          studentId: s.id,
-          studentName: s.name,
-          rollNumber: s.rollNumber || s.roll_number || s.studentIdNumber || 'N/A',
-          course: s.course || '',
-          status: existingMap.get(s.id) || 'Present'
+          studentId: s.id || s.uid,
+          studentName: s.name || s.fullName || 'Student',
+          rollNumber: s.rollNumber || s.roll_number || s.studentIdNumber || s.id || 'N/A',
+          course: s.course_name || s.courseName || s.course || '',
+          status: existingMap.get(s.id || s.uid) || 'Not Marked'
         }));
         setAttRecords(records);
       } catch (err) {
-        console.error(err);
+        console.error('[Trainer] Attendance load error:', err);
       } finally {
         setLoadingAttRecords(false);
       }
@@ -147,7 +150,7 @@ const TrainerDashboard = () => {
     if (activeTab === 'attendance') {
       loadAtt();
     }
-  }, [attBatchId, attDate, activeTab]);
+  }, [attBatchId, attDate, activeTab, trainerStudents]);
 
   const handleSaveAttendance = async () => {
     if (!attBatchId || attRecords.length === 0) return;

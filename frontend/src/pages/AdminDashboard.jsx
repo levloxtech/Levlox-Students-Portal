@@ -2981,26 +2981,39 @@ Levlox Administration`;
     try {
       const records = await getAttendanceByBatchAndDate(batchId, dateVal);
       // Fetch assigned students for the batch
-      const batchStudents = await getStudentsByBatch(batchId).catch(() => students.filter(s => s.batch_id === batchId));
+      let batchStudents = await getStudentsByBatch(batchId).catch(() => []);
       
+      if (!batchStudents || batchStudents.length === 0) {
+        const batchObj = batches.find(b => b.id === batchId || b.code === batchId || b.batchId === batchId);
+        batchStudents = students.filter(s => 
+          s.batch_id === batchId || 
+          s.batchId === batchId || 
+          (batchObj?.code && (s.batch_id === batchObj.code || s.batchId === batchObj.code)) ||
+          (batchObj?.name && (s.batch_name === batchObj.name || s.batchName === batchObj.name)) ||
+          (batchObj?.student_ids && Array.isArray(batchObj.student_ids) && batchObj.student_ids.includes(s.id))
+        );
+      }
+
       const recordMap = {};
       records.forEach(r => {
         const sId = r.studentId || r.student_id;
-        recordMap[sId] = r;
+        if (sId) recordMap[sId] = r;
       });
 
       const mergedSheet = batchStudents.map(s => {
-        const existing = recordMap[s.id];
+        const sId = s.id || s.uid;
+        const existing = recordMap[sId];
         return {
-          id: existing ? existing.id : `${batchId}_${dateVal}_${s.id}`,
-          studentId: s.id,
-          student_id: s.id,
-          studentName: s.name,
-          student_name: s.name,
-          rollNumber: s.rollNumber || s.id || 'N/A',
-          phone: s.phone || '',
-          course: s.course || '',
+          id: existing ? existing.id : `${batchId}_${dateVal}_${sId}`,
+          studentId: sId,
+          student_id: sId,
+          studentName: s.name || s.fullName || 'Student',
+          student_name: s.name || s.fullName || 'Student',
+          rollNumber: s.rollNumber || s.studentId || sId || 'N/A',
+          phone: s.phone || s.mobile || '',
+          course: s.course_name || s.courseName || s.course || attCourse || '',
           batch_id: batchId,
+          batchId: batchId,
           date: dateVal,
           status: existing ? (existing.status || 'Not Marked') : 'Not Marked',
           isExisting: !!existing,
@@ -3010,6 +3023,7 @@ Levlox Administration`;
       setAttendanceRecords(mergedSheet);
     } catch (error) {
       console.error('[Admin] fetchAttendanceSheetByBatch failed:', error);
+      setAttendanceRecords([]);
     } finally {
       setLoading(false);
     }
@@ -3079,7 +3093,7 @@ Levlox Administration`;
 
   const handleStatusChange = (studentId, newStatus) => {
     setAttendanceRecords(prev => 
-      prev.map(r => r.student_id === studentId ? { ...r, status: newStatus } : r)
+      prev.map(r => (r.student_id === studentId || r.studentId === studentId) ? { ...r, status: newStatus } : r)
     );
   };
 
@@ -3093,14 +3107,8 @@ Levlox Administration`;
       return;
     }
 
-    const unMarked = attendanceRecords.some(r => !r.status || r.status === 'Not Marked');
-    if (unMarked) {
-      showModal('Validation Warning', 'Please mark attendance for all students before saving.', 'warning');
-      return;
-    }
-
     try {
-      const selectedBatchObj = batches.find(b => b.id === attBatchId);
+      const selectedBatchObj = batches.find(b => b.id === attBatchId || b.code === attBatchId);
       const batchNameVal = selectedBatchObj?.name || 'Batch';
       const courseNameVal = selectedBatchObj?.course_name || attCourse || '';
 
@@ -3108,7 +3116,7 @@ Levlox Administration`;
         studentId: r.studentId || r.student_id,
         studentName: r.studentName || r.student_name || r.name,
         rollNumber: r.rollNumber || r.studentIdNumber || 'N/A',
-        status: r.status,
+        status: r.status || 'Not Marked',
         course: courseNameVal,
       }));
 
@@ -7499,40 +7507,7 @@ Levlox Administration`;
           </div>
         </div>
       )}
-      {/* Trainer Modal */}
-      {showTrainerModal && (
-        <CustomModal isOpen={showTrainerModal} onClose={() => setShowTrainerModal(false)} title={editingTrainer ? 'Edit Trainer' : 'Add New Trainer'}>
-          <form onSubmit={handleSaveTrainer} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div>
-              <label className="form-label">Trainer Name *</label>
-              <input type="text" className="form-input" value={trainerName} onChange={(e) => setTrainerName(e.target.value)} placeholder="e.g. Rajesh Kumar" required />
-            </div>
-            <div>
-              <label className="form-label">Specialization</label>
-              <input type="text" className="form-input" value={trainerSpecialization} onChange={(e) => setTrainerSpecialization(e.target.value)} placeholder="e.g. React & Node.js Expert" />
-            </div>
-            <div>
-              <label className="form-label">Email</label>
-              <input type="email" className="form-input" value={trainerEmail} onChange={(e) => setTrainerEmail(e.target.value)} placeholder="trainer@levlox.com" />
-            </div>
-            <div>
-              <label className="form-label">Phone</label>
-              <input type="text" className="form-input" value={trainerPhone} onChange={(e) => setTrainerPhone(e.target.value)} placeholder="+91 9876543210" />
-            </div>
-            <div>
-              <label className="form-label">Status</label>
-              <select className="form-select" value={trainerStatus} onChange={(e) => setTrainerStatus(e.target.value)}>
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-              </select>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
-              <button type="button" className="btn btn-outline" onClick={() => setShowTrainerModal(false)}>Cancel</button>
-              <button type="submit" className="btn btn-primary">Save Trainer</button>
-            </div>
-          </form>
-        </CustomModal>
-      )}
+
     </div>
   );
 };

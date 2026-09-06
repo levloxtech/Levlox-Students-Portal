@@ -207,10 +207,36 @@ export const getPaginatedDocuments = async (collectionName, constraints = [], pa
 
 export const getStudent = (uid) => getDocument("students", uid);
 
-export const updateStudent = (uid, data) => updateDocumentFields("students", uid, data);
+export const updateStudent = (uid, data) => {
+  const normalized = { ...data };
+  if (data.batchId || data.batch_id) {
+    const bId = data.batchId || data.batch_id;
+    normalized.batchId = bId;
+    normalized.batch_id = bId;
+  }
+  if (data.courseId || data.course_id) {
+    const cId = data.courseId || data.course_id;
+    normalized.courseId = cId;
+    normalized.course_id = cId;
+  }
+  return updateDocumentFields("students", uid, normalized);
+};
 
-export const createStudent = (uid, data) =>
-  setDocument("students", uid, { ...data, role: "student", status: "active", createdAt: serverTimestamp() }, false);
+export const createStudent = (uid, data) => {
+  const bId = data.batchId || data.batch_id || "";
+  const cId = data.courseId || data.course_id || "";
+  const payload = {
+    ...data,
+    role: "student",
+    status: data.status || "active",
+    batchId: bId,
+    batch_id: bId,
+    courseId: cId,
+    course_id: cId,
+    createdAt: serverTimestamp(),
+  };
+  return setDocument("students", uid, payload, false);
+};
 
 export const listStudents = (constraints = []) =>
   getDocuments("students", [...constraints, limit(DEFAULT_LIST_LIMIT)]);
@@ -650,13 +676,19 @@ export const deleteBatch = (id) => deleteDocument("batches", id);
 export const getStudentsByBatch = async (batchId) => {
   if (!batchId) return [];
   const batch = await getDocument("batches", batchId);
-  const [byBatchField, byStudentIds] = await Promise.all([
+  const batchCode = batch?.code || batch?.batchId || batchId;
+
+  const [byBatchField, byBatchIdField, byCodeField, byStudentIds] = await Promise.all([
     getDocuments("students", [where("batch_id", "==", batchId)]).catch(() => []),
+    getDocuments("students", [where("batchId", "==", batchId)]).catch(() => []),
+    batchCode !== batchId
+      ? getDocuments("students", [where("batch_id", "==", batchCode)]).catch(() => [])
+      : Promise.resolve([]),
     batch?.student_ids && batch.student_ids.length > 0
       ? getStudentsByIds(batch.student_ids).catch(() => [])
       : Promise.resolve([])
   ]);
-  const merged = [...byBatchField, ...byStudentIds];
+  const merged = [...byBatchField, ...byBatchIdField, ...byCodeField, ...byStudentIds];
   const uniqueMap = new Map();
   merged.forEach(s => uniqueMap.set(s.id, s));
   return Array.from(uniqueMap.values());
@@ -664,7 +696,7 @@ export const getStudentsByBatch = async (batchId) => {
 
 
 /**
- * Replace a batch's student roster and keep each student's `batch_id` in sync.
+ * Replace a batch's student roster and keep each student's `batch_id` & `batchId` in sync.
  * Runs as an atomic batched write so the two sides can never diverge.
  */
 export const assignStudentsToBatch = async (batchId, studentIds = []) => {
@@ -674,7 +706,11 @@ export const assignStudentsToBatch = async (batchId, studentIds = []) => {
   }
 
   // Find all students currently linked to this batch in Firestore
-  const allCurrentInBatch = await getDocuments("students", [where("batch_id", "==", batchId)]).catch(() => []);
+  const [allCurrentInBatch1, allCurrentInBatch2] = await Promise.all([
+    getDocuments("students", [where("batch_id", "==", batchId)]).catch(() => []),
+    getDocuments("students", [where("batchId", "==", batchId)]).catch(() => [])
+  ]);
+  const allCurrentInBatch = [...allCurrentInBatch1, ...allCurrentInBatch2];
   const allPreviousIds = Array.from(new Set([
     ...(existing?.student_ids || []),
     ...allCurrentInBatch.map(s => s.id)
@@ -692,7 +728,9 @@ export const assignStudentsToBatch = async (batchId, studentIds = []) => {
   studentIds.forEach((sid) => {
     batch.set(doc(db, "students", sid), {
       batch_id: batchId,
+      batchId: batchId,
       batch_name: existing?.name || "",
+      batchName: existing?.name || "",
       updatedAt: serverTimestamp(),
     }, { merge: true });
   });
@@ -700,7 +738,9 @@ export const assignStudentsToBatch = async (batchId, studentIds = []) => {
   removedIds.forEach((sid) => {
     batch.set(doc(db, "students", sid), {
       batch_id: "",
+      batchId: "",
       batch_name: "",
+      batchName: "",
       updatedAt: serverTimestamp(),
     }, { merge: true });
   });
