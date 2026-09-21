@@ -4263,53 +4263,11 @@ Levlox Administration`;
         )}
 
         {activeTab === 'live-classes' && (() => {
-          const getDummyClasses = () => {
-            const todayStr = '2026-07-10';
-            const tomorrowStr = '2026-07-11';
-            const yesterdayStr = '2026-07-09';
-            
-            return [
-              {
-                _id: 'dummy-1',
-                title: 'Python Basics',
-                batch_name: 'Full Stack Batch A',
-                instructor: 'Sri',
-                date: todayStr,
-                time: '7:00 PM',
-                status: 'Live',
-                students_joined: 32,
-                meet_link: 'https://meet.google.com/abc-defg-hij'
-              },
-              {
-                _id: 'dummy-2',
-                title: 'React Components',
-                batch_name: 'Batch B',
-                instructor: 'Rahul',
-                date: tomorrowStr,
-                time: '6:00 PM',
-                status: 'Upcoming',
-                students_joined: 0,
-                meet_link: 'https://meet.google.com/abc-defg-hij'
-              },
-              {
-                _id: 'dummy-3',
-                title: 'Java OOP',
-                batch_name: 'Batch C',
-                instructor: 'Kavya',
-                date: yesterdayStr,
-                time: '5:00 PM',
-                status: 'Completed',
-                students_joined: 45,
-                meet_link: 'https://meet.google.com/abc-defg-hij'
-              }
-            ];
-          };
-
-          const allAvailableClasses = [...liveClasses.map(c => ({
+          const allAvailableClasses = liveClasses.map(c => ({
             ...c,
-            batch_name: batches.find(b => b.id === c.batch_id)?.name || 'General Batch',
+            batch_name: batches.find(b => b.id === c.batch_id)?.name || c.batch_name || 'General Batch',
             students_joined: c.students_joined || 0
-          })), ...getDummyClasses()];
+          }));
 
           const filteredClasses = allAvailableClasses.filter(c => {
             const query = sessionSearch.toLowerCase();

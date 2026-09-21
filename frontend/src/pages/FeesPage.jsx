@@ -65,28 +65,27 @@ const FeesPage = ({ dashboardData, onPayFees, paying }) => {
   const payDate   = student.feesPaymentDate || '—';
   const statusStr = isPaid ? 'Paid' : 'Pending Payment';
 
-  /* ── Mock installment history ── */
-  const mockHistory = useMemo(() => {
+  /* ── Payment transaction history ── */
+  const paymentHistory = useMemo(() => {
     if (!dashboardData) return [];
     const items = [];
     if (paid > 0) {
-      items.push({ id: 'TXN-001', amount: paid, date: payDate, status: 'paid', method: 'Online Payment', desc: 'Fee payment received' });
+      items.push({ id: student.id ? `TXN-${student.id.slice(0, 6).toUpperCase()}` : 'TXN-PAID', amount: paid, date: payDate, status: 'paid', method: 'Online / Admin Direct', desc: 'Fee payment received' });
     }
     if (pending > 0) {
-      const dueDate = new Date(); dueDate.setDate(dueDate.getDate() + 15);
-      items.push({ id: 'TXN-002', amount: pending, date: dueDate.toLocaleDateString('en-IN'), status: 'due', method: '—', desc: 'Balance due' });
+      items.push({ id: 'TXN-PENDING', amount: pending, date: 'Pending', status: 'due', method: '—', desc: 'Outstanding fee balance' });
     }
     return items;
-  }, [dashboardData, paid, pending, payDate]);
+  }, [dashboardData, student, paid, pending, payDate]);
 
-  /* ── Installment plan (mock 3-installment) ── */
+  /* ── Schedule breakdown ── */
   const installments = useMemo(() => {
     if (total === 0) return [];
     const amt = Math.round(total / 3);
     return [
-      { no: 1, amount: amt, dueDate: 'Jan 2025', status: paid >= amt ? 'paid' : 'due' },
-      { no: 2, amount: amt, dueDate: 'Mar 2025', status: paid >= amt * 2 ? 'paid' : paid >= amt ? 'due' : 'pending' },
-      { no: 3, amount: total - amt * 2, dueDate: 'May 2025', status: isPaid ? 'paid' : 'pending' },
+      { no: 1, amount: amt, dueDate: 'Term 1', status: paid >= amt ? 'paid' : 'due' },
+      { no: 2, amount: amt, dueDate: 'Term 2', status: paid >= amt * 2 ? 'paid' : paid >= amt ? 'due' : 'pending' },
+      { no: 3, amount: total - amt * 2, dueDate: 'Term 3', status: isPaid ? 'paid' : 'pending' },
     ];
   }, [total, paid, isPaid]);
 
@@ -213,8 +212,8 @@ const FeesPage = ({ dashboardData, onPayFees, paying }) => {
           </div>
 
           {/* Table rows */}
-          {mockHistory.length > 0 ? mockHistory.map((tx, i) => (
-            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 12, padding: '16px 24px', borderBottom: i < mockHistory.length - 1 ? '1px solid rgba(0,0,0,0.04)' : 'none', alignItems: 'center', transition: 'all 0.15s' }}
+          {paymentHistory.length > 0 ? paymentHistory.map((tx, i) => (
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 12, padding: '16px 24px', borderBottom: i < paymentHistory.length - 1 ? '1px solid rgba(0,0,0,0.04)' : 'none', alignItems: 'center', transition: 'all 0.15s' }}
               onMouseEnter={e => { e.currentTarget.style.background = '#fafafd'; }}
               onMouseLeave={e => { e.currentTarget.style.background = ''; }}>
               <div>

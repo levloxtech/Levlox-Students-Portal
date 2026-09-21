@@ -47,8 +47,8 @@ const MaterialCard = ({ material, viewMode, isPaid }) => {
   const [hovered, setHovered] = useState(false);
   const sc = getSubjectColor(material.subject || 'General');
   const ft = getFileType(material.url, material.type);
-  const mockDownloads = Math.floor(Math.random() * 800) + 50;
-  const mockRating = (3.6 + Math.random() * 1.4).toFixed(1);
+  const downloadCount = material.downloads || 0;
+  const ratingValue = material.rating || '4.8';
 
   if (viewMode === 'list') {
     return (
@@ -74,7 +74,7 @@ const MaterialCard = ({ material, viewMode, isPaid }) => {
               <Tag size={10} /> {material.subject || 'General'}
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><Clock size={10} /> {material.uploaded_at || 'Recently'}</span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><Download size={10} /> {mockDownloads}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><Download size={10} /> {downloadCount}</span>
           </div>
         </div>
         {/* Actions */}
@@ -136,10 +136,10 @@ const MaterialCard = ({ material, viewMode, isPaid }) => {
         {/* Stats row */}
         <div style={{ display: 'flex', gap: 14, marginBottom: 18, borderTop: '1px solid rgba(0,0,0,0.04)', paddingTop: 12 }}>
           <span style={{ fontSize: 11, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 3 }}>
-            <Download size={10} /> {mockDownloads} downloads
+            <Download size={10} /> {downloadCount} downloads
           </span>
           <span style={{ fontSize: 11, color: '#F59E0B', display: 'flex', alignItems: 'center', gap: 3 }}>
-            ★ {mockRating}
+            ★ {ratingValue}
           </span>
         </div>
 
@@ -353,7 +353,7 @@ const StudyMaterialsPage = ({ dashboardData, isPaid }) => {
           <div style={{ background: 'white', border: '1px solid var(--border-color)', borderRadius: 18, overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
             {popularNotes.map((m, i) => {
               const sc = getSubjectColor(m.subject || 'General');
-              const mockDL = Math.floor(Math.random() * 800) + 50;
+              const dlCount = m.downloads || 0;
               return (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', borderBottom: i < popularNotes.length - 1 ? '1px solid rgba(0,0,0,0.04)' : 'none', transition: 'all 0.15s' }}
                   onMouseEnter={e => { e.currentTarget.style.background = '#fafafd'; }}
@@ -374,7 +374,7 @@ const StudyMaterialsPage = ({ dashboardData, isPaid }) => {
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexShrink: 0 }}>
-                    <span style={{ fontSize: 11, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 3 }}><Download size={10} /> {mockDL}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 3 }}><Download size={10} /> {dlCount}</span>
                     {isPaid && (
                       <a href={m.url} download target="_blank" rel="noreferrer" style={{ padding: '6px 12px', borderRadius: 8, background: `${sc.c1}12`, border: `1px solid ${sc.border}`, fontSize: 11.5, fontWeight: 700, color: sc.c1, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
                         <Download size={11} /> Get

@@ -41,6 +41,22 @@ service firebase.storage {
       allow read: if isAuthenticated();
       allow write: if (isOwner(userId) && isImageUnder(5)) || isAdmin();
     }
+    match /trainerProfiles/{userId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if (isOwner(userId) && isImageUnder(5)) || isAdmin();
+    }
+    match /trainers/{userId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if (isOwner(userId) && isImageUnder(5)) || isAdmin();
+    }
+    match /adminProfiles/{userId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if (isOwner(userId) && isImageUnder(5)) || isAdmin();
+    }
+    match /admins/{userId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if (isOwner(userId) && isImageUnder(5)) || isAdmin();
+    }
 
     // Assignment submissions — a student writes only their own file.
     match /assignments/{assignmentId}/submissions/{studentId} {
