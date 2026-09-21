@@ -847,6 +847,34 @@ export const assignTrainerToBatch = async (batchId, trainerUid, trainerData = {}
   return true;
 };
 
+/**
+ * Remove a batch assignment from a trainer atomically.
+ */
+export const removeTrainerFromBatch = async (batchId, trainerUid) => {
+  const batchRef = doc(db, "batches", batchId);
+  const trainerRef = doc(db, "trainers", trainerUid);
+
+  await runTransaction(db, async (transaction) => {
+    const trainerSnap = await transaction.get(trainerRef);
+    if (trainerSnap.exists()) {
+      const currentBatches = trainerSnap.data().assigned_batch_ids || [];
+      const updatedBatches = currentBatches.filter(id => id !== batchId);
+      transaction.set(trainerRef, {
+        assigned_batch_ids: updatedBatches,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    }
+
+    transaction.set(batchRef, {
+      trainer_uid: "",
+      trainer_id: "",
+      trainer_name: "",
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+  });
+  return true;
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // MASTER DATA SUMMARY HELPER
 // ─────────────────────────────────────────────────────────────────────────────

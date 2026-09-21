@@ -8,7 +8,7 @@ import {
   signOut,
 } from 'firebase/auth';
 import { auth } from '../firebase';
-import { getStudent, getAdmin } from '../services/firebaseService';
+import { getStudent, getAdmin, getDocument } from '../services/firebaseService';
 import {
   Eye, EyeOff, Lock, Smartphone, Check, X, Mail, User,
   ShieldCheck, AlertTriangle, Shield, Loader2,
@@ -162,14 +162,21 @@ const Login = () => {
       const credential = await signInWithPopup(auth, provider);
       const firebaseUser = credential.user;
 
-      const [adminDoc, studentDoc] = await Promise.all([
+      const [adminDoc, trainerDoc, studentDoc] = await Promise.all([
         getAdmin(firebaseUser.uid).catch(() => null),
+        getDocument('trainers', firebaseUser.uid).catch(() => null),
         getStudent(firebaseUser.uid).catch(() => null),
       ]);
 
       let role = null;
       if (adminDoc) {
         role = 'admin';
+      } else if (trainerDoc) {
+        if (trainerDoc.status === 'disabled' || trainerDoc.status === 'Inactive') {
+          await signOut(auth);
+          throw new Error('Your trainer account has been disabled. Please contact your administrator.');
+        }
+        role = 'trainer';
       } else if (studentDoc) {
         if (studentDoc.status === 'disabled' || studentDoc.status === 'inactive') {
           await signOut(auth);
@@ -183,7 +190,9 @@ const Login = () => {
         );
       }
 
-      navigate(role === 'admin' ? '/admin' : '/student', { replace: true });
+      if (role === 'admin') navigate('/admin', { replace: true });
+      else if (role === 'trainer') navigate('/trainer', { replace: true });
+      else navigate('/student', { replace: true });
     } catch (err) {
       console.warn('[Login] Google sign-in failed:', err?.code || err?.message);
       if (err.code !== 'auth/popup-closed-by-user') {
@@ -293,11 +302,13 @@ const Login = () => {
 
       // Resolve the account's role from Firestore. Admin records take priority.
       let adminDoc = null;
+      let trainerDoc = null;
       let studentDoc = null;
       try {
-        [adminDoc, studentDoc] = await Promise.all([
-          getAdmin(firebaseUser.uid),
-          getStudent(firebaseUser.uid),
+        [adminDoc, trainerDoc, studentDoc] = await Promise.all([
+          getAdmin(firebaseUser.uid).catch(() => null),
+          getDocument('trainers', firebaseUser.uid).catch(() => null),
+          getStudent(firebaseUser.uid).catch(() => null),
         ]);
       } catch (firestoreErr) {
         console.error('[Login] Firestore profile lookup failed:', firestoreErr);
@@ -308,6 +319,12 @@ const Login = () => {
       let role = null;
       if (adminDoc) {
         role = 'admin';
+      } else if (trainerDoc) {
+        if (trainerDoc.status === 'disabled' || trainerDoc.status === 'Inactive') {
+          await signOut(auth);
+          throw new Error('Your trainer account has been disabled. Please contact your administrator.');
+        }
+        role = 'trainer';
       } else if (studentDoc) {
         if (studentDoc.status === 'disabled' || studentDoc.status === 'inactive') {
           await signOut(auth);
@@ -331,7 +348,9 @@ const Login = () => {
       else localStorage.removeItem('rememberedIdentifier');
 
       // AuthContext's onAuthStateChanged listener loads the profile from here.
-      navigate(role === 'admin' ? '/admin' : '/student', { replace: true });
+      if (role === 'admin') navigate('/admin', { replace: true });
+      else if (role === 'trainer') navigate('/trainer', { replace: true });
+      else navigate('/student', { replace: true });
 
     } catch (err) {
       console.error('[Login] Firebase Auth sign-in failed:', {

@@ -13,6 +13,7 @@ import {
   getEmailTemplates,
   updateEmailTemplates,
   DEFAULT_STUDENT_WELCOME_TEMPLATE,
+  DEFAULT_TRAINER_WELCOME_TEMPLATE,
   interpolateEmailTemplate,
   DEFAULT_ID_CONFIGS,
   setDocument,
@@ -157,30 +158,38 @@ const MasterDataPage = () => {
     queryFn: getEmailTemplates,
   });
 
+  const [selectedTemplateKey, setSelectedTemplateKey] = useState('studentWelcome');
   const [templateSubject, setTemplateSubject] = useState('');
   const [templateBody, setTemplateBody] = useState('');
   const [savingTemplate, setSavingTemplate] = useState(false);
-  const [showResetConfirmModal, setShowResetConfirmModal] = useState(false);
 
   useEffect(() => {
-    if (emailTemplatesData?.studentWelcome) {
-      setTemplateSubject(emailTemplatesData.studentWelcome.subject || DEFAULT_STUDENT_WELCOME_TEMPLATE.subject);
-      setTemplateBody(emailTemplatesData.studentWelcome.body || DEFAULT_STUDENT_WELCOME_TEMPLATE.body);
+    if (selectedTemplateKey === 'studentWelcome') {
+      const t = emailTemplatesData?.studentWelcome || DEFAULT_STUDENT_WELCOME_TEMPLATE;
+      setTemplateSubject(t.subject || DEFAULT_STUDENT_WELCOME_TEMPLATE.subject);
+      setTemplateBody(t.body || DEFAULT_STUDENT_WELCOME_TEMPLATE.body);
+    } else if (selectedTemplateKey === 'trainerWelcome') {
+      const t = emailTemplatesData?.trainerWelcome || DEFAULT_TRAINER_WELCOME_TEMPLATE;
+      setTemplateSubject(t.subject || DEFAULT_TRAINER_WELCOME_TEMPLATE.subject);
+      setTemplateBody(t.body || DEFAULT_TRAINER_WELCOME_TEMPLATE.body);
     }
-  }, [emailTemplatesData]);
+  }, [emailTemplatesData, selectedTemplateKey]);
 
   const handleSaveTemplate = async (e) => {
     if (e) e.preventDefault();
     setSavingTemplate(true);
     try {
-      await updateEmailTemplates({
-        studentWelcome: {
+      const currentTemplates = emailTemplatesData || {};
+      const updated = {
+        ...currentTemplates,
+        [selectedTemplateKey]: {
           subject: templateSubject,
           body: templateBody
         }
-      });
+      };
+      await updateEmailTemplates(updated);
       queryClient.invalidateQueries(['masterEmailTemplates']);
-      showToast('Student Welcome Email template saved ✓');
+      showToast(`${selectedTemplateKey === 'studentWelcome' ? 'Student' : 'Trainer'} Welcome Email template saved ✓`);
     } catch (err) {
       console.error(err);
       alert(classifyFirestoreError(err).message);
@@ -189,13 +198,19 @@ const MasterDataPage = () => {
     }
   };
 
-  const samplePreviewData = {
+  const samplePreviewData = selectedTemplateKey === 'studentWelcome' ? {
     studentName: 'Demo Student',
     studentId: 'LVX070129',
-    email: 'demo@example.com',
+    email: 'student@example.com',
     temporaryPassword: '********',
     course: 'Python-FSD',
     batch: 'Full Stack'
+  } : {
+    trainerName: 'Hari Prasath',
+    trainerId: 'TRN001001',
+    email: 'trainer@example.com',
+    temporaryPassword: '********',
+    loginUrl: `${window.location.origin}/login`
   };
 
   const interpolatedPreviewSubject = interpolateEmailTemplate(templateSubject, samplePreviewData);
