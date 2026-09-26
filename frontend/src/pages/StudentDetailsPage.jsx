@@ -203,7 +203,16 @@ const StudentDetailsPage = () => {
         </div>
 
         {/* Right Quick Badges */}
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          {student.email && (
+            <a
+              href={`mailto:${student.email}`}
+              className="btn btn-outline"
+              style={{ padding: '10px 16px', fontSize: 13, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none', color: 'var(--primary-color)', borderColor: 'var(--primary-color)', borderRadius: 14 }}
+            >
+              <Mail size={16} /> Send Mail
+            </a>
+          )}
           <div style={{ background: 'var(--surface-alt)', padding: '12px 18px', borderRadius: 14, textAlign: 'center', border: '1px solid var(--border-color)' }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', display: 'block', uppercase: true }}>FEE STATUS</span>
             <span style={{ fontSize: 13, fontWeight: 800, color: feesStatus === 'Paid' ? '#10B981' : '#F59E0B' }}>{feesStatus}</span>

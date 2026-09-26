@@ -822,9 +822,21 @@ const TrainerDashboard = () => {
                         </span>
                       </td>
                       <td style={{ padding: '14px 20px' }}>
-                        <button className="btn btn-outline btn-sm" onClick={() => setSelectedStudentDetails(s)}>
-                          <Eye size={14} /> Profile
-                        </button>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          {s.email && (
+                            <a
+                              href={`mailto:${s.email}`}
+                              className="btn btn-outline btn-sm"
+                              style={{ padding: '4px 8px', textDecoration: 'none', color: 'var(--primary-color)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                              title="Send Mail"
+                            >
+                              <Mail size={14} />
+                            </a>
+                          )}
+                          <button className="btn btn-outline btn-sm" onClick={() => setSelectedStudentDetails(s)}>
+                            <Eye size={14} /> Profile
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

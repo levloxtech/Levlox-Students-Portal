@@ -4158,6 +4158,17 @@ Levlox Administration`;
                         </td>
                         <td className="col-actions" onClick={(e) => e.stopPropagation()}>
                           <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                            {student.email && (
+                              <a
+                                href={`mailto:${student.email}`}
+                                className="action-icon-btn"
+                                style={{ textDecoration: 'none', color: 'var(--primary-color)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                                data-tooltip="Send Mail"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Mail size={16} />
+                              </a>
+                            )}
                             <button className="action-icon-btn btn-view" data-tooltip="View Profile" onClick={() => handleViewStudentDetails(student.id)}>
                               <Eye size={16} />
                             </button>
@@ -4226,6 +4237,16 @@ Levlox Administration`;
                       </div>
                     </div>
                     <div className="student-card-actions" onClick={(e) => e.stopPropagation()} style={{ gap: '8px' }}>
+                      {student.email && (
+                        <a
+                          href={`mailto:${student.email}`}
+                          className="action-icon-btn"
+                          style={{ textDecoration: 'none', color: 'var(--primary-color)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                          data-tooltip="Send Mail"
+                        >
+                          <Mail size={16} />
+                        </a>
+                      )}
                       <button className="action-icon-btn btn-view" data-tooltip="View Profile" onClick={() => handleViewStudentDetails(student.id)}>
                         <Eye size={16} />
                       </button>
@@ -5670,11 +5691,20 @@ Levlox Administration`;
                         <h4 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 800 }}>{t.name}</h4>
                         <p style={{ margin: '0 0 10px', fontSize: 12.5, color: 'var(--primary-color)', fontWeight: 700 }}>{t.specialization || 'Instructor'}</p>
                         <div style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          <span>Email: {t.email || '—'}</span>
+                          <span>Email: {t.email ? <a href={`mailto:${t.email}`} style={{ color: 'var(--primary-color)', textDecoration: 'none', fontWeight: 600 }}>{t.email}</a> : '—'}</span>
                           <span>Phone: {t.phone || '—'}</span>
                         </div>
                       </div>
-                      <div style={{ display: 'flex', gap: 8, marginTop: 16, borderTop: '1px solid var(--border-light)', paddingTop: 12, justifyContent: 'flex-end' }}>
+                      <div style={{ display: 'flex', gap: 8, marginTop: 16, borderTop: '1px solid var(--border-light)', paddingTop: 12, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                        {t.email && (
+                          <a
+                            href={`mailto:${t.email}`}
+                            className="btn btn-outline"
+                            style={{ padding: '6px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, textDecoration: 'none', color: 'var(--primary-color)', borderColor: 'var(--primary-color)' }}
+                          >
+                            <Mail size={14} /> Send Mail
+                          </a>
+                        )}
                         <button className="btn btn-outline" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => openTrainerModal(t)}>
                           <Pencil size={14} /> Edit
                         </button>
