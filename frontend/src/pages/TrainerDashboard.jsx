@@ -139,6 +139,9 @@ const TrainerDashboard = () => {
     };
   }, [batches, students, liveClasses, attendanceSheets]);
 
+  // Student Search Query State
+  const [studentSearchQuery, setStudentSearchQuery] = useState('');
+
   // ─── 2. ATTENDANCE MODULE STATES ──────────────────────────────────────────
   const [attCourseFilter, setAttCourseFilter] = useState('');
   const [attBatchId, setAttBatchId] = useState('');
@@ -776,75 +779,93 @@ const TrainerDashboard = () => {
         )}
 
         {/* ─── MODULE 3: MY STUDENTS ────────────────────────────────────────── */}
-        {activeTab === 'students' && (
-          <div className="animate-fade-in">
-            <div style={{ background: '#FFF', border: '1.5px solid var(--border-color)', borderRadius: 20, padding: 20, marginBottom: 24 }}>
-              <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-                <div style={{ flex: 1, minWidth: 240 }} className="search-bar-container">
-                  <Search size={16} color="var(--text-secondary)" />
-                  <input type="text" placeholder="Search student by name or email..." className="search-bar-input" />
+        {activeTab === 'students' && (() => {
+          const filteredTrainerStudents = students.filter(s => {
+            if (!studentSearchQuery.trim()) return true;
+            const q = studentSearchQuery.toLowerCase();
+            return (
+              (s.name || '').toLowerCase().includes(q) ||
+              (s.email || '').toLowerCase().includes(q) ||
+              (s.rollNumber || s.id || '').toLowerCase().includes(q)
+            );
+          });
+
+          return (
+            <div className="animate-fade-in">
+              <div style={{ background: '#FFF', border: '1.5px solid var(--border-color)', borderRadius: 20, padding: 20, marginBottom: 24 }}>
+                <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: 240 }} className="search-bar-container">
+                    <Search size={16} color="var(--text-secondary)" />
+                    <input
+                      type="text"
+                      placeholder="Search student by name or email..."
+                      className="search-bar-input"
+                      value={studentSearchQuery}
+                      onChange={(e) => setStudentSearchQuery(e.target.value)}
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div style={{ background: '#FFF', border: '1.5px solid var(--border-color)', borderRadius: 20, overflow: 'hidden', boxShadow: 'var(--shadow-card)' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13.5 }}>
-                <thead style={{ background: 'var(--surface-alt)', borderBottom: '1px solid var(--border-color)' }}>
-                  <tr>
-                    <th style={{ padding: '14px 20px', fontWeight: 800, color: 'var(--text-secondary)' }}>Student Name</th>
-                    <th style={{ padding: '14px 20px', fontWeight: 800, color: 'var(--text-secondary)' }}>Student ID</th>
-                    <th style={{ padding: '14px 20px', fontWeight: 800, color: 'var(--text-secondary)' }}>Course</th>
-                    <th style={{ padding: '14px 20px', fontWeight: 800, color: 'var(--text-secondary)' }}>Batch</th>
-                    <th style={{ padding: '14px 20px', fontWeight: 800, color: 'var(--text-secondary)' }}>Activity Points</th>
-                    <th style={{ padding: '14px 20px', fontWeight: 800, color: 'var(--text-secondary)' }}>Status</th>
-                    <th style={{ padding: '14px 20px', fontWeight: 800, color: 'var(--text-secondary)' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {students.map(s => (
-                    <tr key={s.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                      <td style={{ padding: '14px 20px', fontWeight: 700 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <img src={s.profile_pic || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} alt="" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
-                          <div>
-                            <div>{s.name}</div>
-                            <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 400 }}>{s.email}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td style={{ padding: '14px 20px', fontFamily: 'monospace', fontWeight: 700 }}>{s.rollNumber || s.id}</td>
-                      <td style={{ padding: '14px 20px' }}>{s.course || 'Fullstack'}</td>
-                      <td style={{ padding: '14px 20px' }}>{s.batch_name || s.batchName || 'Assigned'}</td>
-                      <td style={{ padding: '14px 20px', fontWeight: 800, color: 'var(--primary-color)' }}>{s.activityPoints || 0} pts</td>
-                      <td style={{ padding: '14px 20px' }}>
-                        <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 8px', background: 'rgba(16,185,129,0.1)', color: '#10B981', borderRadius: 6 }}>
-                          {s.status || 'Active'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '14px 20px' }}>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          {s.email && (
-                            <a
-                              href={`mailto:${s.email}`}
-                              className="btn btn-outline btn-sm"
-                              style={{ padding: '4px 8px', textDecoration: 'none', color: 'var(--primary-color)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                              title="Send Mail"
-                            >
-                              <Mail size={14} />
-                            </a>
-                          )}
-                          <button className="btn btn-outline btn-sm" onClick={() => setSelectedStudentDetails(s)}>
-                            <Eye size={14} /> Profile
-                          </button>
-                        </div>
-                      </td>
+              <div style={{ background: '#FFF', border: '1.5px solid var(--border-color)', borderRadius: 20, overflow: 'hidden', boxShadow: 'var(--shadow-card)' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13.5 }}>
+                  <thead style={{ background: 'var(--surface-alt)', borderBottom: '1px solid var(--border-color)' }}>
+                    <tr>
+                      <th style={{ padding: '14px 20px', fontWeight: 800, color: 'var(--text-secondary)' }}>Student Name</th>
+                      <th style={{ padding: '14px 20px', fontWeight: 800, color: 'var(--text-secondary)' }}>Student ID</th>
+                      <th style={{ padding: '14px 20px', fontWeight: 800, color: 'var(--text-secondary)' }}>Course</th>
+                      <th style={{ padding: '14px 20px', fontWeight: 800, color: 'var(--text-secondary)' }}>Batch</th>
+                      <th style={{ padding: '14px 20px', fontWeight: 800, color: 'var(--text-secondary)' }}>Activity Points</th>
+                      <th style={{ padding: '14px 20px', fontWeight: 800, color: 'var(--text-secondary)' }}>Status</th>
+                      <th style={{ padding: '14px 20px', fontWeight: 800, color: 'var(--text-secondary)' }}>Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {filteredTrainerStudents.map(s => (
+                      <tr key={s.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                        <td style={{ padding: '14px 20px', fontWeight: 700 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <img src={s.profile_pic || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} alt="" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
+                            <div>
+                              <div>{s.name}</div>
+                              <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 400 }}>{s.email}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ padding: '14px 20px', fontFamily: 'monospace', fontWeight: 700 }}>{s.rollNumber || s.id}</td>
+                        <td style={{ padding: '14px 20px' }}>{s.course || 'Fullstack'}</td>
+                        <td style={{ padding: '14px 20px' }}>{s.batch_name || s.batchName || 'Assigned'}</td>
+                        <td style={{ padding: '14px 20px', fontWeight: 800, color: 'var(--primary-color)' }}>{s.activityPoints || 0} pts</td>
+                        <td style={{ padding: '14px 20px' }}>
+                          <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 8px', background: 'rgba(16,185,129,0.1)', color: '#10B981', borderRadius: 6 }}>
+                            {s.status || 'Active'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '14px 20px' }}>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            {s.email && (
+                              <a
+                                href={`mailto:${s.email}`}
+                                className="btn btn-outline btn-sm"
+                                style={{ padding: '4px 8px', textDecoration: 'none', color: 'var(--primary-color)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                                title="Send Mail"
+                              >
+                                <Mail size={14} />
+                              </a>
+                            )}
+                            <button className="btn btn-outline btn-sm" onClick={() => setSelectedStudentDetails(s)}>
+                              <Eye size={14} /> Profile
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* ─── MODULE 4: ATTENDANCE SHEET & CALENDAR ─────────────────────────── */}
         {activeTab === 'attendance' && (
