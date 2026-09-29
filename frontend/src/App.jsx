@@ -14,6 +14,7 @@ const StudentDashboard = lazy(() => import('./pages/StudentDashboard'));
 const StudentDetailsPage = lazy(() => import('./pages/StudentDetailsPage'));
 const BatchDetailsPage = lazy(() => import('./pages/BatchDetailsPage'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
+const VerifyEmail = lazy(() => import('./pages/VerifyEmail'));
 
 /**
  * Root redirect — uses Firebase Auth state to send users to the right place.
@@ -41,6 +42,7 @@ function App() {
                 {/* Public Routes */}
                 <Route path="/login" element={<Login />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/verify-email" element={<VerifyEmail />} />
 
 
                 {/* Protected Student Routes */}

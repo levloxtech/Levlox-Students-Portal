@@ -17,6 +17,7 @@ import {
 import CustomModal from '../components/Modal';
 import leveloxLogo from '../assets/levelox-icon-transparent.png';
 import { normalizeMobile, mobileToAuthId, isValidMobile } from '../services/phoneIdentity';
+import { resendVerificationEmail } from '../services/emailService';
 
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_SECONDS = 30;
@@ -27,6 +28,12 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+
+  /* ─── Unverified Trainee State ─── */
+  const [unverifiedStudent, setUnverifiedStudent] = useState(null);
+  const [unverifiedModalOpen, setUnverifiedModalOpen] = useState(false);
+  const [resendingEmail, setResendingEmail] = useState(false);
+  const [resendToastMsg, setResendToastMsg] = useState('');
 
   /* ─── Reset Password Modal State ─── */
   const [resetModalOpen, setResetModalOpen] = useState(false);
@@ -329,6 +336,17 @@ const Login = () => {
         if (studentDoc.status === 'disabled' || studentDoc.status === 'inactive') {
           await signOut(auth);
           throw new Error('Your account has been disabled. Please contact your administrator.');
+        }
+        if (
+          studentDoc.status === 'Pending Email Verification' ||
+          studentDoc.status === 'pending_verification' ||
+          studentDoc.emailVerified === false ||
+          studentDoc.verificationStatus === 'Pending'
+        ) {
+          await signOut(auth);
+          setUnverifiedStudent(studentDoc);
+          setUnverifiedModalOpen(true);
+          throw new Error('Please verify your email address to access your training.');
         }
         role = 'student';
       } else {
@@ -738,6 +756,55 @@ const Login = () => {
         </div>
       </CustomModal>
 
+
+      {/* Email Verification Required Modal */}
+      <CustomModal
+        isOpen={unverifiedModalOpen}
+        onClose={() => setUnverifiedModalOpen(false)}
+        title="Email Verification Required"
+        type="warning"
+        confirmText={resendingEmail ? "Sending Verification..." : "Resend Verification Email"}
+        onConfirm={async () => {
+          if (!unverifiedStudent) return;
+          setResendingEmail(true);
+          try {
+            await resendVerificationEmail(unverifiedStudent);
+            setResendToastMsg(`Verification email resent successfully to ${unverifiedStudent.email}. Please check your inbox and spam folder.`);
+          } catch (err) {
+            console.error('[Login] Resend verification failed:', err);
+            showToast('Resend Failed', err.message || 'Failed to send verification email. Please try again.', 'error');
+          } finally {
+            setResendingEmail(false);
+          }
+        }}
+        cancelText="Close"
+        onCancel={() => setUnverifiedModalOpen(false)}
+      >
+        <div style={{ textAlign: 'left' }}>
+          <p style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 700, margin: '0 0 10px', lineHeight: 1.5 }}>
+            Please verify your email address to access your training.
+          </p>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 16px', lineHeight: 1.6 }}>
+            A welcome email with your secure account activation link was sent to <strong style={{ color: '#6C3CF0' }}>{unverifiedStudent?.email}</strong>.
+            You must click the activation link in that email to activate your training portal access.
+          </p>
+
+          {resendToastMsg ? (
+            <div style={{
+              background: 'rgba(16, 185, 129, 0.1)',
+              border: '1px solid rgba(16, 185, 129, 0.3)',
+              color: '#10B981',
+              borderRadius: 8,
+              padding: '10px 12px',
+              fontSize: 12.5,
+              fontWeight: 600,
+              marginBottom: 12
+            }}>
+              ✓ {resendToastMsg}
+            </div>
+          ) : null}
+        </div>
+      </CustomModal>
 
       <CustomModal
         isOpen={modalOpen}

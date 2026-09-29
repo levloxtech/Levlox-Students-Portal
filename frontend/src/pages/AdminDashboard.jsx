@@ -82,6 +82,7 @@ import {
 } from '../services/authService';
 import { normalizeMobile, mobileToAuthId, formatMobile } from '../services/phoneIdentity';
 import { createAuthUserDetached } from '../firebase';
+import { sendTraineeWelcomeEmail, resendVerificationEmail, generateVerificationToken } from '../services/emailService';
 
 
 const CustomDropdown = ({ label, value, options, onChange, placeholder, width = '120px' }) => {
@@ -2716,6 +2717,15 @@ Levlox Administration`;
       showModal('Missing Fields', 'Name, a valid Email Address or Mobile Number, and a Temporary Password are required.', 'warning');
       return;
     }
+
+    if (cleanEmail) {
+      const existing = allStudents.find(s => s.email && s.email.trim().toLowerCase() === cleanEmail.toLowerCase());
+      if (existing) {
+        showModal('Duplicate Account', `An account with email address "${cleanEmail}" already exists for student ${existing.name} (${existing.rollNumber || existing.id}). Duplicate accounts are not allowed for the same email address.`, 'warning');
+        return;
+      }
+    }
+
     const strengthError = validatePasswordStrength(createTempPassword);
     if (strengthError) {
       showModal('Weak Password', strengthError, 'warning');
@@ -2768,7 +2778,10 @@ Levlox Administration`;
 
       const rollNumber = await generateNextId('student');
       const selectedBatch = batches.find(b => b.id === createBatchId);
-      await createStudent(targetUid, {
+      const vToken = generateVerificationToken();
+      const vExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+
+      const studentPayload = {
         name: createName,
         email: cleanEmail || authEmail,
         phone: cleanPhone || '',
@@ -2780,11 +2793,18 @@ Levlox Administration`;
         feesTotal: 20000,
         feesPaidAmount: 0,
         feesRemainingAmount: 20000,
-        status: 'active',
+        status: 'Pending Email Verification',
+        emailVerified: false,
+        verificationStatus: 'Pending',
+        emailDeliveryStatus: 'Pending',
+        verificationToken: vToken,
+        verificationTokenExpiresAt: vExpiresAt,
         role: 'student',
         mustChangePassword: true,
         createdBy: uid,
-      });
+      };
+
+      await createStudent(targetUid, studentPayload);
 
       if (createBatchId && selectedBatch) {
         const currentStudentIds = Array.isArray(selectedBatch.student_ids) ? selectedBatch.student_ids : [];
@@ -2793,6 +2813,12 @@ Levlox Administration`;
           await assignStudentsToBatch(createBatchId, updatedStudentIds).catch(err => console.warn('[Admin] Auto-assign batch failed:', err));
         }
       }
+
+      // Automatically send welcome email with activation link
+      await sendTraineeWelcomeEmail({
+        id: targetUid,
+        ...studentPayload,
+      }, createTempPassword).catch(err => console.warn('[Admin] Welcome email dispatch:', err));
 
       setCreatedCredentials({
         username: rollNumber,
@@ -2827,25 +2853,12 @@ Levlox Administration`;
     }
 
     try {
-      const templateData = await getEmailTemplates();
-      const welcomeTemplate = templateData?.studentWelcome || {};
-
-      const variables = {
-        studentName: student.name || 'Student',
-        studentId: student.rollNumber || student.id || 'N/A',
-        email: emailAddr,
-        temporaryPassword: tempPasswordOverride || student.password || '********',
-        course: student.course || 'Levlox Course',
-        batch: student.batch_name || student.batch || 'Regular Batch'
-      };
-
-      const finalSubject = interpolateEmailTemplate(welcomeTemplate.subject, variables);
-      const finalBody = interpolateEmailTemplate(welcomeTemplate.body, variables);
-
-      window.open(`mailto:${emailAddr}?subject=${encodeURIComponent(finalSubject)}&body=${encodeURIComponent(finalBody)}`, '_blank');
+      await sendTraineeWelcomeEmail(student, tempPasswordOverride);
+      showModal("Welcome Email Dispatched", `Welcome email with activation link sent successfully to ${emailAddr}.`, "success");
+      fetchStudents();
     } catch (err) {
       console.error('[Admin] Error sending welcome email:', err);
-      showModal("Error", "Failed to load email template from Master Data.", "error");
+      showModal("Error", err.message || "Failed to send welcome email.", "error");
     }
   };
 
@@ -4075,8 +4088,9 @@ Levlox Administration`;
                   value: statusFilter,
                   onChange: (val) => { setStatusFilter(val); setCurrentPage(1); },
                   options: [
-                    { value: 'Active Only', label: 'Active' },
-                    { value: 'Suspended', label: 'Inactive' }
+                    { value: 'Pending Email Verification', label: 'Pending Email Verification' },
+                    { value: 'Active', label: 'Active' },
+                    { value: 'Inactive', label: 'Inactive' }
                   ]
                 }
               ]}
@@ -4111,12 +4125,16 @@ Levlox Administration`;
                     <th className="col-batch">Batch</th>
                     <th className="col-fee">Fee Status</th>
                     <th className="col-status">Account Status</th>
+                    <th className="col-delivery">Delivery & Verification</th>
                     <th className="col-actions">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {students.map((student) => {
                     const initials = student.name ? student.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'ST';
+                    const isPendingVerification = student.status === 'Pending Email Verification' || student.status === 'pending_verification';
+                    const isActive = student.status === 'active' || student.status === 'Active';
+
                     return (
                       <tr key={student.id} style={{ cursor: 'pointer' }} onClick={() => handleViewStudentDetails(student.id)}>
                         <td className="col-profile" onClick={(e) => e.stopPropagation()}>
@@ -4152,12 +4170,44 @@ Levlox Administration`;
                           </span>
                         </td>
                         <td className="col-status">
-                          <span className={`badge-status-fixed ${student.status === 'active' || student.status === 'Active' ? 'paid' : 'unpaid'}`} onClick={(e) => { e.stopPropagation(); toggleStatus(student.id); }} style={{ cursor: 'pointer' }}>
-                            {student.status === 'active' || student.status === 'Active' ? 'Active' : 'Inactive'}
+                          <span
+                            className="badge-status-fixed"
+                            onClick={(e) => { e.stopPropagation(); toggleStatus(student.id); }}
+                            style={{
+                              cursor: 'pointer',
+                              padding: '4px 10px',
+                              borderRadius: 12,
+                              fontSize: 11.5,
+                              fontWeight: 700,
+                              background: isPendingVerification ? '#FEF3C7' : (isActive ? '#D1FAE5' : '#F3F4F6'),
+                              color: isPendingVerification ? '#D97706' : (isActive ? '#059669' : '#4B5563'),
+                              border: '1px solid currentColor',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            {isPendingVerification ? 'Pending Email Verification' : (isActive ? 'Active' : 'Inactive')}
                           </span>
                         </td>
+                        <td className="col-delivery">
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '11.5px' }}>
+                            <span style={{ color: 'var(--text-secondary)' }}>
+                              Delivery: <strong style={{ color: student.emailDeliveryStatus === 'Failed' ? '#EF4444' : '#10B981' }}>{student.emailDeliveryStatus || 'Sent'}</strong>
+                            </span>
+                            <span>
+                              Verified: <strong style={{ color: student.emailVerified ? '#10B981' : '#F59E0B' }}>{student.emailVerified ? 'Yes' : 'Pending'}</strong>
+                            </span>
+                          </div>
+                        </td>
                         <td className="col-actions" onClick={(e) => e.stopPropagation()}>
-                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                            <button
+                              className="action-icon-btn"
+                              style={{ color: '#6C3CF0' }}
+                              data-tooltip="Resend Welcome Email"
+                              onClick={(e) => { e.stopPropagation(); sendStudentWelcomeEmail(student); }}
+                            >
+                              <RefreshCw size={15} />
+                            </button>
                             {student.email && (
                               <a
                                 href={`mailto:${student.email}`}
