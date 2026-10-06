@@ -528,6 +528,7 @@ const AdminDashboard = () => {
   const [studentSessions, setStudentSessions] = useState([]);
 
   const [resetCredentials, setResetCredentials] = useState(null);
+  const [createdTrainerCredentials, setCreatedTrainerCredentials] = useState(null);
 
   // New modal visibility states
   const [showBatchModal, setShowBatchModal] = useState(false);
@@ -2289,7 +2290,6 @@ const AdminDashboard = () => {
   };
 
   const [trainerTempPassword, setTrainerTempPassword] = useState('');
-  const [createdTrainerCredentials, setCreatedTrainerCredentials] = useState(null);
 
   const openTrainerModal = (trainer = null) => {
     if (trainer) {
@@ -6678,6 +6678,58 @@ Levlox Administration`;
                 )}
 
                 <button className="btn btn-primary" style={{ height: '40px', marginTop: '4px' }} onClick={() => setCreatedCredentials(null)}>
+                  ✓ Done
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Created Trainer Credentials Modal */}
+      {createdTrainerCredentials && (
+        <div className="modal-overlay" style={{ zIndex: 1100 }}>
+          <div className="modal-content modal-sm">
+            <div className="modal-body" style={{ textAlign: 'center', padding: '32px' }}>
+              <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(16,185,129,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: '#10B981' }}>
+                <CheckCircle size={32} />
+              </div>
+              <h3 style={{ fontSize: '18px', fontWeight: '800', margin: '0 0 8px' }}>Trainer Account Created Successfully</h3>
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5, margin: '0 0 20px' }}>
+                Account created. Share the credentials below or send the welcome email to the trainer.
+              </p>
+              <div style={{ background: 'var(--surface-alt)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', textAlign: 'left', marginBottom: '20px' }}>
+                <div style={{ marginBottom: '12px' }}>
+                  <span style={{ fontSize: '10.5px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 700, display: 'block', marginBottom: '2px' }}>Trainer ID</span>
+                  <strong style={{ fontSize: '14px', color: 'var(--primary-color)' }}>{createdTrainerCredentials.trainerId}</strong>
+                </div>
+                <div style={{ marginBottom: '12px' }}>
+                  <span style={{ fontSize: '10.5px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 700, display: 'block', marginBottom: '2px' }}>Email Address</span>
+                  <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{createdTrainerCredentials.email}</strong>
+                </div>
+                <div>
+                  <span style={{ fontSize: '10.5px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 700, display: 'block', marginBottom: '2px' }}>Temporary Password</span>
+                  <strong style={{ fontSize: '14px', color: 'var(--text-primary)', fontFamily: 'monospace' }}>{createdTrainerCredentials.password}</strong>
+                </div>
+              </div>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <button className="btn btn-outline" style={{ height: '40px', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => {
+                  navigator.clipboard.writeText(`Email: ${createdTrainerCredentials.email}\nTrainer ID: ${createdTrainerCredentials.trainerId}\nTemporary Password: ${createdTrainerCredentials.password}`);
+                  showModal("Copied", "Trainer credentials copied to clipboard!", "success");
+                }}>
+                  📋 Copy Credentials
+                </button>
+
+                {createdTrainerCredentials.email && (
+                  <button className="btn btn-outline" style={{ height: '40px', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px', borderColor: 'var(--primary-color)', color: 'var(--primary-color)' }} onClick={() => {
+                    sendTrainerWelcomeEmail(createdTrainerCredentials, createdTrainerCredentials.password);
+                  }}>
+                    ✉ Send Welcome Email
+                  </button>
+                )}
+
+                <button className="btn btn-primary" style={{ height: '40px', marginTop: '4px' }} onClick={() => setCreatedTrainerCredentials(null)}>
                   ✓ Done
                 </button>
               </div>
