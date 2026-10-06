@@ -2367,40 +2367,49 @@ Levlox Administration`;
             const cleanEmailLower = trainerEmail.trim().toLowerCase();
             const cleanPhone = trainerPhone ? normalizeMobile(trainerPhone) : '';
             
-            // 1. Check if trainer document exists in loaded list
-            const existingTrainer = trainers.find(t => t.email?.trim().toLowerCase() === cleanEmailLower || (cleanPhone && (t.phone === cleanPhone || t.mobile === cleanPhone)));
-            if (existingTrainer) {
-              uid = existingTrainer.id || existingTrainer.uid;
+            // 1. Direct Firestore query on 'trainers'
+            const trainersByEmail = await getDocuments('trainers', [where('email', '==', cleanEmailLower)]).catch(() => []);
+            if (trainersByEmail.length > 0 && trainersByEmail[0].id) {
+              uid = trainersByEmail[0].id;
             }
 
-            // 2. Check deletedUsers tracking collection
+            // 2. Direct Firestore query on 'students'
             if (!uid) {
-              const lookupKeys = [
-                cleanEmailLower,
-                cleanPhone ? mobileToAuthId(cleanPhone) : null
-              ].filter(Boolean);
-
-              for (const key of lookupKeys) {
-                const safeKey = key.replace(/[^a-zA-Z0-9]/g, '_');
-                const deletedDoc = await getDocument('deletedUsers', safeKey).catch(() => null);
-                if (deletedDoc && deletedDoc.uid) {
-                  uid = deletedDoc.uid;
-                  break;
-                }
+              const studentsByEmail = await getDocuments('students', [where('email', '==', cleanEmailLower)]).catch(() => []);
+              if (studentsByEmail.length > 0 && studentsByEmail[0].id) {
+                uid = studentsByEmail[0].id;
               }
             }
 
-            // 3. Check student document if registered previously as a student
+            // 3. Direct Firestore query on 'deletedUsers' tracking
             if (!uid) {
-              const studentDoc = allStudents.find(s => s.email?.trim().toLowerCase() === cleanEmailLower || (cleanPhone && s.phone === cleanPhone));
-              if (studentDoc) {
-                uid = studentDoc.id;
+              const safeKey = cleanEmailLower.replace(/[^a-zA-Z0-9]/g, '_');
+              const deletedDoc = await getDocument('deletedUsers', safeKey).catch(() => null);
+              if (deletedDoc && deletedDoc.uid) {
+                uid = deletedDoc.uid;
               }
             }
 
+            // 4. Query deletedUsers collection directly by email
             if (!uid) {
-              showModal('Account Exists', 'A user with this email address already exists in Firebase Authentication. Please use a different email or update the existing account.', 'warning');
-              return;
+              const deletedByEmail = await getDocuments('deletedUsers', [where('email', '==', cleanEmailLower)]).catch(() => []);
+              if (deletedByEmail.length > 0 && deletedByEmail[0].uid) {
+                uid = deletedByEmail[0].uid;
+              }
+            }
+
+            // 5. Query attendance / payments records for legacy UID
+            if (!uid) {
+              const attRecs = await getDocuments('attendance', [where('studentEmail', '==', cleanEmailLower)]).catch(() => []);
+              if (attRecs.length > 0 && (attRecs[0].studentId || attRecs[0].student_id)) {
+                uid = attRecs[0].studentId || attRecs[0].student_id;
+              }
+            }
+
+            // 6. Fallback: If UID not found in Firestore records, use trainer code ID
+            if (!uid) {
+              const fallbackTrainerCode = await generateNextId('trainer');
+              uid = `trainer_${fallbackTrainerCode}`;
             }
           } else {
             throw authErr;

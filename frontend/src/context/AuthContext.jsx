@@ -1,7 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '../firebase';
-import { getStudent, getAdmin, getDocument } from '../services/firebaseService';
+import { getStudent, getAdmin, getDocument, getDocuments } from '../services/firebaseService';
+import { where } from 'firebase/firestore';
 
 const AuthContext = createContext(null);
 
@@ -29,8 +30,8 @@ export const AuthProvider = ({ children }) => {
   const loadedUidRef = useRef(null);
 
   /** Resolve a signed-in Firebase user to their Firestore profile + role. */
-  const resolveProfile = useCallback(async (uid) => {
-    // Check admin, trainer, and student in parallel
+  const resolveProfile = useCallback(async (uid, email = null) => {
+    // Check admin, trainer, and student in parallel by UID
     const [adminDoc, trainerDoc, studentDoc] = await Promise.all([
       getAdmin(uid).catch(() => null),
       getDocument('trainers', uid).catch(() => null),
@@ -40,6 +41,22 @@ export const AuthProvider = ({ children }) => {
     if (adminDoc) return { profile: adminDoc, role: 'admin' };
     if (trainerDoc) return { profile: trainerDoc, role: trainerDoc.role || 'trainer' };
     if (studentDoc) return { profile: studentDoc, role: studentDoc.role || 'student' };
+
+    // Fallback: If UID lookup returned null, check collections by email
+    const userEmail = email || auth.currentUser?.email;
+    if (userEmail) {
+      const cleanEmail = userEmail.trim().toLowerCase();
+      const [trainerByEmail, studentByEmail, adminByEmail] = await Promise.all([
+        getDocuments('trainers', [where('email', '==', cleanEmail)]).catch(() => []),
+        getDocuments('students', [where('email', '==', cleanEmail)]).catch(() => []),
+        getDocuments('admins', [where('email', '==', cleanEmail)]).catch(() => []),
+      ]);
+
+      if (adminByEmail.length > 0) return { profile: adminByEmail[0], role: 'admin' };
+      if (trainerByEmail.length > 0) return { profile: trainerByEmail[0], role: trainerByEmail[0].role || 'trainer' };
+      if (studentByEmail.length > 0) return { profile: studentByEmail[0], role: studentByEmail[0].role || 'student' };
+    }
+
     return { profile: null, role: null };
   }, []);
 
