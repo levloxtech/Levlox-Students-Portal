@@ -396,39 +396,46 @@ const MasterDataPage = () => {
 
       {/* ─── TAB 10: EMAIL TEMPLATES ────────────────────────────────────────── */}
       {activeTab === 'email-templates' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 24 }}>
-          {/* EDITOR CARD */}
-          <div style={{ background: '#FFF', border: '1.5px solid var(--border-color)', borderRadius: 20, padding: 24, boxShadow: 'var(--shadow-card)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, borderBottom: '1px solid var(--border-color)', paddingBottom: 12 }}>
-              <div>
-                <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: '#121118', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Mail size={18} color="var(--primary-color)" /> {selectedTemplateKey === 'studentWelcome' ? 'Student Welcome Email' : 'Trainer Welcome Email'}
-                </h3>
-                <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
-                  Configures the email template sent when Admin creates a new {selectedTemplateKey === 'studentWelcome' ? 'student' : 'trainer'}.
-                </p>
-              </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Top Template Type Selector Header */}
+          <div style={{ background: '#FFF', border: '1.5px solid var(--border-color)', borderRadius: 16, padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+            <div>
+              <h4 style={{ margin: 0, fontSize: 14, fontWeight: 800, color: '#121118' }}>Select Template to Edit:</h4>
+              <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>Choose whether to configure Student or Trainer welcome emails.</p>
             </div>
-
-            {/* Template Selector Buttons */}
-            <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+            <div style={{ display: 'flex', gap: 10 }}>
               <button
                 type="button"
                 className={`btn ${selectedTemplateKey === 'studentWelcome' ? 'btn-primary' : 'btn-outline'}`}
-                style={{ flex: 1, fontSize: 12 }}
+                style={{ padding: '8px 18px', fontSize: 13, fontWeight: 700, borderRadius: 10 }}
                 onClick={() => setSelectedTemplateKey('studentWelcome')}
               >
-                🎓 Student Welcome
+                🎓 Student Welcome Email
               </button>
               <button
                 type="button"
                 className={`btn ${selectedTemplateKey === 'trainerWelcome' ? 'btn-primary' : 'btn-outline'}`}
-                style={{ flex: 1, fontSize: 12 }}
+                style={{ padding: '8px 18px', fontSize: 13, fontWeight: 700, borderRadius: 10 }}
                 onClick={() => setSelectedTemplateKey('trainerWelcome')}
               >
-                👨‍🏫 Trainer Welcome
+                👨‍🏫 Trainer Welcome Email
               </button>
             </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 24 }}>
+            {/* EDITOR CARD */}
+            <div style={{ background: '#FFF', border: '1.5px solid var(--border-color)', borderRadius: 20, padding: 24, boxShadow: 'var(--shadow-card)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, borderBottom: '1px solid var(--border-color)', paddingBottom: 12 }}>
+                <div>
+                  <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: '#121118', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Mail size={18} color="var(--primary-color)" /> {selectedTemplateKey === 'studentWelcome' ? 'Student Welcome Email' : 'Trainer Welcome Email'}
+                  </h3>
+                  <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+                    Configures the email template sent when Admin creates a new {selectedTemplateKey === 'studentWelcome' ? 'student' : 'trainer'}.
+                  </p>
+                </div>
+              </div>
 
             <form onSubmit={handleSaveTemplate} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               <div className="form-group" style={{ marginBottom: 0 }}>
@@ -469,6 +476,7 @@ const MasterDataPage = () => {
               <div style={{ flex: 1, padding: 16, background: '#F9FAFB', border: '1px solid var(--border-color)', borderRadius: 12, fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', color: '#374151' }}>
                 {interpolatedPreviewBody}
               </div>
+            </div>
             </div>
           </div>
         </div>
