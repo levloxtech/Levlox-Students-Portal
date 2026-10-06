@@ -79,9 +79,11 @@ export const sendTraineeWelcomeEmail = async (studentData, tempPassword = "") =>
       body += `----------------------------------------`;
     }
 
-    // Launch native mailto interface or simulated dispatcher
+    // Construct mailto URL for optional manual email client opening
     const mailtoUrl = `mailto:${encodeURIComponent(emailAddr)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    window.open(mailtoUrl, "_blank");
+    if (studentData.openMailClient === true) {
+      window.open(mailtoUrl, "_blank");
+    }
 
     // Update Firestore student record with delivery tracking and token
     await updateStudent(studentId, {
@@ -96,6 +98,7 @@ export const sendTraineeWelcomeEmail = async (studentData, tempPassword = "") =>
       success: true,
       deliveryStatus: "Sent",
       activationLink,
+      mailtoUrl,
       token,
     };
   } catch (err) {

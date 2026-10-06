@@ -74,6 +74,7 @@ import {
   createTrainerProfile,
   generateNextId,
   saveBatchAttendance,
+  assignTrainerToBatch,
 } from '../services/firebaseService';
 import {
   changeOwnPassword,
@@ -2363,12 +2364,41 @@ Levlox Administration`;
           uid = await createAuthUserDetached(trainerEmail.trim(), trainerTempPassword);
         } catch (authErr) {
           if (authErr?.code === 'auth/email-already-in-use') {
-            // Check if trainer document exists in loaded list
-            const existingTrainer = trainers.find(t => t.email?.trim().toLowerCase() === trainerEmail.trim().toLowerCase());
+            const cleanEmailLower = trainerEmail.trim().toLowerCase();
+            const cleanPhone = trainerPhone ? normalizeMobile(trainerPhone) : '';
+            
+            // 1. Check if trainer document exists in loaded list
+            const existingTrainer = trainers.find(t => t.email?.trim().toLowerCase() === cleanEmailLower || (cleanPhone && (t.phone === cleanPhone || t.mobile === cleanPhone)));
             if (existingTrainer) {
               uid = existingTrainer.id || existingTrainer.uid;
-            } else {
-              // Firebase Auth has user, try sign-in or reuse
+            }
+
+            // 2. Check deletedUsers tracking collection
+            if (!uid) {
+              const lookupKeys = [
+                cleanEmailLower,
+                cleanPhone ? mobileToAuthId(cleanPhone) : null
+              ].filter(Boolean);
+
+              for (const key of lookupKeys) {
+                const safeKey = key.replace(/[^a-zA-Z0-9]/g, '_');
+                const deletedDoc = await getDocument('deletedUsers', safeKey).catch(() => null);
+                if (deletedDoc && deletedDoc.uid) {
+                  uid = deletedDoc.uid;
+                  break;
+                }
+              }
+            }
+
+            // 3. Check student document if registered previously as a student
+            if (!uid) {
+              const studentDoc = allStudents.find(s => s.email?.trim().toLowerCase() === cleanEmailLower || (cleanPhone && s.phone === cleanPhone));
+              if (studentDoc) {
+                uid = studentDoc.id;
+              }
+            }
+
+            if (!uid) {
               showModal('Account Exists', 'A user with this email address already exists in Firebase Authentication. Please use a different email or update the existing account.', 'warning');
               return;
             }
