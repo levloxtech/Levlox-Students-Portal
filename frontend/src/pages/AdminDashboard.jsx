@@ -83,7 +83,7 @@ import {
 } from '../services/authService';
 import { normalizeMobile, mobileToAuthId, formatMobile } from '../services/phoneIdentity';
 import { createAuthUserDetached } from '../firebase';
-import { sendTraineeWelcomeEmail, resendVerificationEmail, generateVerificationToken } from '../services/emailService';
+import { sendTraineeWelcomeEmail, sendTrainerWelcomeEmail, resendVerificationEmail, generateVerificationToken } from '../services/emailService';
 
 
 const CustomDropdown = ({ label, value, options, onChange, placeholder, width = '120px' }) => {
@@ -2442,8 +2442,8 @@ Levlox Administration`;
           password: trainerTempPassword
         });
 
-        // Trigger welcome mailto flow
-        sendTrainerWelcomeEmail({ name: trainerName.trim(), email: trainerEmail.trim(), trainerId }, trainerTempPassword);
+        // Trigger welcome email status tracking in Firestore
+        sendTrainerWelcomeEmail({ name: trainerName.trim(), email: trainerEmail.trim(), trainerId, openMailClient: false }, trainerTempPassword);
       }
       fetchStats();
     } catch (err) {
@@ -6171,6 +6171,11 @@ Levlox Administration`;
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <button className="btn btn-outline" style={{ height: 40, justifyContent: 'center' }} onClick={() => {
+                sendTrainerWelcomeEmail({ name: createdTrainerCredentials.name, email: createdTrainerCredentials.email, trainerId: createdTrainerCredentials.trainerId, openMailClient: true }, createdTrainerCredentials.password);
+              }}>
+                ✉️ Send Welcome Email
+              </button>
               <button className="btn btn-outline" style={{ height: 40, justifyContent: 'center' }} onClick={() => {
                 navigator.clipboard.writeText(`Trainer ID: ${createdTrainerCredentials.trainerId}\nEmail: ${createdTrainerCredentials.email}\nTemporary Password: ${createdTrainerCredentials.password}`);
                 showModal("Copied", "Trainer credentials copied to clipboard!", "success");

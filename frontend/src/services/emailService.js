@@ -5,7 +5,7 @@
  * email verification, and delivery status tracking in Firestore.
  */
 
-import { updateStudent, getDocument, getEmailTemplates, interpolateEmailTemplate } from "./firebaseService";
+import { updateStudent, updateTrainer, getDocument, getEmailTemplates, interpolateEmailTemplate, DEFAULT_TRAINER_WELCOME_TEMPLATE } from "./firebaseService";
 import { serverTimestamp } from "firebase/firestore";
 
 /**
@@ -131,8 +131,64 @@ export const resendVerificationEmail = async (studentIdOrEmail) => {
   return sendTraineeWelcomeEmail(studentDoc);
 };
 
+/**
+ * Send Welcome email to a Trainer.
+ * Uses trainerWelcome template from Master Data if available.
+ */
+export const sendTrainerWelcomeEmail = async (trainerData, tempPassword = "") => {
+  if (!trainerData || (!trainerData.email && !trainerData.id)) {
+    throw new Error("Trainer details and email address are required.");
+  }
+
+  const trainerId = trainerData.id || trainerData.uid;
+  const emailAddr = trainerData.email;
+
+  if (!emailAddr) {
+    throw new Error("No registered email address found for this trainer.");
+  }
+
+  const origin = window.location.origin;
+  const loginLink = `${origin}/login`;
+
+  try {
+    const templateData = await getEmailTemplates();
+    const welcomeTemplate = templateData?.trainerWelcome || DEFAULT_TRAINER_WELCOME_TEMPLATE;
+
+    const variables = {
+      trainerName: trainerData.name || trainerData.trainer_name || "Trainer",
+      trainerId: trainerData.trainerId || trainerData.id || "N/A",
+      email: emailAddr,
+      temporaryPassword: tempPassword || trainerData.password || "********",
+      loginUrl: loginLink,
+    };
+
+    let subject = interpolateEmailTemplate(welcomeTemplate.subject, variables);
+    let body = interpolateEmailTemplate(welcomeTemplate.body, variables);
+
+    const mailtoUrl = `mailto:${encodeURIComponent(emailAddr)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    if (trainerData.openMailClient === true) {
+      window.open(mailtoUrl, "_blank");
+    }
+
+    await updateTrainer(trainerId, {
+      emailDeliveryStatus: "Sent",
+      emailSentAt: new Date().toISOString(),
+    }).catch(() => null);
+
+    return {
+      success: true,
+      deliveryStatus: "Sent",
+      mailtoUrl,
+    };
+  } catch (err) {
+    console.error("[EmailService] Failed to send trainer welcome email:", err);
+    throw err;
+  }
+};
+
 export default {
   generateVerificationToken,
   sendTraineeWelcomeEmail,
+  sendTrainerWelcomeEmail,
   resendVerificationEmail,
 };

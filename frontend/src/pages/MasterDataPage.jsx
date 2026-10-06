@@ -402,12 +402,32 @@ const MasterDataPage = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, borderBottom: '1px solid var(--border-color)', paddingBottom: 12 }}>
               <div>
                 <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: '#121118', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Mail size={18} color="var(--primary-color)" /> Student Welcome Email
+                  <Mail size={18} color="var(--primary-color)" /> {selectedTemplateKey === 'studentWelcome' ? 'Student Welcome Email' : 'Trainer Welcome Email'}
                 </h3>
                 <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
-                  Configures the email template sent when Admin creates a new student.
+                  Configures the email template sent when Admin creates a new {selectedTemplateKey === 'studentWelcome' ? 'student' : 'trainer'}.
                 </p>
               </div>
+            </div>
+
+            {/* Template Selector Buttons */}
+            <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+              <button
+                type="button"
+                className={`btn ${selectedTemplateKey === 'studentWelcome' ? 'btn-primary' : 'btn-outline'}`}
+                style={{ flex: 1, fontSize: 12 }}
+                onClick={() => setSelectedTemplateKey('studentWelcome')}
+              >
+                🎓 Student Welcome
+              </button>
+              <button
+                type="button"
+                className={`btn ${selectedTemplateKey === 'trainerWelcome' ? 'btn-primary' : 'btn-outline'}`}
+                style={{ flex: 1, fontSize: 12 }}
+                onClick={() => setSelectedTemplateKey('trainerWelcome')}
+              >
+                👨‍🏫 Trainer Welcome
+              </button>
             </div>
 
             <form onSubmit={handleSaveTemplate} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
