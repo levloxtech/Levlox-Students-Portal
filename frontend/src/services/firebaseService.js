@@ -1110,12 +1110,17 @@ Levlox Team`
 export const getEmailTemplates = async () => {
   try {
     const docData = await getDocument("settings", "emailTemplates");
-    if (docData && docData.studentWelcome) {
+    if (docData) {
       return {
         studentWelcome: {
-          subject: docData.studentWelcome.subject || DEFAULT_STUDENT_WELCOME_TEMPLATE.subject,
-          body: docData.studentWelcome.body || DEFAULT_STUDENT_WELCOME_TEMPLATE.body,
-          updatedAt: docData.studentWelcome.updatedAt || null,
+          subject: docData.studentWelcome?.subject || DEFAULT_STUDENT_WELCOME_TEMPLATE.subject,
+          body: docData.studentWelcome?.body || DEFAULT_STUDENT_WELCOME_TEMPLATE.body,
+          updatedAt: docData.studentWelcome?.updatedAt || null,
+        },
+        trainerWelcome: {
+          subject: docData.trainerWelcome?.subject || DEFAULT_TRAINER_WELCOME_TEMPLATE.subject,
+          body: docData.trainerWelcome?.body || DEFAULT_TRAINER_WELCOME_TEMPLATE.body,
+          updatedAt: docData.trainerWelcome?.updatedAt || null,
         }
       };
     }
@@ -1123,7 +1128,8 @@ export const getEmailTemplates = async () => {
     console.warn("[EmailTemplates] Fetch failed or not found, fallback to default:", err);
   }
   return {
-    studentWelcome: { ...DEFAULT_STUDENT_WELCOME_TEMPLATE }
+    studentWelcome: { ...DEFAULT_STUDENT_WELCOME_TEMPLATE },
+    trainerWelcome: { ...DEFAULT_TRAINER_WELCOME_TEMPLATE }
   };
 };
 
@@ -1136,6 +1142,11 @@ export const updateEmailTemplates = async (templatesData) => {
       subject: templatesData?.studentWelcome?.subject?.trim() || DEFAULT_STUDENT_WELCOME_TEMPLATE.subject,
       body: templatesData?.studentWelcome?.body?.trim() || DEFAULT_STUDENT_WELCOME_TEMPLATE.body,
       updatedAt: serverTimestamp(),
+    },
+    trainerWelcome: {
+      subject: templatesData?.trainerWelcome?.subject?.trim() || DEFAULT_TRAINER_WELCOME_TEMPLATE.subject,
+      body: templatesData?.trainerWelcome?.body?.trim() || DEFAULT_TRAINER_WELCOME_TEMPLATE.body,
+      updatedAt: serverTimestamp(),
     }
   };
   await setDocument("settings", "emailTemplates", payload);
@@ -1144,7 +1155,7 @@ export const updateEmailTemplates = async (templatesData) => {
 
 /**
  * Interpolate dynamic placeholders in template string safely.
- * Supported placeholders: {{studentName}}, {{studentId}}, {{email}}, {{temporaryPassword}}, {{course}}, {{batch}}
+ * Supported placeholders: {{studentName}}, {{studentId}}, {{trainerName}}, {{trainerId}}, {{email}}, {{temporaryPassword}}, {{course}}, {{batch}}, {{loginUrl}}
  */
 export const interpolateEmailTemplate = (templateStr = "", variables = {}) => {
   if (!templateStr) return "";
@@ -1153,14 +1164,16 @@ export const interpolateEmailTemplate = (templateStr = "", variables = {}) => {
   const replacements = {
     "{{studentName}}": variables.studentName || variables.name || "Student",
     "{{studentId}}": variables.studentId || variables.rollNumber || "N/A",
+    "{{trainerName}}": variables.trainerName || variables.name || "Trainer",
+    "{{trainerId}}": variables.trainerId || variables.code || "N/A",
     "{{email}}": variables.email || "N/A",
     "{{temporaryPassword}}": variables.temporaryPassword || variables.password || "********",
     "{{course}}": variables.course || "Levlox Course",
     "{{batch}}": variables.batch || variables.batch_name || "Regular Batch",
+    "{{loginUrl}}": variables.loginUrl || (typeof window !== "undefined" ? `${window.location.origin}/login` : "https://levlox-students-portal.vercel.app/login"),
   };
 
   Object.entries(replacements).forEach(([placeholder, val]) => {
-    // Regex global replace for each placeholder
     const safeVal = String(val !== undefined && val !== null ? val : "");
     result = result.split(placeholder).join(safeVal);
   });

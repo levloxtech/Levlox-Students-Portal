@@ -14,6 +14,8 @@ import {
   ShieldCheck, AlertTriangle, Shield, Loader2,
   GraduationCap, Sparkles
 } from 'lucide-react';
+
+
 import CustomModal from '../components/Modal';
 import leveloxLogo from '../assets/levelox-icon-transparent.png';
 import { normalizeMobile, mobileToAuthId, isValidMobile } from '../services/phoneIdentity';
@@ -407,7 +409,7 @@ const Login = () => {
       const errorMsg = isOwnError
         ? err.message
         : getFirebaseAuthError(err.code) +
-          (!isNetworkError && remaining > 0 ? ` (${remaining} attempt${remaining > 1 ? 's' : ''} remaining)` : '');
+        (!isNetworkError && remaining > 0 ? ` (${remaining} attempt${remaining > 1 ? 's' : ''} remaining)` : '');
 
       showToast('Sign-In Failed', errorMsg, 'error');
     } finally {

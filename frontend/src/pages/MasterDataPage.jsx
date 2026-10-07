@@ -446,6 +446,25 @@ const MasterDataPage = () => {
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label" style={{ fontWeight: 700 }}>Message Body</label>
                 <textarea className="form-input" value={templateBody} onChange={e => setTemplateBody(e.target.value)} style={{ minHeight: 220, fontFamily: 'monospace', fontSize: 13, lineHeight: 1.5 }} required />
+                <div style={{ marginTop: 8 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>Available Placeholders (Click to insert):</span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {(selectedTemplateKey === 'studentWelcome' ? [
+                      '{{studentName}}', '{{studentId}}', '{{email}}', '{{temporaryPassword}}', '{{course}}', '{{batch}}'
+                    ] : [
+                      '{{trainerName}}', '{{trainerId}}', '{{email}}', '{{temporaryPassword}}', '{{loginUrl}}'
+                    ]).map(ph => (
+                      <button
+                        type="button"
+                        key={ph}
+                        style={{ fontSize: 11, fontFamily: 'monospace', background: 'var(--surface-alt)', border: '1px solid var(--border-color)', borderRadius: 6, padding: '2px 7px', cursor: 'pointer', color: 'var(--primary-color)' }}
+                        onClick={() => setTemplateBody(prev => prev + ph)}
+                      >
+                        {ph}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>

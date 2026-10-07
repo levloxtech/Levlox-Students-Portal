@@ -147,7 +147,7 @@ export const sendTrainerWelcomeEmail = async (trainerData, tempPassword = "") =>
     throw new Error("No registered email address found for this trainer.");
   }
 
-  const origin = window.location.origin;
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://levlox-students-portal.vercel.app";
   const loginLink = `${origin}/login`;
 
   try {
@@ -156,9 +156,9 @@ export const sendTrainerWelcomeEmail = async (trainerData, tempPassword = "") =>
 
     const variables = {
       trainerName: trainerData.name || trainerData.trainer_name || "Trainer",
-      trainerId: trainerData.trainerId || trainerData.id || "N/A",
+      trainerId: trainerData.trainerId || trainerData.code || trainerData.id || "N/A",
       email: emailAddr,
-      temporaryPassword: tempPassword || trainerData.password || "********",
+      temporaryPassword: tempPassword || trainerData.tempPassword || trainerData.password || "********",
       loginUrl: loginLink,
     };
 
@@ -166,18 +166,22 @@ export const sendTrainerWelcomeEmail = async (trainerData, tempPassword = "") =>
     let body = interpolateEmailTemplate(welcomeTemplate.body, variables);
 
     const mailtoUrl = `mailto:${encodeURIComponent(emailAddr)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    if (trainerData.openMailClient === true) {
+    if (trainerData.openMailClient !== false) {
       window.open(mailtoUrl, "_blank");
     }
 
-    await updateTrainer(trainerId, {
-      emailDeliveryStatus: "Sent",
-      emailSentAt: new Date().toISOString(),
-    }).catch(() => null);
+    if (trainerId) {
+      await updateTrainer(trainerId, {
+        emailDeliveryStatus: "Sent",
+        emailSentAt: new Date().toISOString(),
+      }).catch(() => null);
+    }
 
     return {
       success: true,
       deliveryStatus: "Sent",
+      subject,
+      body,
       mailtoUrl,
     };
   } catch (err) {

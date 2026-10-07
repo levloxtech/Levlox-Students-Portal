@@ -529,6 +529,8 @@ const AdminDashboard = () => {
 
   const [resetCredentials, setResetCredentials] = useState(null);
   const [createdTrainerCredentials, setCreatedTrainerCredentials] = useState(null);
+  const [sendTrainerMailData, setSendTrainerMailData] = useState(null);
+  const [sendMailPassword, setSendMailPassword] = useState('');
 
   // New modal visibility states
   const [showBatchModal, setShowBatchModal] = useState(false);
@@ -2312,25 +2314,26 @@ const AdminDashboard = () => {
     setShowTrainerModal(true);
   };
 
-  const sendTrainerWelcomeEmail = (trainerObj, tempPass) => {
-    const subject = encodeURIComponent("Levlox Trainer Portal — Account Created");
-    const bodyText = `Hello ${trainerObj.name},
+  const openSendTrainerMailModal = (trainerObj) => {
+    setSendTrainerMailData(trainerObj);
+    setSendMailPassword(trainerObj.tempPassword || trainerObj.password || generateRandomPassword());
+  };
 
-Your Levlox Trainer Portal account has been created.
-
-Trainer ID: ${trainerObj.trainerId || trainerObj.trainer_id}
-Email: ${trainerObj.email}
-Temporary Password: ${tempPass}
-Login URL: ${window.location.origin}/login
-
-For security, you must change your temporary password after your first login.
-
-Regards,
-Levlox Administration`;
-
-    const mailtoUrl = `mailto:${trainerObj.email}?subject=${subject}&body=${encodeURIComponent(bodyText)}`;
-    window.open(mailtoUrl, '_blank');
-    showModal("Email Client Opened", `Prepared welcome email for ${trainerObj.name}.`, "success");
+  const handleConfirmSendTrainerMail = async () => {
+    if (!sendTrainerMailData) return;
+    try {
+      await sendTrainerWelcomeEmail({
+        name: sendTrainerMailData.name,
+        email: sendTrainerMailData.email,
+        trainerId: sendTrainerMailData.trainerId || sendTrainerMailData.code || sendTrainerMailData.trainer_id,
+        openMailClient: true
+      }, sendMailPassword);
+      showModal("Email Client Opened", `Prepared welcome email with credentials for ${sendTrainerMailData.name}.`, "success");
+      setSendTrainerMailData(null);
+    } catch (err) {
+      console.error('[Admin] Send trainer mail error:', err);
+      showModal("Error", err.message || "Failed to prepare mail.", "error");
+    }
   };
 
   const handleSaveTrainer = async (e) => {
@@ -5786,13 +5789,14 @@ Levlox Administration`;
                       </div>
                       <div style={{ display: 'flex', gap: 8, marginTop: 16, borderTop: '1px solid var(--border-light)', paddingTop: 12, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                         {t.email && (
-                          <a
-                            href={`mailto:${t.email}`}
+                          <button
+                            type="button"
                             className="btn btn-outline"
-                            style={{ padding: '6px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, textDecoration: 'none', color: 'var(--primary-color)', borderColor: 'var(--primary-color)' }}
+                            style={{ padding: '6px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--primary-color)', borderColor: 'var(--primary-color)' }}
+                            onClick={() => openSendTrainerMailModal(t)}
                           >
                             <Mail size={14} /> Send Mail
-                          </a>
+                          </button>
                         )}
                         <button className="btn btn-outline" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => openTrainerModal(t)}>
                           <Pencil size={14} /> Edit
@@ -6184,6 +6188,67 @@ Levlox Administration`;
               </button>
               <button className="btn btn-primary" style={{ height: 40 }} onClick={() => setCreatedTrainerCredentials(null)}>
                 ✓ Done
+              </button>
+            </div>
+          </div>
+        </CustomModal>
+      )}
+
+      {/* Send Trainer Mail with Password Modal */}
+      {sendTrainerMailData && (
+        <CustomModal
+          isOpen={!!sendTrainerMailData}
+          onClose={() => setSendTrainerMailData(null)}
+          title={`Send Email to Trainer: ${sendTrainerMailData.name}`}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>
+              Prepare and send account credentials email to <strong>{sendTrainerMailData.name}</strong> using the Master Data Email Template.
+            </p>
+
+            <div style={{ background: 'var(--surface-alt)', border: '1px solid var(--border-color)', borderRadius: 12, padding: 14 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                <strong>Recipient Email:</strong> {sendTrainerMailData.email}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                <strong>Trainer ID:</strong> {sendTrainerMailData.trainerId || sendTrainerMailData.code || 'N/A'}
+              </div>
+            </div>
+
+            <div>
+              <label className="form-label" style={{ fontWeight: 700 }}>Password to Include in Email *</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={sendMailPassword}
+                  onChange={(e) => setSendMailPassword(e.target.value)}
+                  placeholder="Enter temporary password"
+                  required
+                />
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  style={{ flexShrink: 0, padding: '0 12px', fontSize: 12 }}
+                  onClick={() => setSendMailPassword(generateRandomPassword())}
+                >
+                  Generate
+                </button>
+              </div>
+              <span style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4, display: 'block' }}>
+                This password will be populated into the email template.
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+              <button type="button" className="btn btn-outline" onClick={() => setSendTrainerMailData(null)}>Cancel</button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                onClick={handleConfirmSendTrainerMail}
+              >
+                <Mail size={15} /> Open Mail & Send
               </button>
             </div>
           </div>
